@@ -1,7 +1,7 @@
 // lib/ai.ts
 export const askTheologian = async (book: string, chapter: number, verse: number, text: string) => {
     
-    const API_KEY = ''; 
+export const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 
     const prompt = `
       Atue como um PhD em Teologia Bíblica e Línguas Originais.
@@ -31,7 +31,7 @@ export const askTheologian = async (book: string, chapter: number, verse: number
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`,
+         'Authorization': `Bearer ${process.env.EXPO_PUBLIC_OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
           model: "gpt-4o-mini", 
