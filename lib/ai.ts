@@ -1,6 +1,7 @@
 export const askTheologian = async (book: string, chapter: number, verse: number, text: string) => {
-  const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-
+  // COLOQUE SUA SENHA REAL AQUI DENTRO DAS ASPAS
+  const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+  console.log("DEBUG: A chave é:", apiKey ? "Chave Existe (Começa com " + apiKey.substring(0,3) + ")" : "⚠️ CHAVE ESTÁ VAZIA/UNDEFINED");
   // Objeto de "Paraquedas" (Resposta padrão em caso de erro)
   const fallbackResponse = {
     original: "⚠️ Erro de Conexão: Não foi possível falar com a IA.",
