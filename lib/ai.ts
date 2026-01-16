@@ -1,7 +1,5 @@
 // lib/ai.ts
 export const askTheologian = async (book: string, chapter: number, verse: number, text: string) => {
-    
-export const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 
     const prompt = `
       Atue como um PhD em Teologia Bíblica e Línguas Originais.
