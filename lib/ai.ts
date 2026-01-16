@@ -1,46 +1,40 @@
 export const askTheologian = async (book: string, chapter: number, verse: number, text: string) => {
-  
-  // --- AQUI ESTÁ O TRUQUE ---
-  // Cole a primeira metade da sua senha na parte A
-  const parteA = "sk-proj-x9-gvC0fS_nlPIOKFsqmBm1hH_rRhonPL8HVleplVVnXs7_AmWrC1F6QklzSL"; 
-  // Cole o resto da senha na parte B
-  const parteB = "Wvyk3z4Y-CGCGT3BlbkFJF9Hf8gs_8XVjAlrcKEjbXe-SK-oOAJNYbEnX07u3MeOvV7Swpn488bW4B4kkoV5XufzvMyRMUA";
-  
-  const apiKey = parteA + parteB; 
-  // ---------------------------
-  const fallbackResponse = {
-    original: "⚠️ Erro de Conexão: Não foi possível falar com a IA.",
-    context: "Verifique se a Chave API no Vercel está correta e se a conta OpenAI tem saldo ($5+).",
-    references: [],
-    application: "Por favor, verifique as configurações e tente novamente."
-  };
+  const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 
   if (!apiKey) {
-    console.error("ERRO CRÍTICO: Chave API ausente.");
-    return fallbackResponse;
+    console.error("ERRO: Chave API não encontrada no Vercel.");
+    return { original: "Erro de Configuração: Chave de API ausente." };
   }
 
+  // AQUI ESTÁ A MÁGICA: O Prompt Completo e Detalhado voltou!
   const prompt = `
-    Atue como um PhD em Teologia Bíblica e Línguas Originais.
-    Analise o versículo: ${book} ${chapter}:${verse} - "${text}".
+    Atue como um especialista sênior em Teologia Bíblica, Exegese e Línguas Originais (Hebraico/Grego).
     
-    Gere um JSON estrito seguindo este modelo exato. IMPORTANTE: Todos os campos devem ser STRING (texto corrido), nunca objetos ou listas aninhadas (exceto no campo references).
+    Analise profundamente o versículo: ${book} ${chapter}:${verse} - "${text}".
     
+    Forneça uma resposta rica, estruturada em um JSON estrito (sem markdown), seguindo EXATAMENTE este formato:
     {
-      "original": "Análise exegética em texto corrido, sem subdivisões em chaves.",
-      "context": "Contexto histórico e cultural em texto corrido.",
+      "original": "Faça uma análise exegética detalhada. Explore o significado das palavras chaves no original (hebraico/grego), tempos verbais e nuances que não aparecem na tradução. Escreva em texto corrido e profundo.",
+      
+      "context": "Explique o contexto histórico, cultural e literário. Quem escreveu? Para quem? O que estava acontecendo na época? Como isso afeta o entendimento do texto?",
+      
       "references": [
         { 
           "ref": "Ex: Rm 3:23", 
-          "type": "Ex: Doutrina", 
-          "text": "Texto do versículo aqui", 
-          "reason": "Explicação da conexão teológica." 
+          "type": "Correlação", 
+          "text": "Texto resumido do versículo relacionado...", 
+          "reason": "Explique brevemente a conexão teológica com o versículo analisado." 
+        },
+        {
+          "ref": "Outra referência",
+          "type": "Profecia/Cumprimento",
+          "text": "...",
+          "reason": "..."
         }
       ],
-      "application": "Aplicação pastoral em texto corrido."
+      
+      "application": "Traga uma aplicação pastoral e devocional prática e impactante para os dias de hoje. Como esse versículo muda nossa vida hoje?"
     }
-
-    Responda apenas o JSON puro.
   `;
 
   try {
@@ -51,30 +45,26 @@ export const askTheologian = async (book: string, chapter: number, verse: number
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini", 
+        model: "gpt-4o-mini", // Modelo rápido e inteligente
         messages: [{ role: "user", content: prompt }],
-        temperature: 0.3,
+        temperature: 0.5, // Um pouco mais criativo para a teologia
       }),
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("❌ ERRO OPENAI:", data);
-      return { 
-        ...fallbackResponse, 
-        original: `Erro da OpenAI: ${data.error?.message || "Erro desconhecido"}` 
-      };
+      return { original: `Erro na resposta da IA: ${data.error?.message}` };
     }
 
     let content = data.choices[0].message.content.trim();
-    // Limpeza bruta para garantir que o JSON funcione
+    // Limpeza para garantir que o JSON não quebre
     const jsonString = content.replace(/```json/g, '').replace(/```/g, '').trim();
     
     return JSON.parse(jsonString);
 
   } catch (error) {
-    console.error("❌ Erro Geral:", error);
-    return fallbackResponse;
+    console.error("Erro no fetch:", error);
+    return { original: "Não foi possível conectar ao servidor de Inteligência Artificial." };
   }
 };
