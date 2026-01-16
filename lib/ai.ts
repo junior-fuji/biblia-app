@@ -1,33 +1,30 @@
 export const askTheologian = async (book: string, chapter: number, verse: number, text: string) => {
   const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 
-  // 1. Verificação de segurança antes de tentar conectar
+  // Objeto de "Paraquedas" (Resposta padrão em caso de erro)
+  const fallbackResponse = {
+    original: "⚠️ Erro de Conexão: Não foi possível falar com a IA.",
+    context: "Verifique se a Chave API no Vercel está correta e se a conta OpenAI tem saldo ($5+).",
+    references: [],
+    application: "Por favor, verifique as configurações e tente novamente."
+  };
+
   if (!apiKey) {
-    console.error("ERRO CRÍTICO: A Chave API não foi encontrada no Vercel.");
-    return null;
+    console.error("ERRO CRÍTICO: Chave API ausente.");
+    return fallbackResponse;
   }
 
   const prompt = `
-    Atue como um PhD em Teologia Bíblica e Línguas Originais.
-    Analise o versículo: ${book} ${chapter}:${verse} - "${text}".
+    Atue como um PhD em Teologia Bíblica.
+    Analise: ${book} ${chapter}:${verse} - "${text}".
     
-    Gere um JSON estrito seguindo este modelo exato. IMPORTANTE: Todos os campos devem ser STRING (texto corrido), nunca objetos ou listas aninhadas (exceto no campo references).
-    
+    Gere um JSON estrito (sem markdown):
     {
-      "original": "Análise exegética em texto corrido, sem subdivisões em chaves.",
-      "context": "Contexto histórico e cultural em texto corrido.",
-      "references": [
-        { 
-          "ref": "Ex: Rm 3:23", 
-          "type": "Ex: Doutrina", 
-          "text": "Texto do versículo aqui", 
-          "reason": "Explicação da conexão teológica." 
-        }
-      ],
-      "application": "Aplicação pastoral em texto corrido."
+      "original": "Análise exegética em texto corrido.",
+      "context": "Contexto histórico.",
+      "references": [{"ref": "Rm 3:23", "type": "Doutrina", "text": "...", "reason": "..."}],
+      "application": "Aplicação pastoral."
     }
-
-    Responda apenas o JSON puro.
   `;
 
   try {
@@ -38,7 +35,7 @@ export const askTheologian = async (book: string, chapter: number, verse: number
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini", // Mantido o seu modelo preferido
+        model: "gpt-4o-mini", 
         messages: [{ role: "user", content: prompt }],
         temperature: 0.3,
       }),
@@ -46,27 +43,22 @@ export const askTheologian = async (book: string, chapter: number, verse: number
 
     const data = await response.json();
 
-    // 2. O DETETIVE DE ERROS (AQUI ESTÁ A PROTEÇÃO NOVA)
     if (!response.ok) {
-      console.error("❌ ERRO DA OPENAI:", data.error?.message || JSON.stringify(data));
-      // Se der erro de cota ou senha, ele vai avisar no console agora
-      return null;
-    }
-
-    if (!data.choices || !data.choices[0]) {
-      console.error("❌ Erro: A IA respondeu vazio.");
-      return null;
+      console.error("❌ ERRO OPENAI:", data);
+      return { 
+        ...fallbackResponse, 
+        original: `Erro da OpenAI: ${data.error?.message || "Erro desconhecido"}` 
+      };
     }
 
     let content = data.choices[0].message.content.trim();
-    
-    // Limpeza de markdown
+    // Limpeza bruta para garantir que o JSON funcione
     const jsonString = content.replace(/```json/g, '').replace(/```/g, '').trim();
     
     return JSON.parse(jsonString);
 
   } catch (error) {
-    console.error("❌ Erro Geral na Conexão:", error);
-    return null;
+    console.error("❌ Erro Geral:", error);
+    return fallbackResponse;
   }
 };
