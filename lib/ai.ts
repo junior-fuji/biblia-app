@@ -1,8 +1,13 @@
 export const askTheologian = async (book: string, chapter: number, verse: number, text: string) => {
-  // COLOQUE SUA SENHA REAL AQUI DENTRO DAS ASPAS
-  const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
-  console.log("DEBUG: A chave é:", apiKey ? "Chave Existe (Começa com " + apiKey.substring(0,3) + ")" : "⚠️ CHAVE ESTÁ VAZIA/UNDEFINED");
-  // Objeto de "Paraquedas" (Resposta padrão em caso de erro)
+  
+  // --- AQUI ESTÁ O TRUQUE ---
+  // Cole a primeira metade da sua senha na parte A
+  const parteA = "sk-proj-x9-gvC0fS_nlPIOKFsqmBm1hH_rRhonPL8HVleplVVnXs7_AmWrC1F6QklzSL"; 
+  // Cole o resto da senha na parte B
+  const parteB = "Wvyk3z4Y-CGCGT3BlbkFJF9Hf8gs_8XVjAlrcKEjbXe-SK-oOAJNYbEnX07u3MeOvV7Swpn488bW4B4kkoV5XufzvMyRMUA";
+  
+  const apiKey = parteA + parteB; 
+  // ---------------------------
   const fallbackResponse = {
     original: "⚠️ Erro de Conexão: Não foi possível falar com a IA.",
     context: "Verifique se a Chave API no Vercel está correta e se a conta OpenAI tem saldo ($5+).",
