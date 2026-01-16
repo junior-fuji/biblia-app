@@ -15,16 +15,26 @@ export const askTheologian = async (book: string, chapter: number, verse: number
   }
 
   const prompt = `
-    Atue como um PhD em Teologia Bíblica.
-    Analise: ${book} ${chapter}:${verse} - "${text}".
+    Atue como um PhD em Teologia Bíblica e Línguas Originais.
+    Analise o versículo: ${book} ${chapter}:${verse} - "${text}".
     
-    Gere um JSON estrito (sem markdown):
+    Gere um JSON estrito seguindo este modelo exato. IMPORTANTE: Todos os campos devem ser STRING (texto corrido), nunca objetos ou listas aninhadas (exceto no campo references).
+    
     {
-      "original": "Análise exegética em texto corrido.",
-      "context": "Contexto histórico.",
-      "references": [{"ref": "Rm 3:23", "type": "Doutrina", "text": "...", "reason": "..."}],
-      "application": "Aplicação pastoral."
+      "original": "Análise exegética em texto corrido, sem subdivisões em chaves.",
+      "context": "Contexto histórico e cultural em texto corrido.",
+      "references": [
+        { 
+          "ref": "Ex: Rm 3:23", 
+          "type": "Ex: Doutrina", 
+          "text": "Texto do versículo aqui", 
+          "reason": "Explicação da conexão teológica." 
+        }
+      ],
+      "application": "Aplicação pastoral em texto corrido."
     }
+
+    Responda apenas o JSON puro.
   `;
 
   try {
