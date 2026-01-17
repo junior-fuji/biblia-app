@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// ✅ CAMINHO CORRIGIDO
+// ✅ CAMINHO SUPABASE (Mantido o que funcionou)
 import { supabase } from '../../../lib/supabase';
 
 // --- MAPA COMPLETO DE LIVROS ---
@@ -69,13 +69,15 @@ export default function LeituraScreen() {
   const { book, chapter } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   
-  // ✅ CORREÇÃO CRÍTICA: Garante que o ID é lido corretamente, não importa como venha
-  const rawBook = Array.isArray(book) ? book[0] : book;
-  const rawChapter = Array.isArray(chapter) ? chapter[0] : chapter;
-  
-  // Se não vier nada, assume 1 (Gênesis)
-  const numericBookId = rawBook ? parseInt(rawBook, 10) : 1;
-  const initialChapter = rawChapter ? parseInt(rawChapter, 10) : 1;
+  // LOGICA SEGURA DE ID
+  const parseParam = (param: string | string[] | undefined) => {
+    if (!param) return 0;
+    if (Array.isArray(param)) return parseInt(param[0], 10) || 0;
+    return parseInt(param, 10) || 0;
+  };
+
+  const numericBookId = parseParam(book) || 1;
+  const initialChapter = parseParam(chapter) || 1;
 
   const [loading, setLoading] = useState(false);
   const [verses, setVerses] = useState<Verse[]>([]);
@@ -131,14 +133,12 @@ export default function LeituraScreen() {
     initBook();
   }, [numericBookId]);
 
-  useEffect(() => { if (numericBookId) fetchVerses(numericBookId, selectedChapter); }, [selectedChapter, numericBookId]);
+  useEffect(() => { if (numericBookId > 0) fetchVerses(numericBookId, selectedChapter); }, [selectedChapter, numericBookId]);
 
   async function fetchVerses(bId: number, cap: number) {
     setLoading(true);
     try {
-        // Busca simples e robusta
         const { data, error } = await supabase.from('verses').select('id, verse, text_pt').eq('book_id', bId).eq('chapter', cap).order('verse', { ascending: true });
-        
         if (error) throw error;
         setVerses(data || []); 
     } catch (error) {
@@ -181,18 +181,21 @@ export default function LeituraScreen() {
     else { Alert.alert("Sucesso!", "Análise salva."); setIsEditing(false); }
   };
 
+  // ✅ CORREÇÃO: FORMATADOR DE EDIÇÃO
+  // Agora ele cria um texto bonito e espaçado quando você clica em Editar
   const handleEdit = () => {
     if (!analysisData) return;
     
     const safe = (txt: any) => {
-       if (!txt) return "";
+       if (!txt) return "Sem informação.";
        return typeof txt === 'object' ? Object.values(txt).join(' ') : txt;
     };
 
+    // Note os \n\n para pular linhas e os emojis para organizar
     const textVersion = 
       `📌 TEMA CENTRAL:\n${safe(analysisData.theme)}\n\n` +
       `🏛️ CONTEXTO HISTÓRICO:\n${safe(analysisData.history)}\n\n` +
-      `🔎 EXEGESE & ORIGINAL:\n${safe(analysisData.exegesis)}\n\n` +
+      `🔎 EXEGESE DETALHADA:\n${safe(analysisData.exegesis)}\n\n` +
       `✝️ TEOLOGIA:\n${safe(analysisData.theology)}\n\n` +
       `🌱 APLICAÇÃO PRÁTICA:\n${safe(analysisData.application)}`;
       
@@ -202,20 +205,15 @@ export default function LeituraScreen() {
 
   const speakWithOpenAI = async () => {
     if (!analysisData && !isEditing) return;
-    
     if (sound) {
       if (isSpeaking) { await sound.pauseAsync(); setIsSpeaking(false); } 
       else { await sound.playAsync(); setIsSpeaking(true); }
       return;
     }
-
     try {
       setAudioLoading(true);
-      
       const safeText = (txt: any) => typeof txt === 'object' ? JSON.stringify(txt) : txt;
-      let textToSpeak = isEditing 
-        ? editedText 
-        : `Análise Teológica. Tema: ${safeText(analysisData?.theme)}. Exegese: ${safeText(analysisData?.exegesis)}. Aplicação: ${safeText(analysisData?.application)}`;
+      let textToSpeak = isEditing ? editedText : `Análise Teológica. Tema: ${safeText(analysisData?.theme)}. Exegese: ${safeText(analysisData?.exegesis)}. Aplicação: ${safeText(analysisData?.application)}`;
 
       const response = await fetch('/api/speech', {
         method: 'POST',
@@ -230,7 +228,6 @@ export default function LeituraScreen() {
       reader.readAsDataURL(blob);
       reader.onloadend = async () => {
         const uriResult = reader.result as string;
-        
         if (Platform.OS === 'web') {
            const { sound: newSound } = await Audio.Sound.createAsync({ uri: uriResult }, { shouldPlay: true });
            setSound(newSound); setIsSpeaking(true);
@@ -260,22 +257,25 @@ export default function LeituraScreen() {
     setAiModalVisible(true); 
     setAiLoading(true);
     
+    // ✅ CORREÇÃO: PROMPT TURBO DETALHADO
+    // Manda a IA ser prolixa e detalhista
     const SYSTEM_PROMPT = `
     ATUE COMO: Um Teólogo Reformado Sênior, PhD em Exegese Bíblica e Linguística.
-    TAREFA: Analisar o texto bíblico fornecido.
+    TAREFA: Analisar o texto bíblico fornecido com profundidade acadêmica e pastoral.
     
-    DIRETRIZES (OBRIGATÓRIO):
-    1. NÃO SEJA SUPERFICIAL. Escreva parágrafos completos e densos.
-    2. Na Exegese, EXPLIQUE o significado das palavras originais (transliteradas).
-    3. Na Teologia, conecte com a História da Redenção.
+    REGRAS OBRIGATÓRIAS:
+    1. NÃO RESUMA. Escreva parágrafos longos, densos e explicativos.
+    2. Na Exegese, analise as palavras chave no original (Hebraico/Grego), colocando a transliteração e o sentido profundo.
+    3. Na Teologia, conecte com a Grande História da Redenção (Cristocentrismo).
+    4. Seja didático mas profundo, como um comentário bíblico de referência.
     
     ESTRUTURA JSON (Responda APENAS JSON):
     {
-      "theme": "Escreva um resumo robusto do tema central (mínimo 2 frases).",
-      "history": "Contexto histórico, autor, data e público alvo.",
-      "exegesis": "Análise versículo a versículo. Cite palavras chaves e explique seu peso teológico.",
-      "theology": "Doutrinas fundamentais presentes no texto.",
-      "application": "3 pontos práticos e desafiadores para a vida cristã hoje."
+      "theme": "Resumo robusto do tema central (mínimo 3 frases).",
+      "history": "Contexto histórico completo: autor, data, situação política e destinatários.",
+      "exegesis": "Análise detalhada versículo a versículo ou das palavras-chave. Mínimo 150 palavras.",
+      "theology": "Doutrinas fundamentais (Justificação, Santificação, etc) presentes no texto.",
+      "application": "3 aplicações práticas, desafiadoras e específicas para a vida cristã hoje."
     }
     `;
 
@@ -384,15 +384,24 @@ export default function LeituraScreen() {
 
       <View style={{ flex: 1 }}>
         {loading ? <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 50 }} /> : (
-          <FlatList data={verses} key="text" keyExtractor={i => i.id.toString()} contentContainerStyle={styles.textContainer} showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <TouchableOpacity activeOpacity={0.7} onLongPress={() => analyzeVerse(item)} style={styles.verseBox}>
-                <Text style={[styles.verseText, { fontSize: fontSize }]}>
-                  <Text style={[styles.verseNumber, { fontSize: fontSize * 0.7 }]}>{item.verse}  </Text>
-                  {item.text_pt}
-                </Text>
-              </TouchableOpacity>
-            )} />
+            verses.length === 0 ? (
+                <View style={{padding: 40, alignItems: 'center'}}>
+                    <Text style={{fontSize: 16, color: '#666', textAlign: 'center'}}>
+                        Nenhum versículo encontrado.{'\n'}
+                        Tente recarregar ou verifique sua conexão.
+                    </Text>
+                </View>
+            ) : (
+                <FlatList data={verses} key="text" keyExtractor={i => i.id.toString()} contentContainerStyle={styles.textContainer} showsVerticalScrollIndicator={false}
+                    renderItem={({ item }) => (
+                    <TouchableOpacity activeOpacity={0.7} onLongPress={() => analyzeVerse(item)} style={styles.verseBox}>
+                        <Text style={[styles.verseText, { fontSize: fontSize }]}>
+                        <Text style={[styles.verseNumber, { fontSize: fontSize * 0.7 }]}>{item.verse}  </Text>
+                        {item.text_pt}
+                        </Text>
+                    </TouchableOpacity>
+                    )} />
+            )
         )}
       </View>
 
