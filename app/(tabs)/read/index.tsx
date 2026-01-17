@@ -20,6 +20,8 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// ✅ CAMINHO DO SUPABASE CORRIGIDO (3 NÍVEIS)
 import { supabase } from '../../../lib/supabase';
 
 // --- MAPA COMPLETO DE LIVROS ---
@@ -89,8 +91,11 @@ export default function LeituraScreen() {
   const [editedText, setEditedText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
 
-  const numericBookId = Number(book);
-  const currentBookData = BOOK_MAP[numericBookId] || { name: 'Livro', abbrev: '' };
+  // ✅ CORREÇÃO PARA "BÍBLIA SUMIDA": Garante que o ID do livro é um número
+  const rawBook = Array.isArray(book) ? book[0] : book;
+  const numericBookId = rawBook ? parseInt(rawBook, 10) : 0;
+
+  const currentBookData = BOOK_MAP[numericBookId] || { name: 'Carregando...', abbrev: '' };
   const displayTitle = currentBookData.name;
 
   useEffect(() => { return () => { if (sound) sound.unloadAsync(); }; }, [sound]);
@@ -108,10 +113,11 @@ export default function LeituraScreen() {
     configureAudio();
   }, []);
 
+  // Busca o total de capítulos
   useEffect(() => {
     async function initBook() {
+      if (!numericBookId) return;
       try {
-        if (!numericBookId) return;
         const { data: max } = await supabase.from('verses').select('chapter').eq('book_id', numericBookId).order('chapter', { ascending: false }).limit(1);
         if (max && max.length > 0) { 
             setTotalChapters(max[0].chapter); 
@@ -122,12 +128,25 @@ export default function LeituraScreen() {
     initBook();
   }, [numericBookId]);
 
+  // Busca os Versículos
   useEffect(() => { if (numericBookId) fetchVerses(numericBookId, selectedChapter); }, [selectedChapter, numericBookId]);
 
   async function fetchVerses(bId: number, cap: number) {
     setLoading(true);
-    const { data } = await supabase.from('verses').select('id, verse, text_pt').eq('book_id', bId).eq('chapter', cap).order('verse', { ascending: true });
-    setVerses(data || []); setLoading(false);
+    try {
+        const { data, error } = await supabase.from('verses').select('id, verse, text_pt').eq('book_id', bId).eq('chapter', cap).order('verse', { ascending: true });
+        
+        if (error) {
+            console.error("Erro Supabase:", error);
+            Alert.alert("Erro", "Falha ao carregar versículos.");
+        }
+        
+        setVerses(data || []); 
+    } catch (error) {
+        console.error("Erro Geral:", error);
+    } finally {
+        setLoading(false);
+    }
   }
 
   const handleShare = async () => {
@@ -163,7 +182,6 @@ export default function LeituraScreen() {
     else { Alert.alert("Sucesso!", "Análise salva."); setIsEditing(false); }
   };
 
-  // --- FORMATAÇÃO BONITA PARA EDIÇÃO ---
   const handleEdit = () => {
     if (!analysisData) return;
     
@@ -183,7 +201,6 @@ export default function LeituraScreen() {
     setIsEditing(true);
   };
 
-  // --- ÁUDIO COM BACKEND SEGURO ---
   const speakWithOpenAI = async () => {
     if (!analysisData && !isEditing) return;
     
@@ -201,7 +218,6 @@ export default function LeituraScreen() {
         ? editedText 
         : `Análise Teológica. Tema: ${safeText(analysisData?.theme)}. Exegese: ${safeText(analysisData?.exegesis)}. Aplicação: ${safeText(analysisData?.application)}`;
 
-      // Chama nosso backend de voz
       const response = await fetch('/api/speech', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -240,7 +256,6 @@ export default function LeituraScreen() {
     }
   };
 
-  // --- ANÁLISE IA COM PROMPT TURBO ---
   const callAI = async (prompt: string, title: string) => {
     setAiTitle(title); 
     setAnalysisData(null); 
