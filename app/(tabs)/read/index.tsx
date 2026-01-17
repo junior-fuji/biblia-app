@@ -21,8 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// ⚠️ CONFIRA SE O CAMINHO ESTÁ CERTO PARA O SEU PROJETO
-// Se der erro de "module not found", mude para ../../../lib/supabase
+// ✅ CAMINHO CORRIGIDO (3 níveis)
 import { supabase } from '../../../lib/supabase';
 
 const BOOK_MAP: { [key: number]: { name: string, abbrev: string } } = {
@@ -69,11 +68,21 @@ export default function LeituraScreen() {
   const { book, chapter } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   
+  // --- LÓGICA DE ID BLINDADA ---
+  const parseParam = (param: string | string[] | undefined) => {
+    if (!param) return 0;
+    if (Array.isArray(param)) return parseInt(param[0], 10) || 0;
+    return parseInt(param, 10) || 0;
+  };
+
+  const numericBookId = parseParam(book);
+  const initialChapter = parseParam(chapter) || 1;
+
   const [loading, setLoading] = useState(false);
   const [verses, setVerses] = useState<Verse[]>([]);
   const [chaptersList, setChaptersList] = useState<number[]>([]);
   const [totalChapters, setTotalChapters] = useState(0);
-  const [selectedChapter, setSelectedChapter] = useState<number>(chapter ? Number(chapter) : 1);
+  const [selectedChapter, setSelectedChapter] = useState<number>(initialChapter);
   const [showGrid, setShowGrid] = useState(false); 
   const [fontSize, setFontSize] = useState(20);
 
@@ -91,9 +100,7 @@ export default function LeituraScreen() {
   const [editedText, setEditedText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
 
-  // 🔄 VOLTAMOS AO JEITO SIMPLES DE PEGAR O ID
-  const numericBookId = Number(book);
-  const currentBookData = BOOK_MAP[numericBookId] || { name: 'Livro', abbrev: '' };
+  const currentBookData = BOOK_MAP[numericBookId] || { name: 'Carregando...', abbrev: '' };
   const displayTitle = currentBookData.name;
 
   useEffect(() => { return () => { if (sound) sound.unloadAsync(); }; }, [sound]);
@@ -113,8 +120,8 @@ export default function LeituraScreen() {
 
   useEffect(() => {
     async function initBook() {
+      if (!numericBookId) return;
       try {
-        if (!numericBookId) return;
         const { data: max } = await supabase.from('verses').select('chapter').eq('book_id', numericBookId).order('chapter', { ascending: false }).limit(1);
         if (max && max.length > 0) { 
             setTotalChapters(max[0].chapter); 
@@ -125,13 +132,23 @@ export default function LeituraScreen() {
     initBook();
   }, [numericBookId]);
 
-  useEffect(() => { if (numericBookId) fetchVerses(numericBookId, selectedChapter); }, [selectedChapter, numericBookId]);
+  useEffect(() => { 
+      if (numericBookId > 0) {
+          fetchVerses(numericBookId, selectedChapter); 
+      }
+  }, [selectedChapter, numericBookId]);
 
   async function fetchVerses(bId: number, cap: number) {
     setLoading(true);
-    // VOLTAMOS A LÓGICA ORIGINAL DE BUSCA
-    const { data } = await supabase.from('verses').select('id, verse, text_pt').eq('book_id', bId).eq('chapter', cap).order('verse', { ascending: true });
-    setVerses(data || []); setLoading(false);
+    try {
+        const { data, error } = await supabase.from('verses').select('id, verse, text_pt').eq('book_id', bId).eq('chapter', cap).order('verse', { ascending: true });
+        if (error) throw error;
+        setVerses(data || []); 
+    } catch (error) {
+        console.error("Erro busca:", error);
+    } finally {
+        setLoading(false);
+    }
   }
 
   const handleShare = async () => {
@@ -169,39 +186,23 @@ export default function LeituraScreen() {
 
   const handleEdit = () => {
     if (!analysisData) return;
-    
-    const safe = (txt: any) => {
-       if (!txt) return "";
-       return typeof txt === 'object' ? Object.values(txt).join(' ') : txt;
-    };
-
-    const textVersion = 
-      `📌 TEMA CENTRAL:\n${safe(analysisData.theme)}\n\n` +
-      `🏛️ CONTEXTO HISTÓRICO:\n${safe(analysisData.history)}\n\n` +
-      `🔎 EXEGESE & ORIGINAL:\n${safe(analysisData.exegesis)}\n\n` +
-      `✝️ TEOLOGIA:\n${safe(analysisData.theology)}\n\n` +
-      `🌱 APLICAÇÃO PRÁTICA:\n${safe(analysisData.application)}`;
-      
+    const safe = (txt: any) => { if (!txt) return ""; return typeof txt === 'object' ? Object.values(txt).join(' ') : txt; };
+    const textVersion = `📌 TEMA CENTRAL:\n${safe(analysisData.theme)}\n\n🏛️ CONTEXTO HISTÓRICO:\n${safe(analysisData.history)}\n\n🔎 EXEGESE & ORIGINAL:\n${safe(analysisData.exegesis)}\n\n✝️ TEOLOGIA:\n${safe(analysisData.theology)}\n\n🌱 APLICAÇÃO PRÁTICA:\n${safe(analysisData.application)}`;
     setEditedText(textVersion); 
     setIsEditing(true);
   };
 
   const speakWithOpenAI = async () => {
     if (!analysisData && !isEditing) return;
-    
     if (sound) {
       if (isSpeaking) { await sound.pauseAsync(); setIsSpeaking(false); } 
       else { await sound.playAsync(); setIsSpeaking(true); }
       return;
     }
-
     try {
       setAudioLoading(true);
-      
       const safeText = (txt: any) => typeof txt === 'object' ? JSON.stringify(txt) : txt;
-      let textToSpeak = isEditing 
-        ? editedText 
-        : `Análise Teológica. Tema: ${safeText(analysisData?.theme)}. Exegese: ${safeText(analysisData?.exegesis)}. Aplicação: ${safeText(analysisData?.application)}`;
+      let textToSpeak = isEditing ? editedText : `Análise Teológica. Tema: ${safeText(analysisData?.theme)}. Exegese: ${safeText(analysisData?.exegesis)}. Aplicação: ${safeText(analysisData?.application)}`;
 
       const response = await fetch('/api/speech', {
         method: 'POST',
@@ -216,7 +217,6 @@ export default function LeituraScreen() {
       reader.readAsDataURL(blob);
       reader.onloadend = async () => {
         const uriResult = reader.result as string;
-        
         if (Platform.OS === 'web') {
            const { sound: newSound } = await Audio.Sound.createAsync({ uri: uriResult }, { shouldPlay: true });
            setSound(newSound); setIsSpeaking(true);
@@ -231,78 +231,30 @@ export default function LeituraScreen() {
            newSound.setOnPlaybackStatusUpdate((s: any) => { if (s.didJustFinish) { setIsSpeaking(false); newSound.unloadAsync(); setSound(null); }});
         }
       };
-    } catch (error: any) { 
-        Alert.alert("Erro de Áudio", "Não foi possível gerar o áudio."); 
-    } finally { 
-        setAudioLoading(false); 
-    }
+    } catch (error: any) { Alert.alert("Erro de Áudio", "Não foi possível gerar o áudio."); } 
+    finally { setAudioLoading(false); }
   };
 
   const callAI = async (prompt: string, title: string) => {
-    setAiTitle(title); 
-    setAnalysisData(null); 
-    setIsEditing(false); 
-    stopSpeaking(); 
-    setAiModalVisible(true); 
-    setAiLoading(true);
-    
-    const SYSTEM_PROMPT = `
-    ATUE COMO: Um Teólogo Reformado Sênior, PhD em Exegese Bíblica e Linguística.
-    TAREFA: Analisar o texto bíblico fornecido.
-    
-    DIRETRIZES (OBRIGATÓRIO):
-    1. NÃO SEJA SUPERFICIAL. Escreva parágrafos completos e densos.
-    2. Na Exegese, EXPLIQUE o significado das palavras originais (transliteradas).
-    3. Na Teologia, conecte com a História da Redenção.
-    
-    ESTRUTURA JSON (Responda APENAS JSON):
-    {
-      "theme": "Escreva um resumo robusto do tema central (mínimo 2 frases).",
-      "history": "Contexto histórico, autor, data e público alvo.",
-      "exegesis": "Análise versículo a versículo. Cite palavras chaves e explique seu peso teológico.",
-      "theology": "Doutrinas fundamentais presentes no texto.",
-      "application": "3 pontos práticos e desafiadores para a vida cristã hoje."
-    }
-    `;
+    setAiTitle(title); setAnalysisData(null); setIsEditing(false); stopSpeaking(); setAiModalVisible(true); setAiLoading(true);
+    const SYSTEM_PROMPT = `ATUE COMO: Um Teólogo Reformado Sênior. TAREFA: Analisar o texto bíblico. DIRETRIZES: 1. Profundidade. 2. Exegese com transliteração. 3. Teologia robusta. JSON OBRIGATÓRIO: { "theme": "...", "history": "...", "exegesis": "...", "theology": "...", "application": "..." }`;
 
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: prompt }
-          ]
-        })
+        body: JSON.stringify({ messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }] })
       });
-
       const data = await response.json();
-
-      if (data.error) throw new Error(data.error);
-
       if (data.choices) {
         let content = data.choices[0].message.content;
-        const firstBrace = content.indexOf('{');
-        const lastBrace = content.lastIndexOf('}');
-        
+        const firstBrace = content.indexOf('{'); const lastBrace = content.lastIndexOf('}');
         if (firstBrace !== -1 && lastBrace !== -1) {
-            const cleanJson = content.substring(firstBrace, lastBrace + 1);
-            try {
-                setAnalysisData(JSON.parse(cleanJson));
-            } catch (e) {
-                setAnalysisData({ theme: "Erro na leitura", exegesis: "A IA retornou um formato inválido." });
-            }
-        } else {
-             setAnalysisData({ theme: "Erro", exegesis: "A IA não retornou um JSON válido." });
-        }
+            setAnalysisData(JSON.parse(content.substring(firstBrace, lastBrace + 1)));
+        } else { setAnalysisData({ theme: "Erro", exegesis: "Formato inválido." }); }
       }
-    } catch (error) { 
-        console.error(error);
-        setAnalysisData({ theme: "Erro de Conexão", exegesis: "Não foi possível conectar ao servidor de Teologia." });
-    } finally { 
-        setAiLoading(false); 
-    }
+    } catch (error) { setAnalysisData({ theme: "Erro de Conexão", exegesis: "Não foi possível conectar." }); } 
+    finally { setAiLoading(false); }
   };
   
   const stopSpeaking = async () => { if (sound) { await sound.stopAsync(); await sound.unloadAsync(); setSound(null); setIsSpeaking(false); } };
@@ -338,12 +290,7 @@ export default function LeituraScreen() {
   const InfoCard = ({ title, text, color, icon }: any) => {
     if (!text) return null;
     let safeContent = text;
-    if (typeof text === 'object') {
-        safeContent = Object.values(text).join('. ');
-        if (safeContent === '[object Object]' || safeContent === '') {
-            safeContent = JSON.stringify(text).replace(/[\{\}"]/g, '').replace(/:/g, ': ');
-        }
-    }
+    if (typeof text === 'object') { safeContent = Object.values(text).join('. '); if (safeContent === '[object Object]' || safeContent === '') safeContent = JSON.stringify(text).replace(/[\{\}"]/g, '').replace(/:/g, ': '); }
     return (
       <View style={styles.cardContainer}>
         <View style={[styles.cardBar, { backgroundColor: color }]} />
@@ -370,15 +317,26 @@ export default function LeituraScreen() {
 
       <View style={{ flex: 1 }}>
         {loading ? <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 50 }} /> : (
-          <FlatList data={verses} key="text" keyExtractor={i => i.id.toString()} contentContainerStyle={styles.textContainer} showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <TouchableOpacity activeOpacity={0.7} onLongPress={() => analyzeVerse(item)} style={styles.verseBox}>
-                <Text style={[styles.verseText, { fontSize: fontSize }]}>
-                  <Text style={[styles.verseNumber, { fontSize: fontSize * 0.7 }]}>{item.verse}  </Text>
-                  {item.text_pt}
-                </Text>
-              </TouchableOpacity>
-            )} />
+            verses.length === 0 ? (
+                <View style={{padding: 40, alignItems: 'center'}}>
+                    <Text style={{fontSize: 16, color: '#666', textAlign: 'center'}}>
+                        Nenhum versículo encontrado.{'\n\n'}
+                        Livro ID: {numericBookId}{'\n'}
+                        Capítulo: {selectedChapter}
+                    </Text>
+                    <Text style={{fontSize: 12, color: '#999', marginTop: 20}}>Verifique se o banco de dados está conectado.</Text>
+                </View>
+            ) : (
+                <FlatList data={verses} key="text" keyExtractor={i => i.id.toString()} contentContainerStyle={styles.textContainer} showsVerticalScrollIndicator={false}
+                    renderItem={({ item }) => (
+                    <TouchableOpacity activeOpacity={0.7} onLongPress={() => analyzeVerse(item)} style={styles.verseBox}>
+                        <Text style={[styles.verseText, { fontSize: fontSize }]}>
+                        <Text style={[styles.verseNumber, { fontSize: fontSize * 0.7 }]}>{item.verse}  </Text>
+                        {item.text_pt}
+                        </Text>
+                    </TouchableOpacity>
+                    )} />
+            )
         )}
       </View>
 
@@ -398,12 +356,7 @@ export default function LeituraScreen() {
             </TouchableOpacity>
             <View style={styles.headerActions}>
                 <TouchableOpacity onPress={speakWithOpenAI} style={styles.playActionBtn} disabled={audioLoading}>
-                    {audioLoading ? <ActivityIndicator size="small" color="#007AFF"/> : 
-                        <>
-                        <Ionicons name={isSpeaking ? "pause-circle" : "play-circle"} size={32} color="#007AFF" />
-                        <Text style={styles.playLabel}>Ouvir</Text>
-                        </>
-                    }
+                    {audioLoading ? <ActivityIndicator size="small" color="#007AFF"/> : <><Ionicons name={isSpeaking ? "pause-circle" : "play-circle"} size={32} color="#007AFF" /><Text style={styles.playLabel}>Ouvir</Text></>}
                 </TouchableOpacity>
                 {isEditing ? (
                     <TouchableOpacity onPress={handleSave} style={{backgroundColor:'#007AFF', paddingHorizontal:12, paddingVertical:8, borderRadius:15}}>
@@ -411,29 +364,19 @@ export default function LeituraScreen() {
                     </TouchableOpacity>
                 ) : (
                     <>
-                    <TouchableOpacity onPress={handleSave} style={styles.actionIcon}>
-                        {savingNote ? <ActivityIndicator size="small" color="#007AFF"/> : <Ionicons name="save-outline" size={26} color="#007AFF" />}
-                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleSave} style={styles.actionIcon}>{savingNote ? <ActivityIndicator size="small" color="#007AFF"/> : <Ionicons name="save-outline" size={26} color="#007AFF" />}</TouchableOpacity>
                     <TouchableOpacity onPress={handleEdit} style={styles.actionIcon}><Ionicons name="pencil-outline" size={26} color="#007AFF" /></TouchableOpacity>
                     <TouchableOpacity onPress={handleShare} style={styles.actionIcon}><Ionicons name="share-outline" size={26} color="#007AFF" /></TouchableOpacity>
                     </>
                 )}
             </View>
           </View>
-          
           {aiLoading ? (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" color="#AF52DE" /><Text style={{ marginTop: 20, color: '#666', fontSize: 16 }}>Consultando PhD em Teologia...</Text></View>
           ) : (
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
                 {isEditing ? (
-                    <TextInput 
-                        style={styles.textEditor} 
-                        multiline 
-                        value={editedText} 
-                        onChangeText={setEditedText} 
-                        placeholder="Edite sua anotação aqui..."
-                        textAlignVertical="top"
-                    />
+                    <TextInput style={styles.textEditor} multiline value={editedText} onChangeText={setEditedText} placeholder="Edite sua anotação aqui..." textAlignVertical="top"/>
                 ) : (
                     <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
                       <Text style={styles.analysisSubject}>{aiTitle}</Text>
@@ -476,16 +419,7 @@ const styles = StyleSheet.create({
   navButtonText: { color: '#fff', fontWeight: '600' },
   disabledText: { color: '#ccc' },
   chapterIndicator: { fontSize: 14, color: '#666' },
-  modalHeader: { 
-      flexDirection: 'row', 
-      justifyContent: 'space-between', 
-      alignItems: 'center', 
-      paddingHorizontal: 20, 
-      paddingBottom: 15, 
-      backgroundColor: '#F2F2F7', 
-      borderBottomWidth: 1, 
-      borderBottomColor: '#E5E5EA' 
-  },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 15, backgroundColor: '#F2F2F7', borderBottomWidth: 1, borderBottomColor: '#E5E5EA' },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   playActionBtn: { alignItems: 'center', justifyContent: 'center', marginRight: 15 }, 
   playLabel: { fontSize: 9, color: '#007AFF', fontWeight: '600', marginTop: -2 },
