@@ -1,309 +1,506 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
+import * as Clipboard from 'expo-clipboard';
+import * as FileSystem from 'expo-file-system';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../../lib/supabase';
 
-// DADOS DOS LIVROS (Para navegação rápida)
-const ALL_BOOKS = [
-  { id: 1, name: 'Gênesis', abbrev: 'Gn', chapters: 50, test: 'old' },
-  { id: 2, name: 'Êxodo', abbrev: 'Ex', chapters: 40, test: 'old' },
-  { id: 3, name: 'Levítico', abbrev: 'Lv', chapters: 27, test: 'old' },
-  { id: 4, name: 'Números', abbrev: 'Nm', chapters: 36, test: 'old' },
-  { id: 5, name: 'Deuteronômio', abbrev: 'Dt', chapters: 34, test: 'old' },
-  { id: 6, name: 'Josué', abbrev: 'Js', chapters: 24, test: 'old' },
-  { id: 7, name: 'Juízes', abbrev: 'Jz', chapters: 21, test: 'old' },
-  { id: 8, name: 'Rute', abbrev: 'Rt', chapters: 4, test: 'old' },
-  { id: 9, name: '1 Samuel', abbrev: '1Sm', chapters: 31, test: 'old' },
-  { id: 10, name: '2 Samuel', abbrev: '2Sm', chapters: 24, test: 'old' },
-  { id: 11, name: '1 Reis', abbrev: '1Rs', chapters: 22, test: 'old' },
-  { id: 12, name: '2 Reis', abbrev: '2Rs', chapters: 25, test: 'old' },
-  { id: 13, name: '1 Crônicas', abbrev: '1Cr', chapters: 29, test: 'old' },
-  { id: 14, name: '2 Crônicas', abbrev: '2Cr', chapters: 36, test: 'old' },
-  { id: 15, name: 'Esdras', abbrev: 'Ed', chapters: 10, test: 'old' },
-  { id: 16, name: 'Neemias', abbrev: 'Ne', chapters: 13, test: 'old' },
-  { id: 17, name: 'Ester', abbrev: 'Et', chapters: 10, test: 'old' },
-  { id: 18, name: 'Jó', abbrev: 'Jó', chapters: 42, test: 'old' },
-  { id: 19, name: 'Salmos', abbrev: 'Sl', chapters: 150, test: 'old' },
-  { id: 20, name: 'Provérbios', abbrev: 'Pv', chapters: 31, test: 'old' },
-  { id: 21, name: 'Eclesiastes', abbrev: 'Ec', chapters: 12, test: 'old' },
-  { id: 22, name: 'Cânticos', abbrev: 'Ct', chapters: 8, test: 'old' },
-  { id: 23, name: 'Isaías', abbrev: 'Is', chapters: 66, test: 'old' },
-  { id: 24, name: 'Jeremias', abbrev: 'Jr', chapters: 52, test: 'old' },
-  { id: 25, name: 'Lamentações', abbrev: 'Lm', chapters: 5, test: 'old' },
-  { id: 26, name: 'Ezequiel', abbrev: 'Ez', chapters: 48, test: 'old' },
-  { id: 27, name: 'Daniel', abbrev: 'Dn', chapters: 12, test: 'old' },
-  { id: 28, name: 'Oseias', abbrev: 'Os', chapters: 14, test: 'old' },
-  { id: 29, name: 'Joel', abbrev: 'Jl', chapters: 3, test: 'old' },
-  { id: 30, name: 'Amós', abbrev: 'Am', chapters: 9, test: 'old' },
-  { id: 31, name: 'Obadias', abbrev: 'Ob', chapters: 1, test: 'old' },
-  { id: 32, name: 'Jonas', abbrev: 'Jn', chapters: 4, test: 'old' },
-  { id: 33, name: 'Miqueias', abbrev: 'Mq', chapters: 7, test: 'old' },
-  { id: 34, name: 'Naum', abbrev: 'Na', chapters: 3, test: 'old' },
-  { id: 35, name: 'Habacuque', abbrev: 'Hc', chapters: 3, test: 'old' },
-  { id: 36, name: 'Sofonias', abbrev: 'Sf', chapters: 3, test: 'old' },
-  { id: 37, name: 'Ageu', abbrev: 'Ag', chapters: 2, test: 'old' },
-  { id: 38, name: 'Zacarias', abbrev: 'Zc', chapters: 14, test: 'old' },
-  { id: 39, name: 'Malaquias', abbrev: 'Ml', chapters: 4, test: 'old' },
-  { id: 40, name: 'Mateus', abbrev: 'Mt', chapters: 28, test: 'new' },
-  { id: 41, name: 'Marcos', abbrev: 'Mc', chapters: 16, test: 'new' },
-  { id: 42, name: 'Lucas', abbrev: 'Lc', chapters: 24, test: 'new' },
-  { id: 43, name: 'João', abbrev: 'Jo', chapters: 21, test: 'new' },
-  { id: 44, name: 'Atos', abbrev: 'At', chapters: 28, test: 'new' },
-  { id: 45, name: 'Romanos', abbrev: 'Rm', chapters: 16, test: 'new' },
-  { id: 46, name: '1 Coríntios', abbrev: '1Co', chapters: 16, test: 'new' },
-  { id: 47, name: '2 Coríntios', abbrev: '2Co', chapters: 13, test: 'new' },
-  { id: 48, name: 'Gálatas', abbrev: 'Gl', chapters: 6, test: 'new' },
-  { id: 49, name: 'Efésios', abbrev: 'Ef', chapters: 6, test: 'new' },
-  { id: 50, name: 'Filipenses', abbrev: 'Fp', chapters: 4, test: 'new' },
-  { id: 51, name: 'Colossenses', abbrev: 'Cl', chapters: 4, test: 'new' },
-  { id: 52, name: '1 Tessalonicenses', abbrev: '1Ts', chapters: 5, test: 'new' },
-  { id: 53, name: '2 Tessalonicenses', abbrev: '2Ts', chapters: 3, test: 'new' },
-  { id: 54, name: '1 Timóteo', abbrev: '1Tm', chapters: 6, test: 'new' },
-  { id: 55, name: '2 Timóteo', abbrev: '2Tm', chapters: 4, test: 'new' },
-  { id: 56, name: 'Tito', abbrev: 'Tt', chapters: 3, test: 'new' },
-  { id: 57, name: 'Filemom', abbrev: 'Fm', chapters: 1, test: 'new' },
-  { id: 58, name: 'Hebreus', abbrev: 'Hb', chapters: 13, test: 'new' },
-  { id: 59, name: 'Tiago', abbrev: 'Tg', chapters: 5, test: 'new' },
-  { id: 60, name: '1 Pedro', abbrev: '1Pe', chapters: 5, test: 'new' },
-  { id: 61, name: '2 Pedro', abbrev: '2Pe', chapters: 3, test: 'new' },
-  { id: 62, name: '1 João', abbrev: '1Jo', chapters: 5, test: 'new' },
-  { id: 63, name: '2 João', abbrev: '2Jo', chapters: 1, test: 'new' },
-  { id: 64, name: '3 João', abbrev: '3Jo', chapters: 1, test: 'new' },
-  { id: 65, name: 'Judas', abbrev: 'Jd', chapters: 1, test: 'new' },
-  { id: 66, name: 'Apocalipse', abbrev: 'Ap', chapters: 22, test: 'new' },
-];
+// --- MAPA COMPLETO DE LIVROS ---
+const BOOK_MAP: { [key: number]: { name: string, abbrev: string } } = {
+  1: { name: 'Gênesis', abbrev: 'Gn' }, 2: { name: 'Êxodo', abbrev: 'Êx' },
+  3: { name: 'Levítico', abbrev: 'Lv' }, 4: { name: 'Números', abbrev: 'Nm' },
+  5: { name: 'Deuteronômio', abbrev: 'Dt' }, 6: { name: 'Josué', abbrev: 'Js' },
+  7: { name: 'Juízes', abbrev: 'Jz' }, 8: { name: 'Rute', abbrev: 'Rt' },
+  9: { name: '1 Samuel', abbrev: '1Sm' }, 10: { name: '2 Samuel', abbrev: '2Sm' },
+  11: { name: '1 Reis', abbrev: '1Rs' }, 12: { name: '2 Reis', abbrev: '2Rs' },
+  13: { name: '1 Crônicas', abbrev: '1Cr' }, 14: { name: '2 Crônicas', abbrev: '2Cr' },
+  15: { name: 'Esdras', abbrev: 'Ed' }, 16: { name: 'Neemias', abbrev: 'Ne' },
+  17: { name: 'Ester', abbrev: 'Et' }, 18: { name: 'Jó', abbrev: 'Jó' },
+  19: { name: 'Salmos', abbrev: 'Sl' }, 20: { name: 'Provérbios', abbrev: 'Pv' },
+  21: { name: 'Eclesiastes', abbrev: 'Ec' }, 22: { name: 'Cânticos', abbrev: 'Ct' },
+  23: { name: 'Isaías', abbrev: 'Is' }, 24: { name: 'Jeremias', abbrev: 'Jr' },
+  25: { name: 'Lamentações', abbrev: 'Lm' }, 26: { name: 'Ezequiel', abbrev: 'Ez' },
+  27: { name: 'Daniel', abbrev: 'Dn' }, 28: { name: 'Oseias', abbrev: 'Os' },
+  29: { name: 'Joel', abbrev: 'Jl' }, 30: { name: 'Amós', abbrev: 'Am' },
+  31: { name: 'Obadias', abbrev: 'Ob' }, 32: { name: 'Jonas', abbrev: 'Jn' },
+  33: { name: 'Miqueias', abbrev: 'Mq' }, 34: { name: 'Naum', abbrev: 'Na' },
+  35: { name: 'Habacuque', abbrev: 'Hc' }, 36: { name: 'Sofonias', abbrev: 'Sf' },
+  37: { name: 'Ageu', abbrev: 'Ag' }, 38: { name: 'Zacarias', abbrev: 'Zc' },
+  39: { name: 'Malaquias', abbrev: 'Ml' }, 40: { name: 'Mateus', abbrev: 'Mt' },
+  41: { name: 'Marcos', abbrev: 'Mc' }, 42: { name: 'Lucas', abbrev: 'Lc' },
+  43: { name: 'João', abbrev: 'Jo' }, 44: { name: 'Atos', abbrev: 'At' },
+  45: { name: 'Romanos', abbrev: 'Rm' }, 46: { name: '1 Coríntios', abbrev: '1Co' },
+  47: { name: '2 Coríntios', abbrev: '2Co' }, 48: { name: 'Gálatas', abbrev: 'Gl' },
+  49: { name: 'Efésios', abbrev: 'Ef' }, 50: { name: 'Filipenses', abbrev: 'Fp' },
+  51: { name: 'Colossenses', abbrev: 'Cl' }, 52: { name: '1 Tessalonicenses', abbrev: '1Ts' },
+  53: { name: '2 Tessalonicenses', abbrev: '2Ts' }, 54: { name: '1 Timóteo', abbrev: '1Tm' },
+  55: { name: '2 Timóteo', abbrev: '2Tm' }, 56: { name: 'Tito', abbrev: 'Tt' },
+  57: { name: 'Filemom', abbrev: 'Fm' }, 58: { name: 'Hebreus', abbrev: 'Hb' },
+  59: { name: 'Tiago', abbrev: 'Tg' }, 60: { name: '1 Pedro', abbrev: '1Pe' },
+  61: { name: '2 Pedro', abbrev: '2Pe' }, 62: { name: '1 João', abbrev: '1Jo' },
+  63: { name: '2 João', abbrev: '2Jo' }, 64: { name: '3 João', abbrev: '3Jo' },
+  65: { name: 'Judas', abbrev: 'Jd' }, 66: { name: 'Apocalipse', abbrev: 'Ap' }
+};
 
-export default function BibleIndexScreen() {
-  const router = useRouter();
-  const params = useLocalSearchParams();
+type Verse = { id: string; verse: number; text_pt: string; };
+type AnalysisData = { theme?: string; exegesis?: string; history?: string; theology?: string; application?: string; };
+
+export default function LeituraScreen() {
+  const navigation = useNavigation();
+  const { book, chapter } = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
   
-  const [activeTab, setActiveTab] = useState<'old' | 'new'>('old');
-  const [searchText, setSearchText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [verses, setVerses] = useState<Verse[]>([]);
+  const [chaptersList, setChaptersList] = useState<number[]>([]);
+  const [totalChapters, setTotalChapters] = useState(0);
+  const [selectedChapter, setSelectedChapter] = useState<number>(chapter ? Number(chapter) : 1);
+  const [showGrid, setShowGrid] = useState(false); 
+  const [fontSize, setFontSize] = useState(20);
+
+  // IA & AUDIO
+  const [aiModalVisible, setAiModalVisible] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiTitle, setAiTitle] = useState('');
+  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(false);
   
-  // ESTADOS DA BUSCA
-  const [isSearching, setIsSearching] = useState(false);
-  const [verseResults, setVerseResults] = useState<any[]>([]);
-  const [filteredBooks, setFilteredBooks] = useState<any[]>([]);
-  const [loadingSearch, setLoadingSearch] = useState(false);
+  // EDITAR / SALVAR
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedText, setEditedText] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+
+  const numericBookId = Number(book);
+  const currentBookData = BOOK_MAP[numericBookId] || { name: 'Livro', abbrev: '' };
+  const displayTitle = currentBookData.name;
+
+  useEffect(() => { return () => { if (sound) sound.unloadAsync(); }; }, [sound]);
 
   useEffect(() => {
-    if (params.q) {
-        performSearch(params.q as string);
+    async function configureAudio() {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true,
+          interruptionModeIOS: InterruptionModeIOS.DoNotMix, interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+          shouldDuckAndroid: true, playThroughEarpieceAndroid: false,
+        });
+      } catch (e) {}
     }
-  }, [params.q]);
+    configureAudio();
+  }, []);
 
-  const performSearch = async (text: string) => {
-    setSearchText(text);
-    if (!text.trim()) {
-        setIsSearching(false);
-        setVerseResults([]);
-        return;
-    }
-
-    setIsSearching(true);
-    setLoadingSearch(true);
-
-    // 1. Filtra Livros (Busca simples de nome)
-    const booksFound = ALL_BOOKS.filter(b => 
-        b.name.toLowerCase().includes(text.toLowerCase()) || 
-        b.abbrev.toLowerCase().includes(text.toLowerCase())
-    );
-    setFilteredBooks(booksFound);
-
-    // 2. Busca Versículos (VOLTAMOS PARA O ILIKE QUE É SEGURO)
-    try {
-        const { data, error } = await supabase
-            .from('verses')
-            .select('id, book_id, chapter, verse, text_pt')
-            .ilike('text_pt', `%${text}%`) // Busca ampla primeiro
-            .limit(100); // Trazemos mais resultados para filtrar depois
-
-        if (!error && data) {
-            // 3. FILTRO MANUAL INTELIGENTE (Resolve o Ana vs Banana)
-            // Filtramos aqui no celular para garantir que só exibe a palavra exata
-            const cleanText = text.toLowerCase().trim();
-            
-            const exactMatches = data.filter(item => {
-                const verseLower = item.text_pt.toLowerCase();
-                // Regex: Procura a palavra cercada por espaços ou pontuação
-                const regex = new RegExp(`(^|\\W)${cleanText}($|\\W)`);
-                return regex.test(verseLower);
-            });
-
-            // Se achou correspondências exatas, mostra elas. Se não, mostra a busca ampla.
-            setVerseResults(exactMatches.length > 0 ? exactMatches : data);
+  useEffect(() => {
+    async function initBook() {
+      try {
+        if (!numericBookId) return;
+        const { data: max } = await supabase.from('verses').select('chapter').eq('book_id', numericBookId).order('chapter', { ascending: false }).limit(1);
+        if (max && max.length > 0) { 
+            setTotalChapters(max[0].chapter); 
+            setChaptersList(Array.from({ length: max[0].chapter }, (_, i) => i + 1)); 
         }
-    } catch (e) {
-        console.log("Erro na busca de versículos", e);
-    } finally {
-        setLoadingSearch(false);
+      } catch (e) { console.log(e); }
+    }
+    initBook();
+  }, [numericBookId]);
+
+  useEffect(() => { if (numericBookId) fetchVerses(numericBookId, selectedChapter); }, [selectedChapter, numericBookId]);
+
+  async function fetchVerses(bId: number, cap: number) {
+    setLoading(true);
+    const { data } = await supabase.from('verses').select('id, verse, text_pt').eq('book_id', bId).eq('chapter', cap).order('verse', { ascending: true });
+    setVerses(data || []); setLoading(false);
+  }
+
+  const handleShare = async () => {
+    let message = "";
+    if (isEditing) {
+      message = `*ANÁLISE (Minha Nota)*\n\n${editedText}`;
+    } else if (analysisData) {
+      message = `*ANÁLISE: ${aiTitle}*\n\n📖 *Tema:* ${analysisData.theme}\n🔎 *Exegese:* ${analysisData.exegesis}\n🏛️ *Histórico:* ${analysisData.history}\n✝️ *Teologia:* ${analysisData.theology}\n🌱 *Aplicação:* ${analysisData.application}`;
+    }
+    try { await Share.share({ message }); } catch (error) { Alert.alert("Erro", "Não foi possível compartilhar."); }
+  };
+
+  const handleCopy = async () => {
+    const text = isEditing ? editedText : JSON.stringify(analysisData, null, 2);
+    await Clipboard.setStringAsync(text);
+    Alert.alert("Copiado!", "Texto copiado.");
+  };
+
+  const handleSave = async () => {
+    if (!analysisData && !editedText) return;
+    setSavingNote(true);
+    let contentToSave = "";
+    if (isEditing) {
+      contentToSave = editedText;
+    } else {
+      contentToSave = JSON.stringify(analysisData);
+    }
+    const { error } = await supabase.from('saved_notes').insert({
+        title: aiTitle, reference: `${displayTitle} ${selectedChapter}`, content: contentToSave
+    });
+    setSavingNote(false);
+    if (error) { Alert.alert("Erro", "Não foi possível salvar."); } 
+    else { Alert.alert("Sucesso!", "Análise salva."); setIsEditing(false); }
+  };
+
+  // --- FORMATAÇÃO BONITA PARA EDIÇÃO ---
+  const handleEdit = () => {
+    if (!analysisData) return;
+    
+    const safe = (txt: any) => {
+       if (!txt) return "";
+       return typeof txt === 'object' ? Object.values(txt).join(' ') : txt;
+    };
+
+    const textVersion = 
+      `📌 TEMA CENTRAL:\n${safe(analysisData.theme)}\n\n` +
+      `🏛️ CONTEXTO HISTÓRICO:\n${safe(analysisData.history)}\n\n` +
+      `🔎 EXEGESE & ORIGINAL:\n${safe(analysisData.exegesis)}\n\n` +
+      `✝️ TEOLOGIA:\n${safe(analysisData.theology)}\n\n` +
+      `🌱 APLICAÇÃO PRÁTICA:\n${safe(analysisData.application)}`;
+      
+    setEditedText(textVersion); 
+    setIsEditing(true);
+  };
+
+  // --- ÁUDIO COM BACKEND SEGURO ---
+  const speakWithOpenAI = async () => {
+    if (!analysisData && !isEditing) return;
+    
+    if (sound) {
+      if (isSpeaking) { await sound.pauseAsync(); setIsSpeaking(false); } 
+      else { await sound.playAsync(); setIsSpeaking(true); }
+      return;
+    }
+
+    try {
+      setAudioLoading(true);
+      
+      const safeText = (txt: any) => typeof txt === 'object' ? JSON.stringify(txt) : txt;
+      let textToSpeak = isEditing 
+        ? editedText 
+        : `Análise Teológica. Tema: ${safeText(analysisData?.theme)}. Exegese: ${safeText(analysisData?.exegesis)}. Aplicação: ${safeText(analysisData?.application)}`;
+
+      // Chama nosso backend de voz
+      const response = await fetch('/api/speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: textToSpeak }),
+      });
+
+      if (!response.ok) throw new Error("Erro no servidor de áudio");
+
+      const blob = await response.blob();
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = async () => {
+        const uriResult = reader.result as string;
+        
+        if (Platform.OS === 'web') {
+           const { sound: newSound } = await Audio.Sound.createAsync({ uri: uriResult }, { shouldPlay: true });
+           setSound(newSound); setIsSpeaking(true);
+           newSound.setOnPlaybackStatusUpdate((s: any) => { if (s.didJustFinish) { setIsSpeaking(false); newSound.unloadAsync(); setSound(null); }});
+        } else {
+           const base64data = uriResult.split(',')[1];
+           
+           // @ts-ignore
+           const uri = (FileSystem.cacheDirectory || '') + 'speech_analysis.mp3';
+           
+           await FileSystem.writeAsStringAsync(uri, base64data, { encoding: 'base64' });
+           
+           const { sound: newSound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
+           setSound(newSound); setIsSpeaking(true);
+           newSound.setOnPlaybackStatusUpdate((s: any) => { if (s.didJustFinish) { setIsSpeaking(false); newSound.unloadAsync(); setSound(null); }});
+        }
+      };
+    } catch (error: any) { 
+        Alert.alert("Erro de Áudio", "Não foi possível gerar o áudio."); 
+    } finally { 
+        setAudioLoading(false); 
     }
   };
 
-  const clearSearch = () => {
-    setSearchText('');
-    setIsSearching(false);
-    setVerseResults([]);
-    router.setParams({ q: '' });
-  };
+  // --- ANÁLISE IA COM PROMPT TURBO ---
+  const callAI = async (prompt: string, title: string) => {
+    setAiTitle(title); 
+    setAnalysisData(null); 
+    setIsEditing(false); 
+    stopSpeaking(); 
+    setAiModalVisible(true); 
+    setAiLoading(true);
+    
+    const SYSTEM_PROMPT = `
+    ATUE COMO: Um Teólogo Reformado Sênior, PhD em Exegese Bíblica e Linguística.
+    TAREFA: Analisar o texto bíblico fornecido.
+    
+    DIRETRIZES (OBRIGATÓRIO):
+    1. NÃO SEJA SUPERFICIAL. Escreva parágrafos completos e densos.
+    2. Na Exegese, EXPLIQUE o significado das palavras originais (transliteradas).
+    3. Na Teologia, conecte com a História da Redenção.
+    
+    ESTRUTURA JSON (Responda APENAS JSON):
+    {
+      "theme": "Escreva um resumo robusto do tema central (mínimo 2 frases).",
+      "history": "Contexto histórico, autor, data e público alvo.",
+      "exegesis": "Análise versículo a versículo. Cite palavras chaves e explique seu peso teológico.",
+      "theology": "Doutrinas fundamentais presentes no texto.",
+      "application": "3 pontos práticos e desafiadores para a vida cristã hoje."
+    }
+    `;
 
-  const openBook = (bookId: number, chapter: number = 1) => {
-    router.push({
-      pathname: "/read/[book]",
-      params: { book: bookId, chapter: chapter }
-    });
-  };
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: prompt }
+          ]
+        })
+      });
 
-  const getBookName = (id: number) => {
-    const found = ALL_BOOKS.find(b => b.id === id);
-    return found ? found.name : 'Livro';
-  };
+      const data = await response.json();
 
-  const renderBookItem = (book: any) => (
-    <TouchableOpacity key={book.id} style={styles.bookRow} onPress={() => openBook(book.id)}>
-      <View style={styles.bookLeft}>
-        <View style={styles.abbrevCircle}>
-            <Text style={styles.abbrevText}>{book.abbrev}</Text>
+      if (data.error) throw new Error(data.error);
+
+      if (data.choices) {
+        let content = data.choices[0].message.content;
+        const firstBrace = content.indexOf('{');
+        const lastBrace = content.lastIndexOf('}');
+        
+        if (firstBrace !== -1 && lastBrace !== -1) {
+            const cleanJson = content.substring(firstBrace, lastBrace + 1);
+            try {
+                setAnalysisData(JSON.parse(cleanJson));
+            } catch (e) {
+                setAnalysisData({ theme: "Erro na leitura", exegesis: "A IA retornou um formato inválido." });
+            }
+        } else {
+             setAnalysisData({ theme: "Erro", exegesis: "A IA não retornou um JSON válido." });
+        }
+      }
+    } catch (error) { 
+        console.error(error);
+        setAnalysisData({ theme: "Erro de Conexão", exegesis: "Não foi possível conectar ao servidor de Teologia." });
+    } finally { 
+        setAiLoading(false); 
+    }
+  };
+  
+  const stopSpeaking = async () => { if (sound) { await sound.stopAsync(); await sound.unloadAsync(); setSound(null); setIsSpeaking(false); } };
+  const goNext = () => { if (selectedChapter < totalChapters) setSelectedChapter(selectedChapter + 1); };
+  const goPrev = () => { if (selectedChapter > 1) setSelectedChapter(selectedChapter - 1); };
+  const analyzeChapter = () => callAI(`Analise profundamente o Capítulo ${selectedChapter} de ${displayTitle}.`, `Capítulo ${selectedChapter}`);
+  const analyzeVerse = (v: Verse) => callAI(`Faça uma exegese profunda do Versículo: "${v.text_pt}" (Livro: ${displayTitle}, Cap: ${selectedChapter}, Verso: ${v.verse}).`, `Verso ${v.verse}`);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: true, headerBackTitle: "Livros",
+      headerTitle: () => (
+        <TouchableOpacity onPress={() => setShowGrid(!showGrid)} style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitleText}>{displayTitle} {selectedChapter} {showGrid ? '▲' : '▼'}</Text>
+        </TouchableOpacity>
+      ),
+      headerLeft: () => (
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: -8 }}>
+            <Ionicons name="chevron-back" size={28} color="#007AFF" />
+            <Text style={{ fontSize: 17, color: '#007AFF' }}>Livros</Text>
+        </TouchableOpacity>
+      ),
+      headerRight: () => (
+        <View style={styles.headerRightContainer}>
+           <TouchableOpacity onPress={analyzeChapter} style={styles.iconButton}><Ionicons name="school" size={24} color="#AF52DE" /></TouchableOpacity>
+           <TouchableOpacity onPress={() => setFontSize(p => Math.max(12, p - 2))} style={styles.fontButton}><Ionicons name="remove" size={24} color="#007AFF" /></TouchableOpacity>
+           <TouchableOpacity onPress={() => setFontSize(p => Math.min(40, p + 2))} style={styles.fontButton}><Ionicons name="add" size={24} color="#007AFF" /></TouchableOpacity>
         </View>
-        <View>
-            <Text style={styles.bookName}>{book.name}</Text>
-            <Text style={styles.bookChapters}>{book.chapters} capítulos</Text>
+      ),
+    });
+  }, [navigation, displayTitle, selectedChapter, showGrid]);
+
+  const InfoCard = ({ title, text, color, icon }: any) => {
+    if (!text) return null;
+    let safeContent = text;
+    if (typeof text === 'object') {
+        safeContent = Object.values(text).join('. ');
+        if (safeContent === '[object Object]' || safeContent === '') {
+            safeContent = JSON.stringify(text).replace(/[\{\}"]/g, '').replace(/:/g, ': ');
+        }
+    }
+    return (
+      <View style={styles.cardContainer}>
+        <View style={[styles.cardBar, { backgroundColor: color }]} />
+        <View style={styles.cardContent}>
+          <View style={styles.cardHeader}><Ionicons name={icon} size={20} color={color} style={{marginRight: 8}} /><Text style={[styles.cardTitle, { color: color }]}>{title}</Text></View>
+          <Text style={styles.cardBody}>{safeContent}</Text>
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
-    </TouchableOpacity>
-  );
-
-  const renderVerseItem = ({ item }: any) => (
-    <TouchableOpacity style={styles.verseResultCard} onPress={() => openBook(item.book_id, item.chapter)}>
-        <View style={styles.verseResultHeader}>
-            <Text style={styles.verseResultRef}>{getBookName(item.book_id)} {item.chapter}:{item.verse}</Text>
-            <Ionicons name="arrow-forward-circle" size={20} color="#007AFF" />
-        </View>
-        <Text style={styles.verseResultText} numberOfLines={3}>{item.text_pt}</Text>
-    </TouchableOpacity>
-  );
+    );
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Bíblia Sagrada</Text>
-      </View>
+    <View style={styles.container}>
+      {showGrid && (
+        <View style={styles.gridOverlay}>
+          <FlatList data={chaptersList} key="grid" numColumns={5} keyExtractor={i => i.toString()} contentContainerStyle={styles.gridContainer}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={[styles.chapterButton, item === selectedChapter && styles.activeChapter]} onPress={() => { setSelectedChapter(item); setShowGrid(false); }}>
+                <Text style={[styles.chapterText, item === selectedChapter && styles.activeChapterText]}>{item}</Text>
+              </TouchableOpacity>
+            )} />
+        </View>
+      )}
 
-      {/* BARRA DE BUSCA */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color="#8E8E93" style={{ marginRight: 10 }} />
-        <TextInput 
-            style={styles.searchInput}
-            placeholder="Buscar livro ou palavra..."
-            placeholderTextColor="#8E8E93"
-            value={searchText}
-            onChangeText={(t) => performSearch(t)}
-            returnKeyType="search"
-            autoCapitalize="none"
-        />
-        {searchText.length > 0 && (
-            <TouchableOpacity onPress={clearSearch}>
-                <Ionicons name="close-circle" size={20} color="#8E8E93" />
-            </TouchableOpacity>
+      <View style={{ flex: 1 }}>
+        {loading ? <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 50 }} /> : (
+          <FlatList data={verses} key="text" keyExtractor={i => i.id.toString()} contentContainerStyle={styles.textContainer} showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <TouchableOpacity activeOpacity={0.7} onLongPress={() => analyzeVerse(item)} style={styles.verseBox}>
+                <Text style={[styles.verseText, { fontSize: fontSize }]}>
+                  <Text style={[styles.verseNumber, { fontSize: fontSize * 0.7 }]}>{item.verse}  </Text>
+                  {item.text_pt}
+                </Text>
+              </TouchableOpacity>
+            )} />
         )}
       </View>
 
-      {/* CONTEÚDO */}
-      {isSearching && searchText.trim().length > 0 ? (
-        // --- MODO RESULTADOS ---
-        <ScrollView contentContainerStyle={styles.listContent}>
-            
-            {/* Resultados de Livros */}
-            {filteredBooks.length > 0 && (
-                <View>
-                    <Text style={styles.resultSectionTitle}>LIVROS ENCONTRADOS</Text>
-                    <View style={styles.sectionBlock}>
-                        {filteredBooks.map(renderBookItem)}
-                    </View>
-                </View>
-            )}
+      <SafeAreaView style={styles.bottomNavSafe} edges={['bottom']}>
+        <View style={styles.bottomNavContainer}>
+          <TouchableOpacity style={[styles.navButton, selectedChapter <= 1 && styles.disabledButton]} onPress={goPrev} disabled={selectedChapter <= 1}><Ionicons name="chevron-back" size={20} color={selectedChapter <= 1 ? "#ccc" : "#fff"} /><Text style={[styles.navButtonText, selectedChapter <= 1 && styles.disabledText]}> Anterior</Text></TouchableOpacity>
+          <Text style={styles.chapterIndicator}>{selectedChapter} / {totalChapters}</Text>
+          <TouchableOpacity style={[styles.navButton, selectedChapter >= totalChapters && styles.disabledButton]} onPress={goNext} disabled={selectedChapter >= totalChapters}><Text style={[styles.navButtonText, selectedChapter >= totalChapters && styles.disabledText]}>Próximo </Text><Ionicons name="chevron-forward" size={20} color={selectedChapter >= totalChapters ? "#ccc" : "#fff"} /></TouchableOpacity>
+        </View>
+      </SafeAreaView>
 
-            {/* Resultados de Versículos */}
-            <Text style={styles.resultSectionTitle}>VERSÍCULOS ENCONTRADOS</Text>
-            {loadingSearch ? (
-                <ActivityIndicator size="small" color="#007AFF" style={{marginTop: 10}} />
-            ) : verseResults.length > 0 ? (
-                <FlatList
-                    data={verseResults}
-                    keyExtractor={item => item.id.toString()}
-                    renderItem={renderVerseItem}
-                    scrollEnabled={false}
-                />
-            ) : (
-                <Text style={styles.emptyText}>
-                    {filteredBooks.length === 0 ? "Nenhum resultado encontrado." : "Nenhuma correspondência exata."}
-                </Text>
-            )}
-        </ScrollView>
-
-      ) : (
-        // --- MODO LISTA DE LIVROS (ABAS) ---
-        <>
-            <View style={styles.tabsContainer}>
-                <TouchableOpacity style={[styles.tabButton, activeTab === 'old' && styles.activeTab]} onPress={() => setActiveTab('old')}>
-                    <Text style={[styles.tabText, activeTab === 'old' && styles.activeTabText]}>Antigo Testamento</Text>
+      <Modal animationType="slide" visible={aiModalVisible} onRequestClose={() => { setAiModalVisible(false); stopSpeaking(); }}>
+        <View style={{ flex: 1, backgroundColor: '#F2F2F7', paddingTop: Platform.OS === 'ios' ? insets.top + 20 : 20 }}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => { setAiModalVisible(false); setIsEditing(false); stopSpeaking(); }}>
+                <Text style={styles.closeText}>Fechar</Text>
+            </TouchableOpacity>
+            <View style={styles.headerActions}>
+                <TouchableOpacity onPress={speakWithOpenAI} style={styles.playActionBtn} disabled={audioLoading}>
+                    {audioLoading ? <ActivityIndicator size="small" color="#007AFF"/> : 
+                        <>
+                        <Ionicons name={isSpeaking ? "pause-circle" : "play-circle"} size={32} color="#007AFF" />
+                        <Text style={styles.playLabel}>Ouvir</Text>
+                        </>
+                    }
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.tabButton, activeTab === 'new' && styles.activeTab]} onPress={() => setActiveTab('new')}>
-                    <Text style={[styles.tabText, activeTab === 'new' && styles.activeTabText]}>Novo Testamento</Text>
-                </TouchableOpacity>
+                {isEditing ? (
+                    <TouchableOpacity onPress={handleSave} style={{backgroundColor:'#007AFF', paddingHorizontal:12, paddingVertical:8, borderRadius:15}}>
+                        {savingNote ? <ActivityIndicator color="#fff" size="small"/> : <Text style={{color:'#fff', fontWeight:'bold'}}>Salvar Edição</Text>}
+                    </TouchableOpacity>
+                ) : (
+                    <>
+                    <TouchableOpacity onPress={handleSave} style={styles.actionIcon}>
+                        {savingNote ? <ActivityIndicator size="small" color="#007AFF"/> : <Ionicons name="save-outline" size={26} color="#007AFF" />}
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleEdit} style={styles.actionIcon}><Ionicons name="pencil-outline" size={26} color="#007AFF" /></TouchableOpacity>
+                    <TouchableOpacity onPress={handleShare} style={styles.actionIcon}><Ionicons name="share-outline" size={26} color="#007AFF" /></TouchableOpacity>
+                    </>
+                )}
             </View>
-
-            <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-                <View style={styles.sectionBlock}>
-                    {ALL_BOOKS.filter(b => b.test === activeTab).map(renderBookItem)}
-                </View>
-            </ScrollView>
-        </>
-      )}
-    </SafeAreaView>
+          </View>
+          
+          {aiLoading ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" color="#AF52DE" /><Text style={{ marginTop: 20, color: '#666', fontSize: 16 }}>Consultando PhD em Teologia...</Text></View>
+          ) : (
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+                {isEditing ? (
+                    <TextInput 
+                        style={styles.textEditor} 
+                        multiline 
+                        value={editedText} 
+                        onChangeText={setEditedText} 
+                        placeholder="Edite sua anotação aqui..."
+                        textAlignVertical="top"
+                    />
+                ) : (
+                    <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
+                      <Text style={styles.analysisSubject}>{aiTitle}</Text>
+                      <InfoCard title="TEMA CENTRAL" icon="bookmark" color="#1C1C1E" text={analysisData?.theme} />
+                      <InfoCard title="CONTEXTO HISTÓRICO" icon="time" color="#FF9500" text={analysisData?.history} />
+                      <InfoCard title="EXEGESE & LINGUÍSTICA" icon="search" color="#007AFF" text={analysisData?.exegesis} />
+                      <InfoCard title="TEOLOGIA SISTEMÁTICA" icon="book" color="#AF52DE" text={analysisData?.theology} />
+                      <InfoCard title="APLICAÇÃO PRÁTICA" icon="leaf" color="#34C759" text={analysisData?.application} />
+                    </ScrollView>
+                )}
+            </KeyboardAvoidingView>
+          )}
+        </View>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F2F2F7' },
-  header: { padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E5EA' },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: '#000' },
-  
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E5E5EA', marginHorizontal: 15, marginTop: 15, marginBottom: 10, paddingHorizontal: 15, paddingVertical: 10, borderRadius: 10 },
-  searchInput: { flex: 1, fontSize: 16, color: '#000' },
-
-  tabsContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingBottom: 15 },
-  tabButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: '#E5E5EA', marginHorizontal: 2 },
-  activeTab: { backgroundColor: '#fff', shadowColor: '#000', shadowOffset: {width:0, height:1}, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-  tabText: { fontSize: 13, fontWeight: '600', color: '#8E8E93' },
-  activeTabText: { color: '#007AFF', fontWeight: '700' },
-
-  listContent: { paddingHorizontal: 15, paddingBottom: 100 },
-  sectionBlock: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden' },
-
-  bookRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderBottomColor: '#F2F2F7' },
-  bookLeft: { flexDirection: 'row', alignItems: 'center' },
-  abbrevCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F2F2F7', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  abbrevText: { fontSize: 14, fontWeight: '700', color: '#007AFF' },
-  bookName: { fontSize: 16, fontWeight: '600', color: '#000' },
-  bookChapters: { fontSize: 12, color: '#8E8E93' },
-
-  resultSectionTitle: { fontSize: 13, fontWeight: '800', color: '#8E8E93', marginTop: 20, marginBottom: 10, marginLeft: 5 },
-  verseResultCard: { backgroundColor: '#fff', padding: 15, borderRadius: 12, marginBottom: 10, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
-  verseResultHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  verseResultRef: { fontSize: 14, fontWeight: '700', color: '#007AFF' },
-  verseResultText: { fontSize: 15, color: '#333', lineHeight: 22 },
-  emptyText: { textAlign: 'center', color: '#999', fontSize: 16, marginTop: 20 }
+  container: { flex: 1, backgroundColor: '#fff' },
+  headerTitleContainer: { flexDirection: 'row', alignItems: 'center' },
+  headerTitleText: { fontSize: 17, fontWeight: '700' },
+  headerRightContainer: { flexDirection: 'row', paddingRight: 5, alignItems: 'center' },
+  fontButton: { padding: 5, marginLeft: 5 },
+  iconButton: { padding: 5, marginRight: 10 },
+  gridOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff', zIndex: 10, padding: 10 },
+  gridContainer: { alignItems: 'center', paddingBottom: 40 },
+  chapterButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center', margin: 8 },
+  activeChapter: { backgroundColor: '#007AFF' },
+  chapterText: { fontSize: 16, fontWeight: '600' },
+  activeChapterText: { color: '#fff' },
+  textContainer: { padding: 20, paddingBottom: 20 },
+  verseBox: { marginBottom: 15 },
+  verseText: { lineHeight: 32, color: '#222', textAlign: 'justify' },
+  verseNumber: { fontWeight: 'bold', color: '#007AFF' },
+  bottomNavSafe: { backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
+  bottomNavContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12 },
+  navButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#007AFF', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20 },
+  disabledButton: { backgroundColor: '#f0f0f0' },
+  navButtonText: { color: '#fff', fontWeight: '600' },
+  disabledText: { color: '#ccc' },
+  chapterIndicator: { fontSize: 14, color: '#666' },
+  modalHeader: { 
+      flexDirection: 'row', 
+      justifyContent: 'space-between', 
+      alignItems: 'center', 
+      paddingHorizontal: 20, 
+      paddingBottom: 15, 
+      backgroundColor: '#F2F2F7', 
+      borderBottomWidth: 1, 
+      borderBottomColor: '#E5E5EA' 
+  },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
+  playActionBtn: { alignItems: 'center', justifyContent: 'center', marginRight: 15 }, 
+  playLabel: { fontSize: 9, color: '#007AFF', fontWeight: '600', marginTop: -2 },
+  actionIcon: { marginLeft: 15, padding: 0 },
+  closeText: { fontSize: 17, color: '#007AFF', fontWeight: '500' },
+  modalBody: { flex: 1, padding: 20 },
+  textEditor: { flex: 1, padding: 20, fontSize: 16, lineHeight: 24, backgroundColor: '#fff', textAlignVertical: 'top', color: '#333' },
+  analysisSubject: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 25, textAlign: 'center', lineHeight: 28 },
+  cardContainer: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 12, marginBottom: 15, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2, borderWidth: 1, borderColor: '#f0f0f0' },
+  cardBar: { width: 5 }, 
+  cardContent: { flex: 1, padding: 15, paddingVertical: 18 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  cardTitle: { fontSize: 13, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
+  cardBody: { fontSize: 16, lineHeight: 24, color: '#333', textAlign: 'justify' }
 });
