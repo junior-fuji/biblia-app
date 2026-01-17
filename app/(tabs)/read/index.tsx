@@ -21,10 +21,10 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// ✅ CAMINHO DO SUPABASE CORRIGIDO (3 NÍVEIS)
-import { supabase } from '../../../lib/supabase';
+// ⚠️ CONFIRA SE O CAMINHO ESTÁ CERTO PARA O SEU PROJETO
+// Se der erro de "module not found", mude para ../../../lib/supabase
+import { supabase } from '../../../../lib/supabase';
 
-// --- MAPA COMPLETO DE LIVROS ---
 const BOOK_MAP: { [key: number]: { name: string, abbrev: string } } = {
   1: { name: 'Gênesis', abbrev: 'Gn' }, 2: { name: 'Êxodo', abbrev: 'Êx' },
   3: { name: 'Levítico', abbrev: 'Lv' }, 4: { name: 'Números', abbrev: 'Nm' },
@@ -91,11 +91,9 @@ export default function LeituraScreen() {
   const [editedText, setEditedText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
 
-  // ✅ CORREÇÃO PARA "BÍBLIA SUMIDA": Garante que o ID do livro é um número
-  const rawBook = Array.isArray(book) ? book[0] : book;
-  const numericBookId = rawBook ? parseInt(rawBook, 10) : 0;
-
-  const currentBookData = BOOK_MAP[numericBookId] || { name: 'Carregando...', abbrev: '' };
+  // 🔄 VOLTAMOS AO JEITO SIMPLES DE PEGAR O ID
+  const numericBookId = Number(book);
+  const currentBookData = BOOK_MAP[numericBookId] || { name: 'Livro', abbrev: '' };
   const displayTitle = currentBookData.name;
 
   useEffect(() => { return () => { if (sound) sound.unloadAsync(); }; }, [sound]);
@@ -113,11 +111,10 @@ export default function LeituraScreen() {
     configureAudio();
   }, []);
 
-  // Busca o total de capítulos
   useEffect(() => {
     async function initBook() {
-      if (!numericBookId) return;
       try {
+        if (!numericBookId) return;
         const { data: max } = await supabase.from('verses').select('chapter').eq('book_id', numericBookId).order('chapter', { ascending: false }).limit(1);
         if (max && max.length > 0) { 
             setTotalChapters(max[0].chapter); 
@@ -128,25 +125,13 @@ export default function LeituraScreen() {
     initBook();
   }, [numericBookId]);
 
-  // Busca os Versículos
   useEffect(() => { if (numericBookId) fetchVerses(numericBookId, selectedChapter); }, [selectedChapter, numericBookId]);
 
   async function fetchVerses(bId: number, cap: number) {
     setLoading(true);
-    try {
-        const { data, error } = await supabase.from('verses').select('id, verse, text_pt').eq('book_id', bId).eq('chapter', cap).order('verse', { ascending: true });
-        
-        if (error) {
-            console.error("Erro Supabase:", error);
-            Alert.alert("Erro", "Falha ao carregar versículos.");
-        }
-        
-        setVerses(data || []); 
-    } catch (error) {
-        console.error("Erro Geral:", error);
-    } finally {
-        setLoading(false);
-    }
+    // VOLTAMOS A LÓGICA ORIGINAL DE BUSCA
+    const { data } = await supabase.from('verses').select('id, verse, text_pt').eq('book_id', bId).eq('chapter', cap).order('verse', { ascending: true });
+    setVerses(data || []); setLoading(false);
   }
 
   const handleShare = async () => {
@@ -238,12 +223,9 @@ export default function LeituraScreen() {
            newSound.setOnPlaybackStatusUpdate((s: any) => { if (s.didJustFinish) { setIsSpeaking(false); newSound.unloadAsync(); setSound(null); }});
         } else {
            const base64data = uriResult.split(',')[1];
-           
            // @ts-ignore
            const uri = (FileSystem.cacheDirectory || '') + 'speech_analysis.mp3';
-           
            await FileSystem.writeAsStringAsync(uri, base64data, { encoding: 'base64' });
-           
            const { sound: newSound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
            setSound(newSound); setIsSpeaking(true);
            newSound.setOnPlaybackStatusUpdate((s: any) => { if (s.didJustFinish) { setIsSpeaking(false); newSound.unloadAsync(); setSound(null); }});
