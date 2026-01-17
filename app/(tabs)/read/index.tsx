@@ -21,10 +21,10 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// ✅ CAMINHO SUPABASE (Mantido o que funcionou)
+// ✅ CAMINHO SUPABASE (Confira se no seu PC são 3 ou 4 ../)
 import { supabase } from '../../../lib/supabase';
 
-// --- MAPA COMPLETO DE LIVROS ---
+// --- 📖 MAPA COMPLETO DOS 66 LIVROS (GÊNESIS AO APOCALIPSE) ---
 const BOOK_MAP: { [key: number]: { name: string, abbrev: string } } = {
   1: { name: 'Gênesis', abbrev: 'Gn' }, 2: { name: 'Êxodo', abbrev: 'Êx' },
   3: { name: 'Levítico', abbrev: 'Lv' }, 4: { name: 'Números', abbrev: 'Nm' },
@@ -181,24 +181,18 @@ export default function LeituraScreen() {
     else { Alert.alert("Sucesso!", "Análise salva."); setIsEditing(false); }
   };
 
-  // ✅ CORREÇÃO: FORMATADOR DE EDIÇÃO
-  // Agora ele cria um texto bonito e espaçado quando você clica em Editar
   const handleEdit = () => {
     if (!analysisData) return;
-    
     const safe = (txt: any) => {
        if (!txt) return "Sem informação.";
        return typeof txt === 'object' ? Object.values(txt).join(' ') : txt;
     };
-
-    // Note os \n\n para pular linhas e os emojis para organizar
     const textVersion = 
       `📌 TEMA CENTRAL:\n${safe(analysisData.theme)}\n\n` +
       `🏛️ CONTEXTO HISTÓRICO:\n${safe(analysisData.history)}\n\n` +
       `🔎 EXEGESE DETALHADA:\n${safe(analysisData.exegesis)}\n\n` +
       `✝️ TEOLOGIA:\n${safe(analysisData.theology)}\n\n` +
       `🌱 APLICAÇÃO PRÁTICA:\n${safe(analysisData.application)}`;
-      
     setEditedText(textVersion); 
     setIsEditing(true);
   };
@@ -257,18 +251,14 @@ export default function LeituraScreen() {
     setAiModalVisible(true); 
     setAiLoading(true);
     
-    // ✅ CORREÇÃO: PROMPT TURBO DETALHADO
-    // Manda a IA ser prolixa e detalhista
     const SYSTEM_PROMPT = `
     ATUE COMO: Um Teólogo Reformado Sênior, PhD em Exegese Bíblica e Linguística.
     TAREFA: Analisar o texto bíblico fornecido com profundidade acadêmica e pastoral.
-    
     REGRAS OBRIGATÓRIAS:
     1. NÃO RESUMA. Escreva parágrafos longos, densos e explicativos.
     2. Na Exegese, analise as palavras chave no original (Hebraico/Grego), colocando a transliteração e o sentido profundo.
     3. Na Teologia, conecte com a Grande História da Redenção (Cristocentrismo).
     4. Seja didático mas profundo, como um comentário bíblico de referência.
-    
     ESTRUTURA JSON (Responda APENAS JSON):
     {
       "theme": "Resumo robusto do tema central (mínimo 3 frases).",
@@ -283,40 +273,20 @@ export default function LeituraScreen() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: prompt }
-          ]
-        })
+        body: JSON.stringify({ messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }] })
       });
-
       const data = await response.json();
-
-      if (data.error) throw new Error(data.error);
-
       if (data.choices) {
         let content = data.choices[0].message.content;
         const firstBrace = content.indexOf('{');
         const lastBrace = content.lastIndexOf('}');
-        
         if (firstBrace !== -1 && lastBrace !== -1) {
-            const cleanJson = content.substring(firstBrace, lastBrace + 1);
-            try {
-                setAnalysisData(JSON.parse(cleanJson));
-            } catch (e) {
-                setAnalysisData({ theme: "Erro na leitura", exegesis: "A IA retornou um formato inválido." });
-            }
-        } else {
-             setAnalysisData({ theme: "Erro", exegesis: "A IA não retornou um JSON válido." });
-        }
+            setAnalysisData(JSON.parse(content.substring(firstBrace, lastBrace + 1)));
+        } else { setAnalysisData({ theme: "Erro", exegesis: "A IA não retornou um JSON válido." }); }
       }
     } catch (error) { 
-        console.error(error);
         setAnalysisData({ theme: "Erro de Conexão", exegesis: "Não foi possível conectar ao servidor de Teologia." });
-    } finally { 
-        setAiLoading(false); 
-    }
+    } finally { setAiLoading(false); }
   };
   
   const stopSpeaking = async () => { if (sound) { await sound.stopAsync(); await sound.unloadAsync(); setSound(null); setIsSpeaking(false); } };
@@ -327,7 +297,10 @@ export default function LeituraScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerShown: true, headerBackTitle: "Livros",
+      headerShown: true, 
+      headerBackTitle: "Livros",
+      // ✅ AQUI ESCONDE O MENU DE BAIXO (TABS)
+      tabBarStyle: { display: 'none' },
       headerTitle: () => (
         <TouchableOpacity onPress={() => setShowGrid(!showGrid)} style={styles.headerTitleContainer}>
           <Text style={styles.headerTitleText}>{displayTitle} {selectedChapter} {showGrid ? '▲' : '▼'}</Text>
