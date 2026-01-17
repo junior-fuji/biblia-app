@@ -1,70 +1,74 @@
+// lib/ai.ts
+
 export const askTheologian = async (book: string, chapter: number, verse: number, text: string) => {
-  const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-
-  if (!apiKey) {
-    console.error("ERRO: Chave API não encontrada no Vercel.");
-    return { original: "Erro de Configuração: Chave de API ausente." };
-  }
-
-  // AQUI ESTÁ A MÁGICA: O Prompt Completo e Detalhado voltou!
+  
+  // O SUPER PROMPT DE TEOLOGIA (NÍVEL PHD)
   const prompt = `
-    Atue como um especialista sênior em Teologia Bíblica, Exegese e Línguas Originais (Hebraico/Grego).
+    Você é um renomado PhD em Teologia Bíblica, Especialista em Exegese do Antigo (Hebraico) e Novo Testamento (Grego Koinê).
     
-    Analise profundamente o versículo: ${book} ${chapter}:${verse} - "${text}".
+    REALIZAR ANÁLISE DO TEXTO: ${book} ${chapter}:${verse} - "${text}".
     
-    Forneça uma resposta rica, estruturada em um JSON estrito (sem markdown), seguindo EXATAMENTE este formato:
+    Diretrizes Estritas:
+    1. Use o Método Gramático-Histórico.
+    2. Identifique nuances do original (ex: tempos verbais no grego como Aoristo/Imperfeito ou troncos verbais no hebraico).
+    3. Evite superficialidade. Seja profundo, técnico mas acessível pastoralmente.
+    
+    Gere APENAS um JSON puro (sem markdown, sem crases), seguindo exatamente este esquema:
     {
-      "original": "Faça uma análise exegética detalhada. Explore o significado das palavras chaves no original (hebraico/grego), tempos verbais e nuances que não aparecem na tradução. Escreva em texto corrido e profundo.",
+      "original": "Faça uma análise técnica do texto original. Cite as palavras chaves em Hebraico/Grego (transliterado) e explique seu peso semântico. Explique a gramática (tempos verbais, preposições) e como isso altera o entendimento.",
       
-      "context": "Explique o contexto histórico, cultural e literário. Quem escreveu? Para quem? O que estava acontecendo na época? Como isso afeta o entendimento do texto?",
+      "context": "Descreva o cenário histórico, cultural e literário. Quem é o autor? Qual a tensão do momento? Onde isso se encaixa na narrativa maior do livro?",
       
       "references": [
         { 
-          "ref": "Ex: Rm 3:23", 
-          "type": "Correlação", 
-          "text": "Texto resumido do versículo relacionado...", 
-          "reason": "Explique brevemente a conexão teológica com o versículo analisado." 
+          "ref": "Ex: Rm 5:1", 
+          "type": "Teologia Sistemática", 
+          "text": "Resumo do texto...", 
+          "reason": "Explique a conexão doutrinária (ex: Justificação, Santificação, Aliança)." 
         },
-        {
-          "ref": "Outra referência",
-          "type": "Profecia/Cumprimento",
-          "text": "...",
-          "reason": "..."
+        { 
+          "ref": "Ex: Sl 23:1", 
+          "type": "Paralelismo", 
+          "text": "Resumo do texto...", 
+          "reason": "Explique como este texto ecoa ou cumpre o versículo analisado." 
         }
       ],
       
-      "application": "Traga uma aplicação pastoral e devocional prática e impactante para os dias de hoje. Como esse versículo muda nossa vida hoje?"
+      "application": "Traga uma aplicação homilética poderosa. Como essa verdade teológica profunda muda a segunda-feira do crente comum? Dê um imperativo prático."
     }
   `;
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Chama o seu servidor seguro (api/chat)
+    const response = await fetch('/api/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: "gpt-4o-mini", // Modelo rápido e inteligente
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.5, // Um pouco mais criativo para a teologia
+        messages: [{ role: "user", content: prompt }]
       }),
     });
 
     const data = await response.json();
 
-    if (!response.ok) {
-      return { original: `Erro na resposta da IA: ${data.error?.message}` };
+    if (data.error) {
+      console.error("Erro do Servidor:", data.error);
+      return { original: "O servidor de teologia está indisponível no momento." };
     }
 
+    if (!data.choices || !data.choices[0]) {
+      return { original: "A IA não retornou uma análise válida." };
+    }
+
+    // Processamento e Limpeza da resposta
     let content = data.choices[0].message.content.trim();
-    // Limpeza para garantir que o JSON não quebre
-    const jsonString = content.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    // Remove qualquer marcação de código que a IA possa ter colocado (```json ...)
+    const jsonString = content.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
     
     return JSON.parse(jsonString);
 
   } catch (error) {
-    console.error("Erro no fetch:", error);
-    return { original: "Não foi possível conectar ao servidor de Inteligência Artificial." };
+    console.error("Erro de conexão no Client:", error);
+    return { original: "Erro de comunicação. Verifique sua internet." };
   }
 };
