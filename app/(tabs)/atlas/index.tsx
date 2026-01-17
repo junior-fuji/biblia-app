@@ -11,19 +11,18 @@ import {
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { supabase } from '../../../lib/supabase';
+import { supabase } from '../../../lib/supabase'; // Ajuste o caminho se necessário
 
 // ============================================================================
-// ⚠️ SUA CHAVE AQUI ⚠️
+// ✅ AGORA ESTÁ SEGURO: SEM CHAVE DE API AQUI
 // ============================================================================
-const OPENAI_API_KEY = ''; // <--- COLE SUA CHAVE AQUI
 
 type DictionaryData = {
-    theme: string;
-    exegesis: string;
-    history: string;
-    theology: string;
-    application: string;
+  theme: string;
+  exegesis: string;
+  history: string;
+  theology: string;
+  application: string;
 };
 
 export default function DictionaryScreen() {
@@ -59,33 +58,44 @@ export default function DictionaryScreen() {
     `;
 
     try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      // ⚠️ AQUI MUDOU: Chamamos o SEU servidor (/api/chat)
+      // Não precisa de cabeçalho Authorization nem chave aqui.
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: "gpt-4o-mini",
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: `Analise a palavra bíblica: "${word}"` }
-          ],
-          temperature: 0.5
+          ]
         })
       });
 
       const data = await res.json();
+
       if (data.choices) {
-        let content = data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim();
+        let content = data.choices[0].message.content;
+        
+        // Limpeza de segurança para garantir JSON puro
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        // Tenta encontrar o JSON se houver texto em volta
+        const firstBrace = content.indexOf('{');
+        const lastBrace = content.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1) {
+             content = content.substring(firstBrace, lastBrace + 1);
+        }
+
         setResult(JSON.parse(content));
       } else {
-        Alert.alert("Erro", "A IA não retornou nada.");
+        Alert.alert("Erro", "A IA não retornou nada. Tente novamente.");
       }
     } catch (error: any) {
-        // Se der erro na Web usa o alert simples
-        if (Platform.OS === 'web') alert("Verifique sua API Key ou conexão.");
-        else Alert.alert("Erro", "Falha na conexão.");
+        console.error(error);
+        if (Platform.OS === 'web') alert("Erro de conexão com o servidor.");
+        else Alert.alert("Erro", "Falha na conexão com o servidor.");
     } finally {
       setLoading(false);
     }
@@ -112,20 +122,15 @@ export default function DictionaryScreen() {
     }
   };
 
-  // --- CORREÇÃO DO ERRO "OBJECTS ARE NOT VALID" ---
   const InfoCard = ({ title, text, color, icon }: any) => {
-      // Se não tiver texto, não mostra nada
       if (!text) return null;
 
       let safeContent = text;
 
-      // SE O TEXTO FOR UM OBJETO (CAUSA DO ERRO), CONVERTE PARA STRING
       if (typeof text === 'object') {
           try {
-              // Tenta pegar os valores do objeto e juntar com quebra de linha
               safeContent = Object.values(text).join('\n\n');
           } catch (e) {
-              // Se falhar, transforma em string crua
               safeContent = JSON.stringify(text);
           }
       }

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import * as Clipboard from 'expo-clipboard';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system'; // Ajustado para versão padrão
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import {
@@ -24,13 +24,7 @@ import { supabase } from '../../../../lib/supabase';
 
 const fs = FileSystem; 
 
-// ============================================================================
-// ⚠️ SUA CHAVE AQUI ⚠️
-// ============================================================================
-const OPENAI_API_KEY = ''; 
-
-// --- MAPA COMPLETO DE LIVROS (ID -> DADOS) ---
-// Isso resolve o problema de aparecer números no lugar dos nomes
+// --- MAPA COMPLETO DE LIVROS ---
 const BOOK_MAP: { [key: number]: { name: string, abbrev: string } } = {
   1: { name: 'Gênesis', abbrev: 'Gn' }, 2: { name: 'Êxodo', abbrev: 'Êx' },
   3: { name: 'Levítico', abbrev: 'Lv' }, 4: { name: 'Números', abbrev: 'Nm' },
@@ -97,7 +91,6 @@ export default function LeituraScreen() {
   const [editedText, setEditedText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
 
-  // 1. Resolve o ID do livro para Nome (Correção do "Gênesis 1, Êxodo 2")
   const numericBookId = Number(book);
   const currentBookData = BOOK_MAP[numericBookId] || { name: 'Livro', abbrev: '' };
   const displayTitle = currentBookData.name;
@@ -179,88 +172,66 @@ export default function LeituraScreen() {
     setEditedText(textVersion); setIsEditing(true);
   };
 
+  // --- ÁUDIO (Aviso: Temporariamente precisa de API key local ou nova rota de backend) ---
   const speakWithOpenAI = async () => {
-    if (!analysisData && !isEditing) return;
-    if (sound) {
-      if (isSpeaking) { await sound.pauseAsync(); setIsSpeaking(false); } 
-      else { await sound.playAsync(); setIsSpeaking(true); }
-      return;
-    }
-    try {
-      setAudioLoading(true);
-      const safeText = (txt: any) => typeof txt === 'object' ? JSON.stringify(txt) : txt;
-      let textToSpeak = isEditing 
-        ? editedText 
-        : `Análise de ${aiTitle}. Tema: ${safeText(analysisData?.theme)}. Histórico: ${safeText(analysisData?.history)}. Exegese: ${safeText(analysisData?.exegesis)}. Teologia: ${safeText(analysisData?.theology)}. Aplicação: ${safeText(analysisData?.application)}.`;
-      
-      if (textToSpeak.length > 4000) textToSpeak = textToSpeak.substring(0, 4000) + "... (Fim do áudio por limite).";
-
-      const response = await fetch("https://api.openai.com/v1/audio/speech", {
-        method: "POST", headers: { "Authorization": `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "tts-1-hd", input: textToSpeak, voice: "onyx", speed: 1.0 }),
-      });
-      if (!response.ok) throw new Error("Erro na API de Áudio");
-      
-      const blob = await response.blob();
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
-      reader.onloadend = async () => {
-        const uriResult = reader.result as string;
-        if (Platform.OS === 'web') {
-           const { sound: newSound } = await Audio.Sound.createAsync({ uri: uriResult }, { shouldPlay: true });
-           setSound(newSound); setIsSpeaking(true);
-           newSound.setOnPlaybackStatusUpdate((s: any) => { if (s.didJustFinish) { setIsSpeaking(false); newSound.unloadAsync(); setSound(null); }});
-        } else {
-           const base64data = uriResult.split(',')[1];
-           const uri = (fs.cacheDirectory || '') + 'speech_analysis.mp3';
-           await fs.writeAsStringAsync(uri, base64data, { encoding: 'base64' });
-           const { sound: newSound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
-           setSound(newSound); setIsSpeaking(true);
-           newSound.setOnPlaybackStatusUpdate((s: any) => { if (s.didJustFinish) { setIsSpeaking(false); newSound.unloadAsync(); setSound(null); }});
-        }
-      };
-    } catch (error: any) { Alert.alert("Erro de Áudio", error.message); } finally { setAudioLoading(false); }
+    Alert.alert("Aviso", "A funcionalidade de áudio está sendo atualizada para o novo sistema seguro e voltará em breve.");
+    // Para reativar o áudio, precisaremos criar um arquivo 'api/speech.ts' igual fizemos com o chat.
   };
 
+  // ==============================================================================
+  // ⚡️ FUNÇÃO BLINDADA: CHAMA O SEU SERVIDOR NO VERCEL (/api/chat)
+  // ==============================================================================
   const callAI = async (prompt: string, title: string) => {
-    setAiTitle(title); setAnalysisData(null); setIsEditing(false); stopSpeaking(); setAiModalVisible(true); setAiLoading(true);
+    setAiTitle(title); 
+    setAnalysisData(null); 
+    setIsEditing(false); 
+    stopSpeaking(); 
+    setAiModalVisible(true); 
+    setAiLoading(true);
     
-    // 2. CORREÇÃO DA IA: Prompt focado em JSON e Limpador de Resposta
     const SYSTEM_PROMPT = `
-    VOICE: Você é um PhD em Teologia Reformada.
-    TASK: Analise o texto e retorne JSON.
+    VOICE: Você é um PhD em Teologia Bíblica e Línguas Originais.
+    TASK: Analise o texto e retorne JSON estrito.
     RULES:
-    1. RESPOSTA EXCLUSIVAMENTE EM JSON VÁLIDO. Não escreva nada antes nem depois.
-    2. Não use formatação markdown (\`\`\`json).
-    3. Seja profundo e detalhado no conteúdo.
+    1. RESPOSTA EXCLUSIVAMENTE EM JSON VÁLIDO.
+    2. Não use markdown.
+    3. Seja profundo na exegese (Hebraico/Grego), contexto e aplicação.
     
     JSON STRUCTURE:
     {
       "theme": "Ideia central explicada com profundidade.",
       "history": "Contexto histórico, autor, datação e geografia.",
-      "exegesis": "Análise versículo a versículo com termos originais.",
-      "theology": "Conexões sistemáticas e cristocêntricas.",
+      "exegesis": "Análise técnica com termos originais.",
+      "theology": "Conexões sistemáticas.",
       "application": "Aplicação pastoral prática."
     }
     `;
+
     try {
-      if (!OPENAI_API_KEY || OPENAI_API_KEY.includes('...')) {
-         setTimeout(() => { setAnalysisData({theme:"Erro", exegesis:"Insira a API Key."}); setAiLoading(false);}, 1000); return; 
-      }
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-        body: JSON.stringify({ 
-            model: "gpt-4o-mini",
-            messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: `${prompt}` }],
-            temperature: 0.5 // Mais baixo para ser mais "robótico" no formato JSON
+      // ⚠️ AQUI ESTÁ A MUDANÇA MÁGICA ⚠️
+      // Em vez de chamar a OpenAI direto (que precisa de senha), chamamos o SEU servidor.
+      // O seu servidor (api/chat) é quem tem a senha segura.
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: prompt }
+          ]
         })
       });
-      const data = await res.json();
+
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
       if (data.choices) {
         let content = data.choices[0].message.content;
         
         // --- LIMPADOR DE JSON ---
-        // Remove qualquer coisa que não esteja entre a primeira { e a última }
         const firstBrace = content.indexOf('{');
         const lastBrace = content.lastIndexOf('}');
         
@@ -275,14 +246,19 @@ export default function LeituraScreen() {
              setAnalysisData({ theme: "Erro", exegesis: "A IA não retornou um JSON válido." });
         }
       }
-    } catch (error) { Alert.alert("Erro IA", "Falha na análise."); } finally { setAiLoading(false); }
+    } catch (error) { 
+        console.error(error);
+        setAnalysisData({ theme: "Erro de Conexão", exegesis: "Não foi possível conectar ao servidor de Teologia. Verifique sua internet." });
+    } finally { 
+        setAiLoading(false); 
+    }
   };
   
   const stopSpeaking = async () => { if (sound) { await sound.stopAsync(); await sound.unloadAsync(); setSound(null); setIsSpeaking(false); } };
   const goNext = () => { if (selectedChapter < totalChapters) setSelectedChapter(selectedChapter + 1); };
   const goPrev = () => { if (selectedChapter > 1) setSelectedChapter(selectedChapter - 1); };
-  const analyzeChapter = () => callAI(`Analise profundamente o Capítulo ${selectedChapter} de ${displayTitle}.`, `Capítulo ${selectedChapter}`);
-  const analyzeVerse = (v: Verse) => callAI(`Faça uma exegese profunda do Versículo: "${v.text_pt}" (Livro: ${displayTitle}, Cap: ${selectedChapter}, Verso: ${v.verse}).`, `Verso ${v.verse}`);
+  const analyzeChapter = () => callAI(`Analise profundamente o Capítulo ${selectedChapter} de ${displayTitle}. Foco em teologia bíblica e contexto histórico.`, `Capítulo ${selectedChapter}`);
+  const analyzeVerse = (v: Verse) => callAI(`Faça uma exegese profunda do Versículo: "${v.text_pt}" (Livro: ${displayTitle}, Cap: ${selectedChapter}, Verso: ${v.verse}). Explore o original e aplicação.`, `Verso ${v.verse}`);
 
   useLayoutEffect(() => {
     navigation.setOptions({

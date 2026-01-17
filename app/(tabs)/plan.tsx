@@ -3,13 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  LayoutAnimation,
-  Platform,
-  ScrollView, StyleSheet,
-  Text,
-  TouchableOpacity,
-  UIManager,
-  View
+    LayoutAnimation,
+    Platform,
+    ScrollView, StyleSheet,
+    Text,
+    TouchableOpacity,
+    UIManager,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 

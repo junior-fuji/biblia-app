@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -11,7 +12,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase'; // Verifique se o caminho está correto
 
 // Tipo para estruturar a resposta da IA
 type AIAnalysisData = {
@@ -48,62 +49,75 @@ export default function AIAnalysisScreen() {
         ? `Versículo Específico: Livro de ${params.bookName}, Capítulo ${params.chapter}, Versículo ${params.verse}. Texto: "${params.text}"`
         : `Capítulo Inteiro: Livro de ${params.bookName}, Capítulo ${params.chapter}`;
 
-      // 2. O Prompt (Comando) Atualizado com Transliteração
-      // Note o uso de crases (`) no início e fim para permitir ${promptContext}
+      // 2. O Prompt Poderoso (Enviamos isso para o servidor)
       const systemPrompt = `
         Você é um teólogo reformado sênior, historiador bíblico e especialista em línguas originais.
         Sua tarefa é escrever um comentário bíblico PROFUNDO e DETALHADO sobre: ${promptContext}.
 
         REGRA DE OURO: NÃO RESUMA. O usuário quer estudar a fundo. Escreva parágrafos completos.
 
-        Responda EXCLUSIVAMENTE com este JSON válido (sem markdown, sem crases):
+        Responda EXCLUSIVAMENTE com este JSON válido (sem markdown):
         {
           "theme": "Uma frase teológica impactante e robusta que defina a essência do texto.",
-          "exegesis": "Faça uma análise minuciosa. Cite palavras-chave no original (Hebraico ou Grego), COLOQUE A TRANSLITERAÇÃO (pronúncia) ENTRE PARÊNTESES ao lado da palavra original e seus significados. Explique a gramática e a intenção do autor.",
+          "exegesis": "Faça uma análise minuciosa. Cite palavras-chave no original (Hebraico ou Grego), COLOQUE A TRANSLITERAÇÃO (pronúncia) ENTRE PARÊNTESES ao lado da palavra original e seus significados. Explique a gramática.",
           "context": "Detelhe o cenário histórico, político e cultural. Quem era o rei? Qual era a crise? Quem é o público original?",
           "theology": "Teologia Bíblica: Como esse texto se conecta com a Grande História da Redenção? Onde vemos Cristo?",
           "application": "3 lições práticas, duras e desafiadoras para a igreja contemporânea. Evite clichês."
         }
       `;
 
-      // ⚠️ SUA CHAVE API AQUI (Mantenha as crases para evitar erros de quebra de linha)
-      const apiKey = ``; 
+      console.log("Iniciando análise segura via Vercel...");
 
-      console.log("Iniciando análise com transliteração...");
-
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      // ⚠️ AQUI ESTÁ A MUDANÇA: Chamada Segura ao Backend ⚠️
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey.trim()}`
+          // Não precisa de Authorization aqui, o servidor já sabe a senha
         },
         body: JSON.stringify({
-          model: "gpt-4-turbo",
           messages: [
-            { role: "system", content: "Você é uma API JSON de Teologia Avançada." },
-            { role: "user", content: systemPrompt }
-          ],
-          temperature: 0.7
+            { role: "system", content: systemPrompt }, // O servidor vai ler isso e obedecer
+            { role: "user", content: "Faça a análise agora." }
+          ]
         })
       });
 
       const data = await response.json();
 
-      if (data.error) throw new Error(data.error.message);
+      if (data.error) throw new Error(data.error);
 
-      let aiResponse = data.choices[0].message.content;
-      aiResponse = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+      // Tratamento da resposta
+      if (data.choices && data.choices.length > 0) {
+        let aiResponse = data.choices[0].message.content;
+        
+        // Limpeza de segurança para garantir JSON puro
+        aiResponse = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
 
-      try {
-        const parsedData = JSON.parse(aiResponse);
-        setAnalysisData(parsedData);
-      } catch (e) {
-        setRawText(aiResponse);
+        // Tenta achar o JSON dentro do texto (caso a IA fale algo antes)
+        const firstBrace = aiResponse.indexOf('{');
+        const lastBrace = aiResponse.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1) {
+            aiResponse = aiResponse.substring(firstBrace, lastBrace + 1);
+        }
+
+        try {
+          const parsedData = JSON.parse(aiResponse);
+          setAnalysisData(parsedData);
+        } catch (e) {
+          console.error("Erro ao ler JSON da IA:", e);
+          setRawText(aiResponse); // Mostra o texto bruto se o JSON falhar
+        }
+      } else {
+        throw new Error("A IA não retornou conteúdo.");
       }
 
     } catch (error: any) {
-      Alert.alert("Erro", "Falha: " + error.message);
-      setRawText("Não foi possível gerar a análise.");
+      console.error(error);
+      const msg = error.message || "Erro desconhecido";
+      if (Platform.OS === 'web') alert("Erro: " + msg);
+      else Alert.alert("Erro", "Falha: " + msg);
+      setRawText("Não foi possível gerar a análise. Verifique sua conexão.");
     } finally {
       setLoading(false);
     }
@@ -114,18 +128,25 @@ export default function AIAnalysisScreen() {
     setSaving(true);
 
     try {
-      const { error } = await supabase.from('sketches').insert({
+      // Ajuste para salvar JSON corretamente no Supabase
+      const contentToSave = JSON.stringify(analysisData);
+
+      const { error } = await supabase.from('saved_notes').insert({
         title: `Estudo: ${params.bookName} ${params.chapter}${params.verse ? ':' + params.verse : ''}`,
-        content: analysisData, 
+        reference: `${params.bookName} ${params.chapter}`, // Ajuste conforme sua tabela
+        content: contentToSave, 
       });
       
       if (error) throw error;
       
-      Alert.alert("Sucesso", "Estudo salvo! Veja na aba 'Esboços'.", [
-        { text: "OK", onPress: () => router.push('/(tabs)/explore') }
-      ]);
+      const successMsg = "Estudo salvo! Veja na aba 'Meus Estudos'.";
+      if (Platform.OS === 'web') alert(successMsg);
+      else Alert.alert("Sucesso", successMsg, [{ text: "OK", onPress: () => router.back() }]);
+      
     } catch (e: any) {
-      Alert.alert("Erro ao salvar", e.message);
+      const errorMsg = e.message || "Erro ao salvar";
+      if (Platform.OS === 'web') alert(errorMsg);
+      else Alert.alert("Erro ao salvar", errorMsg);
     } finally {
       setSaving(false);
     }
@@ -199,7 +220,7 @@ export default function AIAnalysisScreen() {
         ) : (
           <View style={styles.card}>
              <View style={styles.cardBody}>
-               <Text style={[styles.cardText, {fontSize}]}>{rawText || "Nenhuma análise disponível."}</Text>
+               <Text style={[styles.cardText, {fontSize}]}>{rawText || "Nenhuma análise disponível. Toque em regerar."}</Text>
              </View>
           </View>
         )}
