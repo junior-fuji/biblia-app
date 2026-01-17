@@ -23,7 +23,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 // ⚠️ CONFIRA SE O CAMINHO ESTÁ CERTO PARA O SEU PROJETO
 // Se der erro de "module not found", mude para ../../../lib/supabase
-import { supabase } from '../../../../lib/supabase';
+import { supabase } from '../../../lib/supabase';
 
 const BOOK_MAP: { [key: number]: { name: string, abbrev: string } } = {
   1: { name: 'Gênesis', abbrev: 'Gn' }, 2: { name: 'Êxodo', abbrev: 'Êx' },
