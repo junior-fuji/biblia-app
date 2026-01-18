@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
-import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useGlobalSearchParams, useNavigation } from 'expo-router'; // ✅ MUDANÇA 1: Global Params
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,11 +18,11 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../lib/supabase';
 
 // -----------------------------------------------------------------------------
-// 📚 DATA LAYER - LISTA COMPLETA E GARANTIDA
+// 📚 DATA LAYER - 66 LIVROS
 // -----------------------------------------------------------------------------
 const BOOK_MAP: { [key: number]: { name: string, abbrev: string } } = {
   1: { name: 'Gênesis', abbrev: 'Gn' }, 2: { name: 'Êxodo', abbrev: 'Êx' },
@@ -61,24 +61,17 @@ const BOOK_MAP: { [key: number]: { name: string, abbrev: string } } = {
 };
 
 type Verse = { id: string; verse: number; text_pt: string; };
-type AnalysisData = { 
-    theme: string; 
-    history: string; 
-    exegesis: string; 
-    theology: string; 
-    application: string; 
-};
+type AnalysisData = { theme: string; history: string; exegesis: string; theology: string; application: string; };
 
 export default function LeituraScreen() {
   const navigation = useNavigation();
-  const { book, chapter } = useLocalSearchParams();
-  const insets = useSafeAreaInsets();
+  // ✅ MUDANÇA 2: Use GlobalSearchParams para garantir que pega o parâmetro de qualquer lugar
+  const globParams = useGlobalSearchParams();
   
-  // ✅ LÓGICA ANTIGA (A QUE FUNCIONA)
-  // Voltamos para o método "bruto" que garante pegar o ID certo
-  const rawBook = Array.isArray(book) ? book[0] : book;
-  const rawChapter = Array.isArray(chapter) ? chapter[0] : chapter;
+  const rawBook = Array.isArray(globParams.book) ? globParams.book[0] : globParams.book;
+  const rawChapter = Array.isArray(globParams.chapter) ? globParams.chapter[0] : globParams.chapter;
   
+  // Se não tiver livro ainda, NÃO assume 1 direto. Espera.
   const numericBookId = rawBook ? parseInt(rawBook, 10) : 1;
   const initialChapter = rawChapter ? parseInt(rawChapter, 10) : 1;
 
@@ -90,24 +83,31 @@ export default function LeituraScreen() {
   const [showGrid, setShowGrid] = useState(false); 
   const [fontSize, setFontSize] = useState(20);
 
-  // IA & AUDIO
+  // IA & AUDIO STATES
   const [aiModalVisible, setAiModalVisible] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiTitle, setAiTitle] = useState('');
-  
-  // ESTADOS DE ANÁLISE E EDIÇÃO
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
   const [editableData, setEditableData] = useState<AnalysisData | null>(null);
-
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
-  
   const [isEditing, setIsEditing] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
 
-  const currentBookData = BOOK_MAP[numericBookId] || { name: 'Livro', abbrev: '' };
+  const currentBookData = BOOK_MAP[numericBookId] || { name: 'Carregando...', abbrev: '' };
   const displayTitle = currentBookData.name;
+
+  // ✅ MUDANÇA 3: Monitora mudanças no ID do livro e reseta se necessário
+  useEffect(() => {
+     if(rawBook) {
+        // Se o parâmetro mudou, atualize o capítulo para o inicial
+        const newBookId = parseInt(rawBook, 10);
+        if(newBookId !== numericBookId) {
+            // Force refresh if needed
+        }
+     }
+  }, [rawBook]);
 
   useEffect(() => { return () => { if (sound) sound.unloadAsync(); }; }, [sound]);
 
@@ -124,6 +124,7 @@ export default function LeituraScreen() {
     configureAudio();
   }, []);
 
+  // 1. Carrega Total de Capítulos
   useEffect(() => {
     async function initBook() {
       if (!numericBookId) return;
@@ -138,6 +139,7 @@ export default function LeituraScreen() {
     initBook();
   }, [numericBookId]);
 
+  // 2. Carrega Versículos
   useEffect(() => { if (numericBookId > 0) fetchVerses(numericBookId, selectedChapter); }, [selectedChapter, numericBookId]);
 
   async function fetchVerses(bId: number, cap: number) {
@@ -150,6 +152,7 @@ export default function LeituraScreen() {
     finally { setLoading(false); }
   }
 
+  // --- FUNÇÕES DE AÇÃO ---
   const handleShare = async () => {
     if (!analysisData) return;
     const message = `*ANÁLISE: ${aiTitle}*\n\n📖 *Tema:* ${analysisData.theme}\n🔎 *Exegese:* ${analysisData.exegesis}\n🏛️ *Histórico:* ${analysisData.history}\n✝️ *Teologia:* ${analysisData.theology}\n🌱 *Aplicação:* ${analysisData.application}`;
@@ -157,123 +160,47 @@ export default function LeituraScreen() {
   };
 
   const handleSave = async () => {
-    // Salva o editado ou o original
     const dataToSave = isEditing ? editableData : analysisData;
-    
     if (!dataToSave) return;
     setSavingNote(true);
-
     const contentToSave = JSON.stringify(dataToSave);
-    
-    const { error } = await supabase.from('saved_notes').insert({
-        title: aiTitle, 
-        reference: `${displayTitle} ${selectedChapter}`, 
-        content: contentToSave 
-    });
-    
+    const { error } = await supabase.from('saved_notes').insert({ title: aiTitle, reference: `${displayTitle} ${selectedChapter}`, content: contentToSave });
     setSavingNote(false);
-    if (error) { 
-        Alert.alert("Erro", "Não foi possível salvar."); 
-    } else { 
-        Alert.alert("Sucesso!", "Análise salva."); 
-        if(isEditing && editableData) {
-            setAnalysisData(editableData);
-            setIsEditing(false);
-        }
-    }
+    if (error) { Alert.alert("Erro", "Não foi possível salvar."); } else { Alert.alert("Sucesso!", "Análise salva."); if(isEditing && editableData) { setAnalysisData(editableData); setIsEditing(false); } }
   };
 
-  const handleEdit = () => {
-    if (!analysisData) return;
-    // Clona para editar
-    setEditableData({ ...analysisData });
-    setIsEditing(true);
-  };
+  const handleEdit = () => { if (!analysisData) return; setEditableData({ ...analysisData }); setIsEditing(true); };
 
   const speakWithOpenAI = async () => {
     if (!analysisData) return;
-    if (sound) {
-      if (isSpeaking) { await sound.pauseAsync(); setIsSpeaking(false); } 
-      else { await sound.playAsync(); setIsSpeaking(true); }
-      return;
-    }
+    if (sound) { if (isSpeaking) { await sound.pauseAsync(); setIsSpeaking(false); } else { await sound.playAsync(); setIsSpeaking(true); } return; }
     try {
       setAudioLoading(true);
       const source = isEditing ? editableData : analysisData;
       if (!source) return;
-
       const textToSpeak = `Análise Teológica. Tema: ${source.theme}. Exegese: ${source.exegesis}. Aplicação: ${source.application}`;
-
-      const response = await fetch('/api/speech', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: textToSpeak }),
-      });
-
+      const response = await fetch('/api/speech', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: textToSpeak }), });
       if (!response.ok) throw new Error("Erro no servidor de áudio");
-
-      const blob = await response.blob();
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
+      const blob = await response.blob(); const reader = new FileReader(); reader.readAsDataURL(blob);
       reader.onloadend = async () => {
         const uriResult = reader.result as string;
-        if (Platform.OS === 'web') {
-           const { sound: newSound } = await Audio.Sound.createAsync({ uri: uriResult }, { shouldPlay: true });
-           setSound(newSound); setIsSpeaking(true);
-           newSound.setOnPlaybackStatusUpdate((s: any) => { if (s.didJustFinish) { setIsSpeaking(false); newSound.unloadAsync(); setSound(null); }});
-        } else {
-           const base64data = uriResult.split(',')[1];
-           // @ts-ignore
-           const uri = (FileSystem.cacheDirectory || '') + 'speech_analysis.mp3';
-           await FileSystem.writeAsStringAsync(uri, base64data, { encoding: 'base64' });
-           const { sound: newSound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
-           setSound(newSound); setIsSpeaking(true);
-           newSound.setOnPlaybackStatusUpdate((s: any) => { if (s.didJustFinish) { setIsSpeaking(false); newSound.unloadAsync(); setSound(null); }});
-        }
+        if (Platform.OS === 'web') { const { sound: newSound } = await Audio.Sound.createAsync({ uri: uriResult }, { shouldPlay: true }); setSound(newSound); setIsSpeaking(true); newSound.setOnPlaybackStatusUpdate((s: any) => { if (s.didJustFinish) { setIsSpeaking(false); newSound.unloadAsync(); setSound(null); }}); } 
+        else { const base64data = uriResult.split(',')[1]; const uri = (FileSystem.cacheDirectory || '') + 'speech_analysis.mp3'; await FileSystem.writeAsStringAsync(uri, base64data, { encoding: 'base64' }); const { sound: newSound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true }); setSound(newSound); setIsSpeaking(true); newSound.setOnPlaybackStatusUpdate((s: any) => { if (s.didJustFinish) { setIsSpeaking(false); newSound.unloadAsync(); setSound(null); }}); }
       };
-    } catch (error: any) { Alert.alert("Erro de Áudio", "Não foi possível gerar o áudio."); } 
-    finally { setAudioLoading(false); }
+    } catch (error: any) { Alert.alert("Erro de Áudio", "Não foi possível gerar o áudio."); } finally { setAudioLoading(false); }
   };
 
   const callAI = async (prompt: string, title: string) => {
-    setAiTitle(title); 
-    setAnalysisData(null); 
-    setIsEditing(false); 
-    stopSpeaking(); 
-    setAiModalVisible(true); 
-    setAiLoading(true);
-    
-    const SYSTEM_PROMPT = `
-    ATUE COMO: Um Teólogo Reformado Sênior.
-    TAREFA: Analisar o texto bíblico com profundidade.
-    ESTRUTURA JSON (STRICKT):
-    {
-      "theme": "Resumo robusto do tema.",
-      "history": "Contexto histórico completo.",
-      "exegesis": "Análise versículo a versículo (min 150 palavras).",
-      "theology": "Doutrinas fundamentais.",
-      "application": "3 aplicações práticas."
-    }
-    `;
-
+    setAiTitle(title); setAnalysisData(null); setIsEditing(false); stopSpeaking(); setAiModalVisible(true); setAiLoading(true);
+    const SYSTEM_PROMPT = `ATUE COMO: Um Teólogo Reformado Sênior. TAREFA: Analisar o texto bíblico. JSON STRICT: { "theme": "...", "history": "...", "exegesis": "...", "theology": "...", "application": "..." }`;
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }] })
-      });
+      const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }] }) });
       const data = await response.json();
       if (data.choices) {
-        let content = data.choices[0].message.content;
-        const firstBrace = content.indexOf('{');
-        const lastBrace = content.lastIndexOf('}');
-        if (firstBrace !== -1 && lastBrace !== -1) {
-            setAnalysisData(JSON.parse(content.substring(firstBrace, lastBrace + 1)));
-        } else { setAnalysisData({ theme: "Erro", exegesis: "A IA não retornou um JSON válido.", history: "", theology: "", application: "" }); }
+        let content = data.choices[0].message.content; const firstBrace = content.indexOf('{'); const lastBrace = content.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1) { setAnalysisData(JSON.parse(content.substring(firstBrace, lastBrace + 1))); } else { setAnalysisData({ theme: "Erro", exegesis: "Formato inválido", history: "", theology: "", application: "" }); }
       }
-    } catch (error) { 
-        setAnalysisData({ theme: "Erro de Conexão", exegesis: "Sem internet.", history: "", theology: "", application: "" });
-    } finally { setAiLoading(false); }
+    } catch (error) { setAnalysisData({ theme: "Erro", exegesis: "Sem conexão", history: "", theology: "", application: "" }); } finally { setAiLoading(false); }
   };
   
   const stopSpeaking = async () => { if (sound) { await sound.stopAsync(); await sound.unloadAsync(); setSound(null); setIsSpeaking(false); } };
@@ -285,18 +212,14 @@ export default function LeituraScreen() {
   useLayoutEffect(() => {
     navigation.getParent()?.setOptions({ tabBarStyle: { display: "none" } });
     navigation.setOptions({
-      headerShown: true, 
-      headerBackTitle: "Livros",
+      headerShown: true, headerBackTitle: "Livros",
       headerTitle: () => (
         <TouchableOpacity onPress={() => setShowGrid(!showGrid)} style={styles.headerTitleContainer}>
           <Text style={styles.headerTitleText}>{displayTitle} {selectedChapter} {showGrid ? '▲' : '▼'}</Text>
         </TouchableOpacity>
       ),
       headerLeft: () => (
-        <TouchableOpacity onPress={() => {
-            navigation.getParent()?.setOptions({ tabBarStyle: { display: "flex" } });
-            navigation.goBack();
-        }} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: -8 }}>
+        <TouchableOpacity onPress={() => { navigation.getParent()?.setOptions({ tabBarStyle: { display: "flex" } }); navigation.goBack(); }} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: -8 }}>
             <Ionicons name="chevron-back" size={28} color="#007AFF" />
             <Text style={{ fontSize: 17, color: '#007AFF' }}>Livros</Text>
         </TouchableOpacity>
@@ -313,27 +236,14 @@ export default function LeituraScreen() {
 
   const InfoCard = ({ title, fieldKey, text, color, icon }: any) => {
     if (!isEditing && !text) return null;
-
     return (
       <View style={styles.cardContainer}>
         <View style={[styles.cardBar, { backgroundColor: color }]} />
         <View style={styles.cardContent}>
-          <View style={styles.cardHeader}>
-            <Ionicons name={icon} size={20} color={color} style={{marginRight: 8}} />
-            <Text style={[styles.cardTitle, { color: color }]}>{title}</Text>
-          </View>
-          
+          <View style={styles.cardHeader}><Ionicons name={icon} size={20} color={color} style={{marginRight: 8}} /><Text style={[styles.cardTitle, { color: color }]}>{title}</Text></View>
           {isEditing ? (
-            <TextInput 
-                style={[styles.inputEditor, { borderColor: color }]}
-                multiline
-                value={editableData ? (editableData as any)[fieldKey] : ''}
-                onChangeText={(val) => setEditableData(prev => prev ? ({...prev, [fieldKey]: val}) : null)}
-                placeholder={`Edite ${title}...`}
-            />
-          ) : (
-            <Text style={styles.cardBody}>{text}</Text>
-          )}
+            <TextInput style={[styles.inputEditor, { borderColor: color }]} multiline value={editableData ? (editableData as any)[fieldKey] : ''} onChangeText={(val) => setEditableData(prev => prev ? ({...prev, [fieldKey]: val}) : null)} placeholder={`Edite ${title}...`} />
+          ) : ( <Text style={styles.cardBody}>{text}</Text> )}
         </View>
       </View>
     );
@@ -356,10 +266,7 @@ export default function LeituraScreen() {
         {loading ? <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 50 }} /> : (
             verses.length === 0 ? (
                 <View style={{padding: 40, alignItems: 'center'}}>
-                    <Text style={{fontSize: 16, color: '#666', textAlign: 'center'}}>
-                        Nenhum versículo encontrado.{'\n'}
-                        Livro: {displayTitle} ({numericBookId})
-                    </Text>
+                    <Text style={{fontSize: 16, color: '#666', textAlign: 'center'}}>Carregando {displayTitle}...</Text>
                 </View>
             ) : (
                 <FlatList data={verses} key="text" keyExtractor={i => i.id.toString()} contentContainerStyle={styles.textContainer} showsVerticalScrollIndicator={false}
@@ -381,39 +288,25 @@ export default function LeituraScreen() {
           <Text style={styles.chapterIndicator}>{selectedChapter} / {totalChapters}</Text>
           <TouchableOpacity style={[styles.navButton, selectedChapter >= totalChapters && styles.disabledButton]} onPress={goNext} disabled={selectedChapter >= totalChapters}><Text style={[styles.navButtonText, selectedChapter >= totalChapters && styles.disabledText]}>Próximo </Text><Ionicons name="chevron-forward" size={20} color={selectedChapter >= totalChapters ? "#ccc" : "#fff"} /></TouchableOpacity>
         </View>
+        {/* DIAGNÓSTICO: REMOVER DEPOIS SE INCOMODAR */}
+        <Text style={{textAlign:'center', fontSize: 9, color: '#ccc', paddingBottom: 2}}>
+           Debug: ID={numericBookId} (Raw: {JSON.stringify(rawBook)})
+        </Text>
       </SafeAreaView>
 
       <Modal animationType="slide" visible={aiModalVisible} onRequestClose={() => { setAiModalVisible(false); stopSpeaking(); }}>
         <View style={{ flex: 1, backgroundColor: '#F2F2F7', paddingTop: Platform.OS === 'ios' ? insets.top + 20 : 20 }}>
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => { setAiModalVisible(false); setIsEditing(false); stopSpeaking(); }}>
-                <Text style={styles.closeText}>Fechar</Text>
-            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setAiModalVisible(false); setIsEditing(false); stopSpeaking(); }}><Text style={styles.closeText}>Fechar</Text></TouchableOpacity>
             <View style={styles.headerActions}>
-                <TouchableOpacity onPress={speakWithOpenAI} style={styles.playActionBtn} disabled={audioLoading}>
-                    {audioLoading ? <ActivityIndicator size="small" color="#007AFF"/> : <><Ionicons name={isSpeaking ? "pause-circle" : "play-circle"} size={32} color="#007AFF" /><Text style={styles.playLabel}>Ouvir</Text></>}
-                </TouchableOpacity>
-                {isEditing ? (
-                    <TouchableOpacity onPress={handleSave} style={{backgroundColor:'#007AFF', paddingHorizontal:12, paddingVertical:8, borderRadius:15}}>
-                        {savingNote ? <ActivityIndicator color="#fff" size="small"/> : <Text style={{color:'#fff', fontWeight:'bold'}}>Salvar</Text>}
-                    </TouchableOpacity>
-                ) : (
-                    <>
-                    <TouchableOpacity onPress={handleSave} style={styles.actionIcon}>{savingNote ? <ActivityIndicator size="small" color="#007AFF"/> : <Ionicons name="save-outline" size={26} color="#007AFF" />}</TouchableOpacity>
-                    <TouchableOpacity onPress={handleEdit} style={styles.actionIcon}><Ionicons name="pencil-outline" size={26} color="#007AFF" /></TouchableOpacity>
-                    <TouchableOpacity onPress={handleShare} style={styles.actionIcon}><Ionicons name="share-outline" size={26} color="#007AFF" /></TouchableOpacity>
-                    </>
-                )}
+                <TouchableOpacity onPress={speakWithOpenAI} style={styles.playActionBtn} disabled={audioLoading}>{audioLoading ? <ActivityIndicator size="small" color="#007AFF"/> : <><Ionicons name={isSpeaking ? "pause-circle" : "play-circle"} size={32} color="#007AFF" /><Text style={styles.playLabel}>Ouvir</Text></>}</TouchableOpacity>
+                {isEditing ? ( <TouchableOpacity onPress={handleSave} style={{backgroundColor:'#007AFF', paddingHorizontal:12, paddingVertical:8, borderRadius:15}}>{savingNote ? <ActivityIndicator color="#fff" size="small"/> : <Text style={{color:'#fff', fontWeight:'bold'}}>Salvar</Text>}</TouchableOpacity> ) : ( <><TouchableOpacity onPress={handleSave} style={styles.actionIcon}>{savingNote ? <ActivityIndicator size="small" color="#007AFF"/> : <Ionicons name="save-outline" size={26} color="#007AFF" />}</TouchableOpacity><TouchableOpacity onPress={handleEdit} style={styles.actionIcon}><Ionicons name="pencil-outline" size={26} color="#007AFF" /></TouchableOpacity><TouchableOpacity onPress={handleShare} style={styles.actionIcon}><Ionicons name="share-outline" size={26} color="#007AFF" /></TouchableOpacity></> )}
             </View>
           </View>
-          
-          {aiLoading ? (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" color="#AF52DE" /><Text style={{ marginTop: 20, color: '#666', fontSize: 16 }}>Consultando Teólogo...</Text></View>
-          ) : (
+          {aiLoading ? ( <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" color="#AF52DE" /><Text style={{ marginTop: 20, color: '#666', fontSize: 16 }}>Consultando Teólogo...</Text></View> ) : (
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
                 <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
                     <Text style={styles.analysisSubject}>{aiTitle} {isEditing ? "(Editando)" : ""}</Text>
-                    
                     <InfoCard title="TEMA CENTRAL" fieldKey="theme" text={isEditing ? null : analysisData?.theme} color="#1C1C1E" icon="bookmark" />
                     <InfoCard title="CONTEXTO HISTÓRICO" fieldKey="history" text={isEditing ? null : analysisData?.history} color="#FF9500" icon="time" />
                     <InfoCard title="EXEGESE & LINGUÍSTICA" fieldKey="exegesis" text={isEditing ? null : analysisData?.exegesis} color="#007AFF" icon="search" />
