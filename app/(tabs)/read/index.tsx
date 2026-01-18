@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
-import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import React, { useEffect, useLayoutEffect, useState } from 'react';
@@ -20,11 +19,11 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-
-// ✅ CAMINHO SUPABASE (Confira se no seu PC são 3 ou 4 ../)
 import { supabase } from '../../../lib/supabase';
 
-// --- 📖 MAPA COMPLETO DOS 66 LIVROS (GÊNESIS AO APOCALIPSE) ---
+// -----------------------------------------------------------------------------
+// 📚 DATA LAYER
+// -----------------------------------------------------------------------------
 const BOOK_MAP: { [key: number]: { name: string, abbrev: string } } = {
   1: { name: 'Gênesis', abbrev: 'Gn' }, 2: { name: 'Êxodo', abbrev: 'Êx' },
   3: { name: 'Levítico', abbrev: 'Lv' }, 4: { name: 'Números', abbrev: 'Nm' },
@@ -62,14 +61,20 @@ const BOOK_MAP: { [key: number]: { name: string, abbrev: string } } = {
 };
 
 type Verse = { id: string; verse: number; text_pt: string; };
-type AnalysisData = { theme?: string; exegesis?: string; history?: string; theology?: string; application?: string; };
+// Estrutura rica de dados
+type AnalysisData = { 
+    theme: string; 
+    history: string; 
+    exegesis: string; 
+    theology: string; 
+    application: string; 
+};
 
 export default function LeituraScreen() {
   const navigation = useNavigation();
   const { book, chapter } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   
-  // LOGICA SEGURA DE ID
   const parseParam = (param: string | string[] | undefined) => {
     if (!param) return 0;
     if (Array.isArray(param)) return parseInt(param[0], 10) || 0;
@@ -91,14 +96,18 @@ export default function LeituraScreen() {
   const [aiModalVisible, setAiModalVisible] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiTitle, setAiTitle] = useState('');
+  
+  // O Estado Principal da Análise
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
+  
+  // Estado Temporário para Edição (Mantendo a estrutura)
+  const [editableData, setEditableData] = useState<AnalysisData | null>(null);
+
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   
-  // EDITAR / SALVAR
   const [isEditing, setIsEditing] = useState(false);
-  const [editedText, setEditedText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
 
   const currentBookData = BOOK_MAP[numericBookId] || { name: 'Carregando...', abbrev: '' };
@@ -141,64 +150,54 @@ export default function LeituraScreen() {
         const { data, error } = await supabase.from('verses').select('id, verse, text_pt').eq('book_id', bId).eq('chapter', cap).order('verse', { ascending: true });
         if (error) throw error;
         setVerses(data || []); 
-    } catch (error) {
-        console.error("Erro busca:", error);
-    } finally {
-        setLoading(false);
-    }
+    } catch (error) { console.error("Erro busca:", error); } 
+    finally { setLoading(false); }
   }
 
   const handleShare = async () => {
-    let message = "";
-    if (isEditing) {
-      message = `*ANÁLISE (Minha Nota)*\n\n${editedText}`;
-    } else if (analysisData) {
-      message = `*ANÁLISE: ${aiTitle}*\n\n📖 *Tema:* ${analysisData.theme}\n🔎 *Exegese:* ${analysisData.exegesis}\n🏛️ *Histórico:* ${analysisData.history}\n✝️ *Teologia:* ${analysisData.theology}\n🌱 *Aplicação:* ${analysisData.application}`;
-    }
+    if (!analysisData) return;
+    const message = `*ANÁLISE: ${aiTitle}*\n\n📖 *Tema:* ${analysisData.theme}\n🔎 *Exegese:* ${analysisData.exegesis}\n🏛️ *Histórico:* ${analysisData.history}\n✝️ *Teologia:* ${analysisData.theology}\n🌱 *Aplicação:* ${analysisData.application}`;
     try { await Share.share({ message }); } catch (error) { Alert.alert("Erro", "Não foi possível compartilhar."); }
   };
 
-  const handleCopy = async () => {
-    const text = isEditing ? editedText : JSON.stringify(analysisData, null, 2);
-    await Clipboard.setStringAsync(text);
-    Alert.alert("Copiado!", "Texto copiado.");
-  };
-
   const handleSave = async () => {
-    if (!analysisData && !editedText) return;
+    // Se estiver editando, salvamos o que está no edit, senão, o original
+    const dataToSave = isEditing ? editableData : analysisData;
+    
+    if (!dataToSave) return;
     setSavingNote(true);
-    let contentToSave = "";
-    if (isEditing) {
-      contentToSave = editedText;
-    } else {
-      contentToSave = JSON.stringify(analysisData);
-    }
+
+    // Salvamos como JSON string para manter a estrutura
+    const contentToSave = JSON.stringify(dataToSave);
+    
     const { error } = await supabase.from('saved_notes').insert({
-        title: aiTitle, reference: `${displayTitle} ${selectedChapter}`, content: contentToSave
+        title: aiTitle, 
+        reference: `${displayTitle} ${selectedChapter}`, 
+        content: contentToSave 
     });
+    
     setSavingNote(false);
-    if (error) { Alert.alert("Erro", "Não foi possível salvar."); } 
-    else { Alert.alert("Sucesso!", "Análise salva."); setIsEditing(false); }
+    if (error) { 
+        Alert.alert("Erro", "Não foi possível salvar."); 
+    } else { 
+        Alert.alert("Sucesso!", "Análise estruturada salva."); 
+        // Se estava editando, atualizamos o estado principal
+        if(isEditing && editableData) {
+            setAnalysisData(editableData);
+            setIsEditing(false);
+        }
+    }
   };
 
   const handleEdit = () => {
     if (!analysisData) return;
-    const safe = (txt: any) => {
-       if (!txt) return "Sem informação.";
-       return typeof txt === 'object' ? Object.values(txt).join(' ') : txt;
-    };
-    const textVersion = 
-      `📌 TEMA CENTRAL:\n${safe(analysisData.theme)}\n\n` +
-      `🏛️ CONTEXTO HISTÓRICO:\n${safe(analysisData.history)}\n\n` +
-      `🔎 EXEGESE DETALHADA:\n${safe(analysisData.exegesis)}\n\n` +
-      `✝️ TEOLOGIA:\n${safe(analysisData.theology)}\n\n` +
-      `🌱 APLICAÇÃO PRÁTICA:\n${safe(analysisData.application)}`;
-    setEditedText(textVersion); 
+    // Clona os dados para edição
+    setEditableData({ ...analysisData });
     setIsEditing(true);
   };
 
   const speakWithOpenAI = async () => {
-    if (!analysisData && !isEditing) return;
+    if (!analysisData) return;
     if (sound) {
       if (isSpeaking) { await sound.pauseAsync(); setIsSpeaking(false); } 
       else { await sound.playAsync(); setIsSpeaking(true); }
@@ -206,8 +205,11 @@ export default function LeituraScreen() {
     }
     try {
       setAudioLoading(true);
-      const safeText = (txt: any) => typeof txt === 'object' ? JSON.stringify(txt) : txt;
-      let textToSpeak = isEditing ? editedText : `Análise Teológica. Tema: ${safeText(analysisData?.theme)}. Exegese: ${safeText(analysisData?.exegesis)}. Aplicação: ${safeText(analysisData?.application)}`;
+      // Lê o dado atual (editado ou original)
+      const source = isEditing ? editableData : analysisData;
+      if (!source) return;
+
+      const textToSpeak = `Análise Teológica. Tema: ${source.theme}. Exegese: ${source.exegesis}. Aplicação: ${source.application}`;
 
       const response = await fetch('/api/speech', {
         method: 'POST',
@@ -236,11 +238,8 @@ export default function LeituraScreen() {
            newSound.setOnPlaybackStatusUpdate((s: any) => { if (s.didJustFinish) { setIsSpeaking(false); newSound.unloadAsync(); setSound(null); }});
         }
       };
-    } catch (error: any) { 
-        Alert.alert("Erro de Áudio", "Não foi possível gerar o áudio."); 
-    } finally { 
-        setAudioLoading(false); 
-    }
+    } catch (error: any) { Alert.alert("Erro de Áudio", "Não foi possível gerar o áudio."); } 
+    finally { setAudioLoading(false); }
   };
 
   const callAI = async (prompt: string, title: string) => {
@@ -252,20 +251,15 @@ export default function LeituraScreen() {
     setAiLoading(true);
     
     const SYSTEM_PROMPT = `
-    ATUE COMO: Um Teólogo Reformado Sênior, PhD em Exegese Bíblica e Linguística.
-    TAREFA: Analisar o texto bíblico fornecido com profundidade acadêmica e pastoral.
-    REGRAS OBRIGATÓRIAS:
-    1. NÃO RESUMA. Escreva parágrafos longos, densos e explicativos.
-    2. Na Exegese, analise as palavras chave no original (Hebraico/Grego), colocando a transliteração e o sentido profundo.
-    3. Na Teologia, conecte com a Grande História da Redenção (Cristocentrismo).
-    4. Seja didático mas profundo, como um comentário bíblico de referência.
-    ESTRUTURA JSON (Responda APENAS JSON):
+    ATUE COMO: Um Teólogo Reformado Sênior.
+    TAREFA: Analisar o texto bíblico com profundidade.
+    ESTRUTURA JSON (STRICKT):
     {
-      "theme": "Resumo robusto do tema central (mínimo 3 frases).",
-      "history": "Contexto histórico completo: autor, data, situação política e destinatários.",
-      "exegesis": "Análise detalhada versículo a versículo ou das palavras-chave. Mínimo 150 palavras.",
-      "theology": "Doutrinas fundamentais (Justificação, Santificação, etc) presentes no texto.",
-      "application": "3 aplicações práticas, desafiadoras e específicas para a vida cristã hoje."
+      "theme": "Resumo robusto do tema.",
+      "history": "Contexto histórico completo.",
+      "exegesis": "Análise versículo a versículo (min 150 palavras).",
+      "theology": "Doutrinas fundamentais.",
+      "application": "3 aplicações práticas."
     }
     `;
 
@@ -282,10 +276,10 @@ export default function LeituraScreen() {
         const lastBrace = content.lastIndexOf('}');
         if (firstBrace !== -1 && lastBrace !== -1) {
             setAnalysisData(JSON.parse(content.substring(firstBrace, lastBrace + 1)));
-        } else { setAnalysisData({ theme: "Erro", exegesis: "A IA não retornou um JSON válido." }); }
+        } else { setAnalysisData({ theme: "Erro", exegesis: "A IA não retornou um JSON válido.", history: "", theology: "", application: "" }); }
       }
     } catch (error) { 
-        setAnalysisData({ theme: "Erro de Conexão", exegesis: "Não foi possível conectar ao servidor de Teologia." });
+        setAnalysisData({ theme: "Erro de Conexão", exegesis: "Sem internet.", history: "", theology: "", application: "" });
     } finally { setAiLoading(false); }
   };
   
@@ -296,18 +290,20 @@ export default function LeituraScreen() {
   const analyzeVerse = (v: Verse) => callAI(`Faça uma exegese profunda do Versículo: "${v.text_pt}" (Livro: ${displayTitle}, Cap: ${selectedChapter}, Verso: ${v.verse}).`, `Verso ${v.verse}`);
 
   useLayoutEffect(() => {
+    navigation.getParent()?.setOptions({ tabBarStyle: { display: "none" } });
     navigation.setOptions({
       headerShown: true, 
       headerBackTitle: "Livros",
-      // ✅ AQUI ESCONDE O MENU DE BAIXO (TABS)
-      tabBarStyle: { display: 'none' },
       headerTitle: () => (
         <TouchableOpacity onPress={() => setShowGrid(!showGrid)} style={styles.headerTitleContainer}>
           <Text style={styles.headerTitleText}>{displayTitle} {selectedChapter} {showGrid ? '▲' : '▼'}</Text>
         </TouchableOpacity>
       ),
       headerLeft: () => (
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: -8 }}>
+        <TouchableOpacity onPress={() => {
+            navigation.getParent()?.setOptions({ tabBarStyle: { display: "flex" } });
+            navigation.goBack();
+        }} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: -8 }}>
             <Ionicons name="chevron-back" size={28} color="#007AFF" />
             <Text style={{ fontSize: 17, color: '#007AFF' }}>Livros</Text>
         </TouchableOpacity>
@@ -322,21 +318,30 @@ export default function LeituraScreen() {
     });
   }, [navigation, displayTitle, selectedChapter, showGrid]);
 
-  const InfoCard = ({ title, text, color, icon }: any) => {
-    if (!text) return null;
-    let safeContent = text;
-    if (typeof text === 'object') {
-        safeContent = Object.values(text).join('. ');
-        if (safeContent === '[object Object]' || safeContent === '') {
-            safeContent = JSON.stringify(text).replace(/[\{\}"]/g, '').replace(/:/g, ': ');
-        }
-    }
+  // UI: CARD DE INFORMAÇÃO OU CAMPO DE EDIÇÃO
+  const InfoCard = ({ title, fieldKey, text, color, icon }: any) => {
+    if (!isEditing && !text) return null; // Se não estiver editando e estiver vazio, esconde
+
     return (
       <View style={styles.cardContainer}>
         <View style={[styles.cardBar, { backgroundColor: color }]} />
         <View style={styles.cardContent}>
-          <View style={styles.cardHeader}><Ionicons name={icon} size={20} color={color} style={{marginRight: 8}} /><Text style={[styles.cardTitle, { color: color }]}>{title}</Text></View>
-          <Text style={styles.cardBody}>{safeContent}</Text>
+          <View style={styles.cardHeader}>
+            <Ionicons name={icon} size={20} color={color} style={{marginRight: 8}} />
+            <Text style={[styles.cardTitle, { color: color }]}>{title}</Text>
+          </View>
+          
+          {isEditing ? (
+            <TextInput 
+                style={[styles.inputEditor, { borderColor: color }]}
+                multiline
+                value={editableData ? (editableData as any)[fieldKey] : ''}
+                onChangeText={(val) => setEditableData(prev => prev ? ({...prev, [fieldKey]: val}) : null)}
+                placeholder={`Edite ${title}...`}
+            />
+          ) : (
+            <Text style={styles.cardBody}>{text}</Text>
+          )}
         </View>
       </View>
     );
@@ -358,12 +363,7 @@ export default function LeituraScreen() {
       <View style={{ flex: 1 }}>
         {loading ? <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 50 }} /> : (
             verses.length === 0 ? (
-                <View style={{padding: 40, alignItems: 'center'}}>
-                    <Text style={{fontSize: 16, color: '#666', textAlign: 'center'}}>
-                        Nenhum versículo encontrado.{'\n'}
-                        Tente recarregar ou verifique sua conexão.
-                    </Text>
-                </View>
+                <View style={{padding: 40, alignItems: 'center'}}><Text style={{fontSize: 16, color: '#666'}}>Sem versículos.</Text></View>
             ) : (
                 <FlatList data={verses} key="text" keyExtractor={i => i.id.toString()} contentContainerStyle={styles.textContainer} showsVerticalScrollIndicator={false}
                     renderItem={({ item }) => (
@@ -394,22 +394,15 @@ export default function LeituraScreen() {
             </TouchableOpacity>
             <View style={styles.headerActions}>
                 <TouchableOpacity onPress={speakWithOpenAI} style={styles.playActionBtn} disabled={audioLoading}>
-                    {audioLoading ? <ActivityIndicator size="small" color="#007AFF"/> : 
-                        <>
-                        <Ionicons name={isSpeaking ? "pause-circle" : "play-circle"} size={32} color="#007AFF" />
-                        <Text style={styles.playLabel}>Ouvir</Text>
-                        </>
-                    }
+                    {audioLoading ? <ActivityIndicator size="small" color="#007AFF"/> : <><Ionicons name={isSpeaking ? "pause-circle" : "play-circle"} size={32} color="#007AFF" /><Text style={styles.playLabel}>Ouvir</Text></>}
                 </TouchableOpacity>
                 {isEditing ? (
                     <TouchableOpacity onPress={handleSave} style={{backgroundColor:'#007AFF', paddingHorizontal:12, paddingVertical:8, borderRadius:15}}>
-                        {savingNote ? <ActivityIndicator color="#fff" size="small"/> : <Text style={{color:'#fff', fontWeight:'bold'}}>Salvar Edição</Text>}
+                        {savingNote ? <ActivityIndicator color="#fff" size="small"/> : <Text style={{color:'#fff', fontWeight:'bold'}}>Salvar</Text>}
                     </TouchableOpacity>
                 ) : (
                     <>
-                    <TouchableOpacity onPress={handleSave} style={styles.actionIcon}>
-                        {savingNote ? <ActivityIndicator size="small" color="#007AFF"/> : <Ionicons name="save-outline" size={26} color="#007AFF" />}
-                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleSave} style={styles.actionIcon}>{savingNote ? <ActivityIndicator size="small" color="#007AFF"/> : <Ionicons name="save-outline" size={26} color="#007AFF" />}</TouchableOpacity>
                     <TouchableOpacity onPress={handleEdit} style={styles.actionIcon}><Ionicons name="pencil-outline" size={26} color="#007AFF" /></TouchableOpacity>
                     <TouchableOpacity onPress={handleShare} style={styles.actionIcon}><Ionicons name="share-outline" size={26} color="#007AFF" /></TouchableOpacity>
                     </>
@@ -418,28 +411,19 @@ export default function LeituraScreen() {
           </View>
           
           {aiLoading ? (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" color="#AF52DE" /><Text style={{ marginTop: 20, color: '#666', fontSize: 16 }}>Consultando PhD em Teologia...</Text></View>
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" color="#AF52DE" /><Text style={{ marginTop: 20, color: '#666', fontSize: 16 }}>Consultando Teólogo...</Text></View>
           ) : (
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                {isEditing ? (
-                    <TextInput 
-                        style={styles.textEditor} 
-                        multiline 
-                        value={editedText} 
-                        onChangeText={setEditedText} 
-                        placeholder="Edite sua anotação aqui..."
-                        textAlignVertical="top"
-                    />
-                ) : (
-                    <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
-                      <Text style={styles.analysisSubject}>{aiTitle}</Text>
-                      <InfoCard title="TEMA CENTRAL" icon="bookmark" color="#1C1C1E" text={analysisData?.theme} />
-                      <InfoCard title="CONTEXTO HISTÓRICO" icon="time" color="#FF9500" text={analysisData?.history} />
-                      <InfoCard title="EXEGESE & LINGUÍSTICA" icon="search" color="#007AFF" text={analysisData?.exegesis} />
-                      <InfoCard title="TEOLOGIA SISTEMÁTICA" icon="book" color="#AF52DE" text={analysisData?.theology} />
-                      <InfoCard title="APLICAÇÃO PRÁTICA" icon="leaf" color="#34C759" text={analysisData?.application} />
-                    </ScrollView>
-                )}
+                <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
+                    <Text style={styles.analysisSubject}>{aiTitle} {isEditing ? "(Editando)" : ""}</Text>
+                    
+                    {/* CARDS INTELIGENTES: VIRAM INPUT SE ESTIVER EDITANDO */}
+                    <InfoCard title="TEMA CENTRAL" fieldKey="theme" text={isEditing ? null : analysisData?.theme} color="#1C1C1E" icon="bookmark" />
+                    <InfoCard title="CONTEXTO HISTÓRICO" fieldKey="history" text={isEditing ? null : analysisData?.history} color="#FF9500" icon="time" />
+                    <InfoCard title="EXEGESE & LINGUÍSTICA" fieldKey="exegesis" text={isEditing ? null : analysisData?.exegesis} color="#007AFF" icon="search" />
+                    <InfoCard title="TEOLOGIA SISTEMÁTICA" fieldKey="theology" text={isEditing ? null : analysisData?.theology} color="#AF52DE" icon="book" />
+                    <InfoCard title="APLICAÇÃO PRÁTICA" fieldKey="application" text={isEditing ? null : analysisData?.application} color="#34C759" icon="leaf" />
+                </ScrollView>
             </KeyboardAvoidingView>
           )}
         </View>
@@ -472,28 +456,19 @@ const styles = StyleSheet.create({
   navButtonText: { color: '#fff', fontWeight: '600' },
   disabledText: { color: '#ccc' },
   chapterIndicator: { fontSize: 14, color: '#666' },
-  modalHeader: { 
-      flexDirection: 'row', 
-      justifyContent: 'space-between', 
-      alignItems: 'center', 
-      paddingHorizontal: 20, 
-      paddingBottom: 15, 
-      backgroundColor: '#F2F2F7', 
-      borderBottomWidth: 1, 
-      borderBottomColor: '#E5E5EA' 
-  },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 15, backgroundColor: '#F2F2F7', borderBottomWidth: 1, borderBottomColor: '#E5E5EA' },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   playActionBtn: { alignItems: 'center', justifyContent: 'center', marginRight: 15 }, 
   playLabel: { fontSize: 9, color: '#007AFF', fontWeight: '600', marginTop: -2 },
   actionIcon: { marginLeft: 15, padding: 0 },
   closeText: { fontSize: 17, color: '#007AFF', fontWeight: '500' },
   modalBody: { flex: 1, padding: 20 },
-  textEditor: { flex: 1, padding: 20, fontSize: 16, lineHeight: 24, backgroundColor: '#fff', textAlignVertical: 'top', color: '#333' },
   analysisSubject: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 25, textAlign: 'center', lineHeight: 28 },
   cardContainer: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 12, marginBottom: 15, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2, borderWidth: 1, borderColor: '#f0f0f0' },
   cardBar: { width: 5 }, 
   cardContent: { flex: 1, padding: 15, paddingVertical: 18 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   cardTitle: { fontSize: 13, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
-  cardBody: { fontSize: 16, lineHeight: 24, color: '#333', textAlign: 'justify' }
+  cardBody: { fontSize: 16, lineHeight: 24, color: '#333', textAlign: 'justify' },
+  inputEditor: { fontSize: 16, lineHeight: 24, color: '#000', minHeight: 80, textAlignVertical: 'top', borderWidth: 1, borderRadius: 8, padding: 10, backgroundColor: '#FAFAFA' }
 });
