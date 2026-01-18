@@ -22,7 +22,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '../../../lib/supabase';
 
 // -----------------------------------------------------------------------------
-// 📚 DATA LAYER
+// 📚 DATA LAYER - LISTA COMPLETA E GARANTIDA
 // -----------------------------------------------------------------------------
 const BOOK_MAP: { [key: number]: { name: string, abbrev: string } } = {
   1: { name: 'Gênesis', abbrev: 'Gn' }, 2: { name: 'Êxodo', abbrev: 'Êx' },
@@ -61,7 +61,6 @@ const BOOK_MAP: { [key: number]: { name: string, abbrev: string } } = {
 };
 
 type Verse = { id: string; verse: number; text_pt: string; };
-// Estrutura rica de dados
 type AnalysisData = { 
     theme: string; 
     history: string; 
@@ -75,14 +74,13 @@ export default function LeituraScreen() {
   const { book, chapter } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   
-  const parseParam = (param: string | string[] | undefined) => {
-    if (!param) return 0;
-    if (Array.isArray(param)) return parseInt(param[0], 10) || 0;
-    return parseInt(param, 10) || 0;
-  };
-
-  const numericBookId = parseParam(book) || 1;
-  const initialChapter = parseParam(chapter) || 1;
+  // ✅ LÓGICA ANTIGA (A QUE FUNCIONA)
+  // Voltamos para o método "bruto" que garante pegar o ID certo
+  const rawBook = Array.isArray(book) ? book[0] : book;
+  const rawChapter = Array.isArray(chapter) ? chapter[0] : chapter;
+  
+  const numericBookId = rawBook ? parseInt(rawBook, 10) : 1;
+  const initialChapter = rawChapter ? parseInt(rawChapter, 10) : 1;
 
   const [loading, setLoading] = useState(false);
   const [verses, setVerses] = useState<Verse[]>([]);
@@ -97,10 +95,8 @@ export default function LeituraScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiTitle, setAiTitle] = useState('');
   
-  // O Estado Principal da Análise
+  // ESTADOS DE ANÁLISE E EDIÇÃO
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
-  
-  // Estado Temporário para Edição (Mantendo a estrutura)
   const [editableData, setEditableData] = useState<AnalysisData | null>(null);
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
@@ -110,7 +106,7 @@ export default function LeituraScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
 
-  const currentBookData = BOOK_MAP[numericBookId] || { name: 'Carregando...', abbrev: '' };
+  const currentBookData = BOOK_MAP[numericBookId] || { name: 'Livro', abbrev: '' };
   const displayTitle = currentBookData.name;
 
   useEffect(() => { return () => { if (sound) sound.unloadAsync(); }; }, [sound]);
@@ -161,13 +157,12 @@ export default function LeituraScreen() {
   };
 
   const handleSave = async () => {
-    // Se estiver editando, salvamos o que está no edit, senão, o original
+    // Salva o editado ou o original
     const dataToSave = isEditing ? editableData : analysisData;
     
     if (!dataToSave) return;
     setSavingNote(true);
 
-    // Salvamos como JSON string para manter a estrutura
     const contentToSave = JSON.stringify(dataToSave);
     
     const { error } = await supabase.from('saved_notes').insert({
@@ -180,8 +175,7 @@ export default function LeituraScreen() {
     if (error) { 
         Alert.alert("Erro", "Não foi possível salvar."); 
     } else { 
-        Alert.alert("Sucesso!", "Análise estruturada salva."); 
-        // Se estava editando, atualizamos o estado principal
+        Alert.alert("Sucesso!", "Análise salva."); 
         if(isEditing && editableData) {
             setAnalysisData(editableData);
             setIsEditing(false);
@@ -191,7 +185,7 @@ export default function LeituraScreen() {
 
   const handleEdit = () => {
     if (!analysisData) return;
-    // Clona os dados para edição
+    // Clona para editar
     setEditableData({ ...analysisData });
     setIsEditing(true);
   };
@@ -205,7 +199,6 @@ export default function LeituraScreen() {
     }
     try {
       setAudioLoading(true);
-      // Lê o dado atual (editado ou original)
       const source = isEditing ? editableData : analysisData;
       if (!source) return;
 
@@ -318,9 +311,8 @@ export default function LeituraScreen() {
     });
   }, [navigation, displayTitle, selectedChapter, showGrid]);
 
-  // UI: CARD DE INFORMAÇÃO OU CAMPO DE EDIÇÃO
   const InfoCard = ({ title, fieldKey, text, color, icon }: any) => {
-    if (!isEditing && !text) return null; // Se não estiver editando e estiver vazio, esconde
+    if (!isEditing && !text) return null;
 
     return (
       <View style={styles.cardContainer}>
@@ -363,7 +355,12 @@ export default function LeituraScreen() {
       <View style={{ flex: 1 }}>
         {loading ? <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 50 }} /> : (
             verses.length === 0 ? (
-                <View style={{padding: 40, alignItems: 'center'}}><Text style={{fontSize: 16, color: '#666'}}>Sem versículos.</Text></View>
+                <View style={{padding: 40, alignItems: 'center'}}>
+                    <Text style={{fontSize: 16, color: '#666', textAlign: 'center'}}>
+                        Nenhum versículo encontrado.{'\n'}
+                        Livro: {displayTitle} ({numericBookId})
+                    </Text>
+                </View>
             ) : (
                 <FlatList data={verses} key="text" keyExtractor={i => i.id.toString()} contentContainerStyle={styles.textContainer} showsVerticalScrollIndicator={false}
                     renderItem={({ item }) => (
@@ -417,7 +414,6 @@ export default function LeituraScreen() {
                 <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
                     <Text style={styles.analysisSubject}>{aiTitle} {isEditing ? "(Editando)" : ""}</Text>
                     
-                    {/* CARDS INTELIGENTES: VIRAM INPUT SE ESTIVER EDITANDO */}
                     <InfoCard title="TEMA CENTRAL" fieldKey="theme" text={isEditing ? null : analysisData?.theme} color="#1C1C1E" icon="bookmark" />
                     <InfoCard title="CONTEXTO HISTÓRICO" fieldKey="history" text={isEditing ? null : analysisData?.history} color="#FF9500" icon="time" />
                     <InfoCard title="EXEGESE & LINGUÍSTICA" fieldKey="exegesis" text={isEditing ? null : analysisData?.exegesis} color="#007AFF" icon="search" />
