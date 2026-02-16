@@ -8,7 +8,8 @@
     "scheme": "bibleapp",
     "userInterfaceStyle": "automatic",
 
-    "platforms": ["ios", "android"],
+   "platforms": ["ios", "android", "web"],
+
 
     "newArchEnabled": true,
 
