@@ -1,7 +1,8 @@
+import { getSupabaseOrThrow } from '@/lib/supabaseClient';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { supabase } from '../../lib/supabase';
+
 
 type Event = {
   id: number;
@@ -21,10 +22,10 @@ export default function EventsScreen() {
   async function loadEvents() {
     setLoading(true);
 
-    const { data, error } = await supabase
-      .from('events')
-      .select('id, title, description')
-      .order('id', { ascending: false });
+    const sb = getSupabaseOrThrow();
+    const { data, error } = await sb .from('events')
+    .select('id, title, description')
+    .order('id', { ascending: false });
 
     if (error) {
       console.error('Erro ao buscar events:', error.message);

@@ -1,5 +1,6 @@
-import { supabase } from '@/lib/supabase'
-import { AtlasEtapa, AtlasItem } from './types'
+import { getSupabaseOrThrow } from '@/lib/supabaseClient';
+import { AtlasEtapa, AtlasItem } from './types';
+const supabase = getSupabaseOrThrow();
 
 export async function fetchAtlasItems(): Promise<AtlasItem[]> {
   const { data, error } = await supabase

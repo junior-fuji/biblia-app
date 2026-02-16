@@ -1,227 +1,217 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+
 import {
-  Image,
-  Keyboard,
-  RefreshControl,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
-const VERSES = [
-  { text: "Lâmpada para os meus pés é a tua palavra e luz para o meu caminho.", ref: "Salmos 119:105" },
-  { text: "Tudo posso naquele que me fortalece.", ref: "Filipenses 4:13" },
-  { text: "O Senhor é o meu pastor; nada me faltará.", ref: "Salmos 23:1" },
-];
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [verse, setVerse] = useState(VERSES[0]);
-  const [progress, setProgress] = useState(0);
-  const [completedCount, setCompletedCount] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
-  const [searchText, setSearchText] = useState('');
-  
-  // NOVOS ESTADOS PARA PERFIL
-  const [userName, setUserName] = useState('Junior');
-  const [userAvatar, setUserAvatar] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
+  const [greeting, setGreeting] = useState('Graça e Paz');
+  const [quickQuery, setQuickQuery] = useState('');
 
-  // Carrega os dados toda vez que a tela ganha foco
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-    }, [])
-  );
-
-  const loadData = async () => {
-    // 1. Carrega Perfil (Nome e Foto)
-    try {
-        const savedName = await AsyncStorage.getItem('user_name');
-        const savedAvatar = await AsyncStorage.getItem('user_avatar');
-        
-        if (savedName) setUserName(savedName);
-        if (savedAvatar) setUserAvatar(savedAvatar);
-    } catch (e) {}
-
-    // 2. Carrega Progresso do Plano
-    try {
-      const savedPlan = await AsyncStorage.getItem('bible_plan_final');
-      if (savedPlan) {
-        const completed = JSON.parse(savedPlan);
-        setCompletedCount(completed.length);
-        setProgress(completed.length / 365);
-      }
-    } catch (e) {}
-
-    // 3. Versículo Aleatório (Só se quiser mudar sempre que entrar)
-    // const random = VERSES[Math.floor(Math.random() * VERSES.length)];
-    // setVerse(random);
-  };
-
-  const executeSearch = () => {
-    Keyboard.dismiss();
-    if (searchText.trim() !== '') {
-        router.push({
-            pathname: '/(tabs)/read',
-            params: { q: searchText.trim() } 
-        });
-        setSearchText('');
-    } else {
-        router.push('/(tabs)/read');
-    }
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  };
+  useEffect(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) setGreeting('Bom dia');
+    else if (hour < 18) setGreeting('Boa tarde');
+    else setGreeting('Boa noite');
+  }, []);
 
   return (
-    <SafeAreaView style={styles.container}>
-      
-      {/* HEADER FIXO */}
-      <View style={styles.fixedHeader}>
-          <View style={styles.headerTop}>
-            <View>
-                <Text style={styles.greeting}>Graça e Paz,</Text>
-                {/* NOME DINÂMICO AQUI */}
-                <Text style={styles.username}>{userName}</Text>
-            </View>
-            
-            {/* BOTÃO DE PERFIL COM FOTO */}
-            <TouchableOpacity style={styles.profileBtn} onPress={() => router.push('/settings')}>
-                {userAvatar ? (
-                    <Image source={{ uri: userAvatar }} style={styles.profileImage} />
-                ) : (
-                    <Ionicons name="person-circle" size={45} color="#E5E5EA" />
-                )}
-            </TouchableOpacity>
-          </View>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <StatusBar barStyle="dark-content" />
 
-          {/* BARRA DE BUSCA */}
-          <View style={styles.searchContainer}>
-                <Ionicons name="search" size={20} color="#8E8E93" style={{marginLeft: 10}} />
-                <TextInput 
-                    style={styles.searchInput}
-                    placeholder="Buscar livro ou palavra..."
-                    placeholderTextColor="#8E8E93"
-                    value={searchText}
-                    onChangeText={setSearchText}
-                    onSubmitEditing={executeSearch}
-                    returnKeyType="search"
-                    autoCapitalize="none"
-                />
-                <TouchableOpacity onPress={executeSearch} style={styles.searchBtn}>
-                    <Ionicons name="arrow-forward" size={20} color="#fff" />
-                </TouchableOpacity>
-          </View>
-      </View>
-
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: Math.max(insets.top, 12) }
+        ]}
+        showsVerticalScrollIndicator={false}
       >
-        {/* CARD VERSÍCULO */}
-        <View style={styles.verseCard}>
-            <View style={styles.verseHeader}>
-                <Ionicons name="sunny" size={20} color="#fff" style={{marginRight:5}}/>
-                <Text style={styles.verseLabel}>Versículo do Dia</Text>
-            </View>
-            <Text style={styles.verseText}>"{verse.text}"</Text>
-            <Text style={styles.verseRef}>{verse.ref}</Text>
+        {/* HEADER */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>{greeting}, Junior</Text>
+            <Text style={styles.subGreeting}>Vamos examinar as Escrituras?</Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.avatar}
+            onPress={() => router.push('/settings')}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir configurações"
+          >
+            <Text style={styles.avatarText}>JR</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* CARD PLANO */}
-        <TouchableOpacity style={styles.progressCard} onPress={() => router.push('/(tabs)/plan')} activeOpacity={0.9}>
-            <View style={styles.progressHeader}>
-                <Text style={styles.progressTitle}>Plano Anual</Text>
-                <Text style={styles.progressPercent}>{(progress * 100).toFixed(0)}%</Text>
-            </View>
-            <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} />
-            </View>
-            <Text style={styles.progressSubtitle}>{completedCount} dias concluídos. Continue avançando!</Text>
-        </TouchableOpacity>
+        {/* VERSÍCULO DO DIA */}
+        <View style={styles.dailyCard}>
+          <View style={styles.iconCircle}>
+            <Ionicons name="book" size={20} color="#fff" />
+          </View>
+          <Text style={styles.dailyTitle}>Versículo do Dia</Text>
+          <Text style={styles.dailyText}>
+            “Lâmpada para os meus pés é a tua palavra e luz para o meu caminho.”
+          </Text>
+          <Text style={styles.dailyRef}>SALMOS 119:105</Text>
+        </View>
 
-        {/* MENU RÁPIDO */}
-        <Text style={styles.sectionTitle}>Menu Rápido</Text>
+        {/* BARRA DE BUSCA */}
+        <Text style={styles.sectionTitle}>Pesquisa Rápida</Text>
+
+        <View style={styles.quickSearchWrap}>
+          <Ionicons name="search" size={18} color="#8E8E93" />
+
+          <TextInput
+            style={styles.quickSearchInput}
+            placeholder="Buscar palavra na Bíblia…"
+            value={quickQuery}
+            onChangeText={setQuickQuery}
+            returnKeyType="search"
+            autoCorrect={false}
+            autoCapitalize="none"
+            onSubmitEditing={() => {
+              const q = quickQuery.trim();
+              if (q.length >= 2) {
+                router.push({ pathname: '/search', params: { q } });
+              }
+            }}
+          />
+
+          {quickQuery.length > 0 ? (
+            <TouchableOpacity
+              onPress={() => setQuickQuery('')}
+              style={{ padding: 6 }}
+              accessibilityLabel="Limpar busca"
+            >
+              <Ionicons name="close-circle" size={18} color="#C7C7CC" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={() => {
+                const q = quickQuery.trim();
+                if (q.length >= 2) {
+                  router.push({ pathname: '/search', params: { q } });
+                }
+              }}
+              style={styles.quickGoBtn}
+              accessibilityLabel="Pesquisar"
+            >
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* MENU PRINCIPAL */}
+        <Text style={styles.sectionTitle}>Menu Principal</Text>
+
         <View style={styles.grid}>
-            <TouchableOpacity style={styles.gridItem} onPress={() => router.push('/(tabs)/read')}>
-                <View style={[styles.gridIcon, { backgroundColor: '#E3F2FD' }]}>
-                    <Ionicons name="book-outline" size={28} color="#007AFF" />
-                </View>
-                <Text style={styles.gridText}>Bíblia</Text>
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.card} onPress={() => router.push('/read')} activeOpacity={0.85}>
+            <View style={[styles.cardIcon, { backgroundColor: '#E3F2FD' }]}>
+              <Ionicons name="book-outline" size={24} color="#007AFF" />
+            </View>
+            <Text style={styles.cardTitle}>Bíblia</Text>
+            <Text style={styles.cardSub}>Leitura</Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity style={styles.gridItem} onPress={() => router.push('/(tabs)/explore')}>
-                <View style={[styles.gridIcon, { backgroundColor: '#F3E5F5' }]}>
-                    <Ionicons name="journal-outline" size={28} color="#AF52DE" />
-                </View>
-                <Text style={styles.gridText}>Diário</Text>
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.card} onPress={() => router.push('/studies')} activeOpacity={0.85}>
+            <View style={[styles.cardIcon, { backgroundColor: '#E8F5E9' }]}>
+              <Ionicons name="create-outline" size={24} color="#34C759" />
+            </View>
+            <Text style={styles.cardTitle}>Estudos</Text>
+            <Text style={styles.cardSub}>Anotações</Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity style={styles.gridItem} onPress={() => router.push('/(tabs)/study')}>
-                <View style={[styles.gridIcon, { backgroundColor: '#E8F5E9' }]}>
-                    <Ionicons name="document-text-outline" size={28} color="#34C759" />
-                </View>
-                <Text style={styles.gridText}>Meus Estudos</Text>
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.card} onPress={() => router.push('/plan')} activeOpacity={0.85}>
+            <View style={[styles.cardIcon, { backgroundColor: '#F3E5F5' }]}>
+              <Ionicons name="calendar-outline" size={24} color="#AF52DE" />
+            </View>
+            <Text style={styles.cardTitle}>Plano</Text>
+            <Text style={styles.cardSub}>Anual</Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity style={styles.gridItem} onPress={() => router.push('/(tabs)/atlas')}>
-                <View style={[styles.gridIcon, { backgroundColor: '#FFF3E0' }]}>
-                    <Ionicons name="library-outline" size={28} color="#FF9500" />
-                </View>
-                <Text style={styles.gridText}>Dicionário</Text>
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.card} 
+          onPress={() => router.push({ pathname: '/(tabs)/dictionary' } as any)
+
+
+} 
+            activeOpacity={0.85}>
+            <View style={[styles.cardIcon, { backgroundColor: '#FFF3E0' }]}>
+              <Ionicons name="library-outline" size={24} color="#FF9500" />
+            </View>
+            <Text style={styles.cardTitle}>Dicionário</Text>
+            <Text style={styles.cardSub}>Original</Text>
+          </TouchableOpacity>
         </View>
 
+        <View style={{ height: 24 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F2F2F7' },
-  
-  fixedHeader: { backgroundColor: '#fff', paddingHorizontal: 20, paddingBottom: 15, paddingTop: 10, borderBottomWidth: 1, borderBottomColor: '#E5E5EA' },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  greeting: { fontSize: 16, color: '#8E8E93' },
-  username: { fontSize: 28, fontWeight: '800', color: '#000' },
-  
-  profileBtn: { padding: 5 },
-  profileImage: { width: 45, height: 45, borderRadius: 22.5, borderWidth: 1, borderColor: '#eee' }, // Estilo da foto
+  quickSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    height: 48,
+    marginBottom: 22,
+  },
+  quickSearchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#111',
+    marginLeft: 10,
+  },
+  quickGoBtn: {
+    backgroundColor: '#111',
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  container: { flex: 1, backgroundColor: '#FAFAFA' },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 20 },
 
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F2F2F7', borderRadius: 12, height: 50, overflow:'hidden' },
-  searchInput: { flex: 1, fontSize: 16, color: '#000', paddingHorizontal: 10, height: '100%' },
-  searchBtn: { backgroundColor: '#007AFF', width: 40, height: 40, borderRadius: 20, margin: 5, justifyContent:'center', alignItems:'center' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+  greeting: { fontSize: 22, fontWeight: '800', color: '#000' },
+  subGreeting: { fontSize: 14, color: '#666', marginTop: 2 },
+  avatar: { width: 45, height: 45, borderRadius: 25, backgroundColor: '#E0E0E0', justifyContent: 'center', alignItems: 'center' },
+  avatarText: { fontWeight: 'bold', color: '#666' },
 
-  scrollContent: { padding: 20 },
+  dailyCard: { backgroundColor: '#007AFF', padding: 22, borderRadius: 20, marginBottom: 18 },
+  iconCircle: { width: 40, height: 40, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  dailyTitle: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '800', letterSpacing: 0.6, marginBottom: 6 },
+  dailyText: { color: '#fff', fontSize: 17, fontWeight: '600', fontStyle: 'italic', lineHeight: 25 },
+  dailyRef: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: 'bold', marginTop: 12, letterSpacing: 0.6 },
 
-  verseCard: { backgroundColor: '#007AFF', borderRadius: 20, padding: 20, marginBottom: 20, shadowColor: '#007AFF', shadowOffset: {width:0, height:4}, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
-  verseHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  verseLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
-  verseText: { fontSize: 18, color: '#fff', fontWeight: '600', lineHeight: 26, fontStyle: 'italic' },
-  verseRef: { fontSize: 14, color: 'rgba(255,255,255,0.9)', marginTop: 10, fontWeight: '700', textAlign: 'right' },
+  sectionTitle: { fontSize: 18, fontWeight: '800', marginBottom: 12, color: '#333' },
 
-  progressCard: { backgroundColor: '#fff', borderRadius: 20, padding: 20, marginBottom: 25, shadowColor: '#000', shadowOffset: {width:0, height:2}, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
-  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  progressTitle: { fontSize: 16, fontWeight: '700', color: '#333' },
-  progressPercent: { fontSize: 16, fontWeight: '800', color: '#34C759' },
-  progressBarBg: { height: 8, backgroundColor: '#F2F2F7', borderRadius: 4, overflow: 'hidden', marginBottom: 10 },
-  progressBarFill: { height: '100%', backgroundColor: '#34C759', borderRadius: 4 },
-  progressSubtitle: { fontSize: 12, color: '#8E8E93' },
+  searchBar: { flexDirection: 'row', backgroundColor: '#fff', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 16, alignItems: 'center', marginBottom: 18, borderWidth: 1, borderColor: '#eee' },
+  searchPlaceholder: { flex: 1, color: '#999', marginLeft: 10, fontSize: 14 },
+  searchBtn: { backgroundColor: '#111', width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
 
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#333', marginBottom: 15 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  gridItem: { width: '48%', backgroundColor: '#fff', padding: 20, borderRadius: 16, alignItems: 'center', marginBottom: 15, shadowColor: '#000', shadowOffset: {width:0, height:2}, shadowOpacity: 0.03, shadowRadius: 3, elevation: 1 },
-  gridIcon: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  gridText: { fontSize: 14, fontWeight: '600', color: '#333' }
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 14 },
+  card: { width: '48%', backgroundColor: '#fff', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#f0f0f0' },
+  cardIcon: { width: 50, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: '#333' },
+  cardSub: { fontSize: 12, color: '#999', marginTop: 2 },
 });

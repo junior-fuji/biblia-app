@@ -1,31 +1,43 @@
+import { getSupabaseOrThrow } from '@/lib/supabaseClient';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
-import * as Clipboard from 'expo-clipboard';
-import * as FileSystem from 'expo-file-system'; // Ajustado para versão padrão
-import { useLocalSearchParams, useNavigation } from 'expo-router';
-import React, { useEffect, useLayoutEffect, useState } from 'react';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { supabase } from '../../../../lib/supabase';
 
-const fs = FileSystem; 
+/* =========================
+   TIPOS
+========================= */
+type Verse = { id: number; verse: number; text_pt: string };
 
-// --- MAPA COMPLETO DE LIVROS ---
-const BOOK_MAP: { [key: number]: { name: string, abbrev: string } } = {
+type RouteParams = {
+  book?: string;
+  chapter?: string;
+  verse?: string;
+  from?: string;
+  returnTo?: string;
+};
+
+type AnalysisData = {
+  theme?: string;
+  history?: string;
+  exegesis?: string;
+  theology?: string;
+  application?: string;
+};
+
+const BOOK_MAP: Record<number, { name: string; abbrev: string }> = {
   1: { name: 'Gênesis', abbrev: 'Gn' }, 2: { name: 'Êxodo', abbrev: 'Êx' },
   3: { name: 'Levítico', abbrev: 'Lv' }, 4: { name: 'Números', abbrev: 'Nm' },
   5: { name: 'Deuteronômio', abbrev: 'Dt' }, 6: { name: 'Josué', abbrev: 'Js' },
@@ -58,395 +70,628 @@ const BOOK_MAP: { [key: number]: { name: string, abbrev: string } } = {
   59: { name: 'Tiago', abbrev: 'Tg' }, 60: { name: '1 Pedro', abbrev: '1Pe' },
   61: { name: '2 Pedro', abbrev: '2Pe' }, 62: { name: '1 João', abbrev: '1Jo' },
   63: { name: '2 João', abbrev: '2Jo' }, 64: { name: '3 João', abbrev: '3Jo' },
-  65: { name: 'Judas', abbrev: 'Jd' }, 66: { name: 'Apocalipse', abbrev: 'Ap' }
+  65: { name: 'Judas', abbrev: 'Jd' }, 66: { name: 'Apocalipse', abbrev: 'Ap' },
 };
 
-type Verse = { id: string; verse: number; text_pt: string; };
-type AnalysisData = { theme?: string; exegesis?: string; history?: string; theology?: string; application?: string; };
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
 
-export default function LeituraScreen() {
-  const navigation = useNavigation();
-  const { book, chapter } = useLocalSearchParams();
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '') ||
+  'https://biblia-app-six.vercel.app/';
+
+function extractJsonObject(text: string): string | null {
+  if (!text) return null;
+  const first = text.indexOf('{');
+  const last = text.lastIndexOf('}');
+  if (first === -1 || last === -1 || last <= first) return null;
+  return text.slice(first, last + 1);
+}
+
+function InfoCard({
+  title,
+  text,
+  color,
+  icon,
+}: {
+  title: string;
+  text?: string;
+  color: string;
+  icon: any;
+}) {
+  if (!text) return null;
+  return (
+    <View style={styles.infoCard}>
+      <View style={[styles.infoBar, { backgroundColor: color }]} />
+      <View style={styles.infoContent}>
+        <View style={styles.infoHeader}>
+          <Ionicons name={icon} size={18} color={color} style={{ marginRight: 8 }} />
+          <Text style={[styles.infoTitle, { color }]}>{title}</Text>
+        </View>
+        <Text style={styles.infoText}>{text}</Text>
+      </View>
+    </View>
+  );
+}
+
+export default function ReadBookScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
-  
-  const [loading, setLoading] = useState(false);
-  const [verses, setVerses] = useState<Verse[]>([]);
-  const [chaptersList, setChaptersList] = useState<number[]>([]);
+  const listRef = useRef<FlatList<Verse>>(null);
+
+  const { book, chapter, verse, returnTo } = useLocalSearchParams<RouteParams>();
+  const bookId = Number(book);
+  const returnToStr = typeof returnTo === 'string' ? returnTo : undefined;
+
+  const initialChapter = useMemo(() => {
+    const c = chapter ? Number(chapter) : 1;
+    return Number.isFinite(c) && c > 0 ? c : 1;
+  }, [chapter]);
+
+  const initialVerse = useMemo(() => {
+    const v = verse ? Number(verse) : NaN;
+    return Number.isFinite(v) && v > 0 ? v : undefined;
+  }, [verse]);
+
+  // Se abrir sem book, NÃO TRAVA.
+  if (!book || !Number.isFinite(bookId)) {
+    return (
+      <SafeAreaView style={styles.centerSafe} edges={['top', 'bottom']}>
+        <Text style={styles.centerTitle}>Livro não informado</Text>
+        <Text style={styles.centerText}>
+          Essa tela precisa abrir com um livro (ex: /read/1). Volte e selecione um livro.
+        </Text>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)/read' as any)} style={styles.centerBtn}>
+          <Text style={styles.centerBtnText}>Ir para a lista de livros</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  const bookData = BOOK_MAP[bookId] ?? { name: 'Livro', abbrev: '' };
+  const safeBookName = bookData.name || 'Livro';
+
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [chapterNum, setChapterNum] = useState<number>(initialChapter);
   const [totalChapters, setTotalChapters] = useState(0);
-  const [selectedChapter, setSelectedChapter] = useState<number>(chapter ? Number(chapter) : 1);
-  const [showGrid, setShowGrid] = useState(false); 
+  const [verses, setVerses] = useState<Verse[]>([]);
+  const [showChapters, setShowChapters] = useState(false);
   const [fontSize, setFontSize] = useState(20);
 
-  // IA & AUDIO
-  const [aiModalVisible, setAiModalVisible] = useState(false);
+  // IA modal
+  const [aiOpen, setAiOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiTitle, setAiTitle] = useState('');
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [audioLoading, setAudioLoading] = useState(false);
-  
-  // EDITAR / SALVAR
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedText, setEditedText] = useState('');
-  const [savingNote, setSavingNote] = useState(false);
+  const [rawAi, setRawAi] = useState<string>('');
+  const [saving, setSaving] = useState(false);
+  const [saveReference, setSaveReference] = useState<string>('');
 
-  const numericBookId = Number(book);
-  const currentBookData = BOOK_MAP[numericBookId] || { name: 'Livro', abbrev: '' };
-  const displayTitle = currentBookData.name;
-
-  useEffect(() => { return () => { if (sound) sound.unloadAsync(); }; }, [sound]);
-
+  // Mantém chapterNum sincronizado com URL (sem loop)
   useEffect(() => {
-    async function configureAudio() {
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true,
-          interruptionModeIOS: InterruptionModeIOS.DoNotMix, interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-          shouldDuckAndroid: true, playThroughEarpieceAndroid: false,
-        });
-      } catch (e) {}
-    }
-    configureAudio();
-  }, []);
+    setChapterNum((current) => (current !== initialChapter ? initialChapter : current));
+  }, [initialChapter]);
 
+  // Descobre total de capítulos
   useEffect(() => {
-    async function initBook() {
+    let alive = true;
+
+    async function loadTotal() {
       try {
-        if (!numericBookId) return;
-        const { data: max } = await supabase.from('verses').select('chapter').eq('book_id', numericBookId).order('chapter', { ascending: false }).limit(1);
-        if (max && max.length > 0) { 
-            setTotalChapters(max[0].chapter); 
-            setChaptersList(Array.from({ length: max[0].chapter }, (_, i) => i + 1)); 
+        const sb = getSupabaseOrThrow();
+        const { data, error } = await sb
+          .from('verses')
+          .select('chapter')
+          .eq('book_id', bookId)
+          .order('chapter', { ascending: false })
+          .limit(1);
+
+        if (!alive) return;
+
+        if (!error && data && data.length > 0 && Number.isFinite(Number((data as any)[0].chapter))) {
+          const max = Number((data as any)[0].chapter);
+          setTotalChapters((prev) => (prev !== max ? max : prev));
+          setChapterNum((prev) => clamp(prev, 1, max));
+        } else {
+          setTotalChapters(0);
         }
-      } catch (e) { console.log(e); }
+      } catch (e) {
+        if (!alive) return;
+        setTotalChapters(0);
+      }
     }
-    initBook();
-  }, [numericBookId]);
 
-  useEffect(() => { if (numericBookId) fetchVerses(numericBookId, selectedChapter); }, [selectedChapter, numericBookId]);
+    loadTotal();
+    return () => {
+      alive = false;
+    };
+  }, [bookId]);
 
-  async function fetchVerses(bId: number, cap: number) {
-    setLoading(true);
-    const { data } = await supabase.from('verses').select('id, verse, text_pt').eq('book_id', bId).eq('chapter', cap).order('verse', { ascending: true });
-    setVerses(data || []); setLoading(false);
-  }
+  // Carrega versículos do capítulo
+  useEffect(() => {
+    let alive = true;
 
-  const handleShare = async () => {
-    let message = "";
-    if (isEditing) {
-      message = `*ANÁLISE (Minha Nota)*\n\n${editedText}`;
-    } else if (analysisData) {
-      message = `*ANÁLISE: ${aiTitle}*\n\n📖 *Tema:* ${analysisData.theme}\n🔎 *Exegese:* ${analysisData.exegesis}\n🏛️ *Histórico:* ${analysisData.history}\n✝️ *Teologia:* ${analysisData.theology}\n🌱 *Aplicação:* ${analysisData.application}`;
+    async function loadVerses() {
+      setLoading(true);
+      setLoadError(null);
+
+      try {
+        const sb = getSupabaseOrThrow();
+        const { data, error } = await sb
+          .from('verses')
+          .select('id, verse, text_pt')
+          .eq('book_id', bookId)
+          .eq('chapter', chapterNum)
+          .order('verse', { ascending: true });
+
+        if (!alive) return;
+
+        if (error) {
+          setVerses([]);
+          setLoadError('Não foi possível carregar o capítulo. Verifique sua conexão e tente novamente.');
+        } else {
+          setVerses((data as Verse[]) ?? []);
+          setLoadError(null);
+        }
+      } catch (e) {
+        if (!alive) return;
+        setVerses([]);
+        setLoadError('Não foi possível carregar o capítulo. Verifique sua conexão e tente novamente.');
+      } finally {
+        if (alive) setLoading(false);
+      }
     }
-    try { await Share.share({ message }); } catch (error) { Alert.alert("Erro", "Não foi possível compartilhar."); }
-  };
 
-  const handleCopy = async () => {
-    const text = isEditing ? editedText : JSON.stringify(analysisData, null, 2);
-    await Clipboard.setStringAsync(text);
-    Alert.alert("Copiado!", "Texto copiado.");
-  };
+    loadVerses();
+    return () => {
+      alive = false;
+    };
+  }, [bookId, chapterNum]);
 
-  const handleSave = async () => {
-    if (!analysisData && !editedText) return;
-    setSavingNote(true);
-    let contentToSave = "";
-    if (isEditing) {
-      contentToSave = editedText;
-    } else {
-      contentToSave = JSON.stringify(analysisData);
+  // Voltar inteligente: Search/Plan -> volta para onde veio (returnTo)
+  const goBackSmart = useCallback(() => {
+    if (returnToStr) {
+      router.replace(returnToStr as any);
+      return;
     }
-    const { error } = await supabase.from('saved_notes').insert({
-        title: aiTitle, reference: `${displayTitle} ${selectedChapter}`, content: contentToSave
-    });
-    setSavingNote(false);
-    if (error) { Alert.alert("Erro", "Não foi possível salvar."); } 
-    else { Alert.alert("Sucesso!", "Análise salva."); setIsEditing(false); }
-  };
+    router.replace('/(tabs)/read' as any);
+  }, [router, returnToStr]);
 
-  const handleEdit = () => {
-    if (!analysisData) return;
-    const safeText = (txt: any) => typeof txt === 'object' ? JSON.stringify(txt) : txt;
-    const textVersion = `TEMA:\n${safeText(analysisData.theme)}\n\nCONTEXTO HISTÓRICO:\n${safeText(analysisData.history)}\n\nEXEGESE & LINGUÍSTICA:\n${safeText(analysisData.exegesis)}\n\nTEOLOGIA:\n${safeText(analysisData.theology)}\n\nAPLICAÇÃO:\n${safeText(analysisData.application)}`;
-    setEditedText(textVersion); setIsEditing(true);
-  };
-
-  // --- ÁUDIO (Aviso: Temporariamente precisa de API key local ou nova rota de backend) ---
-  const speakWithOpenAI = async () => {
-    Alert.alert("Aviso", "A funcionalidade de áudio está sendo atualizada para o novo sistema seguro e voltará em breve.");
-    // Para reativar o áudio, precisaremos criar um arquivo 'api/speech.ts' igual fizemos com o chat.
-  };
-
-  // ==============================================================================
-  // ⚡️ FUNÇÃO BLINDADA: CHAMA O SEU SERVIDOR NO VERCEL (/api/chat)
-  // ==============================================================================
-  const callAI = async (prompt: string, title: string) => {
-    setAiTitle(title); 
-    setAnalysisData(null); 
-    setIsEditing(false); 
-    stopSpeaking(); 
-    setAiModalVisible(true); 
+  async function callAI(prompt: string, title: string, reference: string) {
+    setAiTitle(title);
+    setSaveReference(reference);
+    setAnalysisData(null);
+    setRawAi('');
+    setAiOpen(true);
     setAiLoading(true);
-    
-    const SYSTEM_PROMPT = `
-    VOICE: Você é um PhD em Teologia Bíblica e Línguas Originais.
-    TASK: Analise o texto e retorne JSON estrito.
-    RULES:
-    1. RESPOSTA EXCLUSIVAMENTE EM JSON VÁLIDO.
-    2. Não use markdown.
-    3. Seja profundo na exegese (Hebraico/Grego), contexto e aplicação.
-    
-    JSON STRUCTURE:
-    {
-      "theme": "Ideia central explicada com profundidade.",
-      "history": "Contexto histórico, autor, datação e geografia.",
-      "exegesis": "Análise técnica com termos originais.",
-      "theology": "Conexões sistemáticas.",
-      "application": "Aplicação pastoral prática."
-    }
-    `;
+
+    const SYSTEM = `
+Você é um especialista em Teologia Bíblica e línguas originais (hebraico/aramaico/grego).
+Responda EXCLUSIVAMENTE com JSON válido (sem markdown, sem texto fora do JSON).
+Estrutura obrigatória:
+{
+  "theme": "Tema central com profundidade",
+  "history": "Contexto histórico (autor, data, geografia, cenário)",
+  "exegesis": "Exegese e nuances do original (hebraico/grego), com termos quando pertinente",
+  "theology": "Conexões bíblicas e implicações teológicas",
+  "application": "Aplicação pastoral prática"
+}
+Se não souber algum campo, preencha com string curta explicando a limitação.
+`.trim();
 
     try {
-      // ⚠️ AQUI ESTÁ A MUDANÇA MÁGICA ⚠️
-      // Em vez de chamar a OpenAI direto (que precisa de senha), chamamos o SEU servidor.
-      // O seu servidor (api/chat) é quem tem a senha segura.
-      const response = await fetch('/api/chat', {
+      const url = Platform.OS === 'web' ? '/api/chat' : `${API_BASE_URL}/api/chat`;
+
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: prompt }
-          ]
-        })
+            { role: 'system', content: SYSTEM },
+            { role: 'user', content: prompt },
+          ],
+        }),
       });
 
-      const data = await response.json();
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((body as any)?.error || `HTTP ${res.status}`);
 
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      const content: string =
+        (body as any)?.choices?.[0]?.message?.content ??
+        (body as any)?.output_text ??
+        '';
 
-      if (data.choices) {
-        let content = data.choices[0].message.content;
-        
-        // --- LIMPADOR DE JSON ---
-        const firstBrace = content.indexOf('{');
-        const lastBrace = content.lastIndexOf('}');
-        
-        if (firstBrace !== -1 && lastBrace !== -1) {
-            const cleanJson = content.substring(firstBrace, lastBrace + 1);
-            try {
-                setAnalysisData(JSON.parse(cleanJson));
-            } catch (e) {
-                setAnalysisData({ theme: "Erro na leitura", exegesis: "A IA retornou um formato inválido." });
-            }
-        } else {
-             setAnalysisData({ theme: "Erro", exegesis: "A IA não retornou um JSON válido." });
+      const maybeJson = extractJsonObject(String(content));
+
+      if (maybeJson) {
+        try {
+          const parsed = JSON.parse(maybeJson);
+          setAnalysisData({
+            theme: parsed.theme,
+            history: parsed.history,
+            exegesis: parsed.exegisis ?? parsed.exegesis,
+            theology: parsed.theology,
+            application: parsed.application,
+          });
+        } catch {
+          setRawAi(String(content));
         }
+      } else {
+        setRawAi(String(content));
       }
-    } catch (error) { 
-        console.error(error);
-        setAnalysisData({ theme: "Erro de Conexão", exegesis: "Não foi possível conectar ao servidor de Teologia. Verifique sua internet." });
-    } finally { 
-        setAiLoading(false); 
+    } catch (e: any) {
+      setRawAi(`Erro: ${e?.message || 'não foi possível consultar a IA'}`);
+    } finally {
+      setAiLoading(false);
     }
-  };
-  
-  const stopSpeaking = async () => { if (sound) { await sound.stopAsync(); await sound.unloadAsync(); setSound(null); setIsSpeaking(false); } };
-  const goNext = () => { if (selectedChapter < totalChapters) setSelectedChapter(selectedChapter + 1); };
-  const goPrev = () => { if (selectedChapter > 1) setSelectedChapter(selectedChapter - 1); };
-  const analyzeChapter = () => callAI(`Analise profundamente o Capítulo ${selectedChapter} de ${displayTitle}. Foco em teologia bíblica e contexto histórico.`, `Capítulo ${selectedChapter}`);
-  const analyzeVerse = (v: Verse) => callAI(`Faça uma exegese profunda do Versículo: "${v.text_pt}" (Livro: ${displayTitle}, Cap: ${selectedChapter}, Verso: ${v.verse}). Explore o original e aplicação.`, `Verso ${v.verse}`);
+  }
 
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShown: true, headerBackTitle: "Livros",
-      headerTitle: () => (
-        <TouchableOpacity onPress={() => setShowGrid(!showGrid)} style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitleText}>{displayTitle} {selectedChapter} {showGrid ? '▲' : '▼'}</Text>
-        </TouchableOpacity>
-      ),
-      headerLeft: () => (
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: -8 }}>
-            <Ionicons name="chevron-back" size={28} color="#007AFF" />
-            <Text style={{ fontSize: 17, color: '#007AFF' }}>Livros</Text>
-        </TouchableOpacity>
-      ),
-      headerRight: () => (
-        <View style={styles.headerRightContainer}>
-           <TouchableOpacity onPress={analyzeChapter} style={styles.iconButton}><Ionicons name="school" size={24} color="#AF52DE" /></TouchableOpacity>
-           <TouchableOpacity onPress={() => setFontSize(p => Math.max(12, p - 2))} style={styles.fontButton}><Ionicons name="remove" size={24} color="#007AFF" /></TouchableOpacity>
-           <TouchableOpacity onPress={() => setFontSize(p => Math.min(40, p + 2))} style={styles.fontButton}><Ionicons name="add" size={24} color="#007AFF" /></TouchableOpacity>
-        </View>
-      ),
-    });
-  }, [navigation, displayTitle, selectedChapter, showGrid]);
-
-  const InfoCard = ({ title, text, color, icon }: any) => {
-    if (!text) return null;
-    let safeContent = text;
-    if (typeof text === 'object') {
-        safeContent = Object.values(text).join('. ');
-        if (safeContent === '[object Object]' || safeContent === '') {
-            safeContent = JSON.stringify(text).replace(/[\{\}"]/g, '').replace(/:/g, ': ');
-        }
-    }
-    return (
-      <View style={styles.cardContainer}>
-        <View style={[styles.cardBar, { backgroundColor: color }]} />
-        <View style={styles.cardContent}>
-          <View style={styles.cardHeader}><Ionicons name={icon} size={20} color={color} style={{marginRight: 8}} /><Text style={[styles.cardTitle, { color: color }]}>{title}</Text></View>
-          <Text style={styles.cardBody}>{safeContent}</Text>
-        </View>
-      </View>
+  const analyzeChapter = useCallback(() => {
+    callAI(
+      `Analise profundamente ${safeBookName} capítulo ${chapterNum}. Foque em contexto histórico, nuances do original (hebraico/grego) e aplicação pastoral.`,
+      `Análise — ${safeBookName} ${chapterNum}`,
+      `${safeBookName} ${chapterNum}`
     );
-  };
+  }, [safeBookName, chapterNum]);
+
+  const analyzeVerse = useCallback(
+    (v: Verse) => {
+      callAI(
+        `Faça exegese profunda do versículo: "${v.text_pt}" (referência: ${safeBookName} ${chapterNum}:${v.verse}). Explique nuances do original e implicações teológicas.`,
+        `Exegese — ${safeBookName} ${chapterNum}:${v.verse}`,
+        `${safeBookName} ${chapterNum}:${v.verse}`
+      );
+    },
+    [safeBookName, chapterNum]
+  );
+
+  async function handleSaveAI() {
+    if (!analysisData && !rawAi) return;
+
+    setSaving(true);
+    try {
+      const contentToSave = analysisData ? JSON.stringify(analysisData) : rawAi;
+
+      const sb = getSupabaseOrThrow();
+      const { error } = await sb.from('saved_notes').insert({
+        title: aiTitle || 'Análise',
+        reference: saveReference,
+        content: contentToSave,
+      });
+
+      if (error) {
+        Alert.alert('Erro ao salvar', error.message);
+        return;
+      }
+
+      Alert.alert('Salvo', 'Análise salva em Meus Estudos.');
+    } catch (e: any) {
+      Alert.alert('Erro ao salvar', e?.message || 'Falha inesperada.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Quando carregar verses: rola até o versículo alvo, se veio via Search/Plan
+  useEffect(() => {
+    if (!initialVerse || verses.length === 0) return;
+
+    const idx = verses.findIndex((v) => v.verse === initialVerse);
+    if (idx < 0) return;
+
+    const t = setTimeout(() => {
+      listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.25 });
+    }, 250);
+
+    return () => clearTimeout(t);
+  }, [initialVerse, verses]);
+
+  const canPrev = chapterNum > 1;
+  const canNext = totalChapters > 0 && chapterNum < totalChapters;
+
+  const goPrev = useCallback(() => {
+    if (canPrev) setChapterNum((c) => c - 1);
+  }, [canPrev]);
+
+  const goNext = useCallback(() => {
+    if (canNext) setChapterNum((c) => c + 1);
+  }, [canNext]);
+
+  const renderVerse = useCallback(
+    ({ item }: { item: Verse }) => (
+      <TouchableOpacity activeOpacity={0.9} onLongPress={() => analyzeVerse(item)}>
+        <Text style={[styles.verse, { fontSize, lineHeight: Math.round(fontSize * 1.6) }]}>
+          <Text style={[styles.verseNumber, { fontSize: Math.round(fontSize * 0.75) }]}>
+            {item.verse}{' '}
+          </Text>
+          {item.text_pt}
+        </Text>
+      </TouchableOpacity>
+    ),
+    [analyzeVerse, fontSize]
+  );
 
   return (
     <View style={styles.container}>
-      {showGrid && (
-        <View style={styles.gridOverlay}>
-          <FlatList data={chaptersList} key="grid" numColumns={5} keyExtractor={i => i.toString()} contentContainerStyle={styles.gridContainer}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={[styles.chapterButton, item === selectedChapter && styles.activeChapter]} onPress={() => { setSelectedChapter(item); setShowGrid(false); }}>
-                <Text style={[styles.chapterText, item === selectedChapter && styles.activeChapterText]}>{item}</Text>
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={goBackSmart}
+              style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 }}
+            >
+              <Ionicons name="chevron-back" size={26} color="#007AFF" />
+              <Text style={{ color: '#007AFF', fontSize: 16, fontWeight: '900' }}>Voltar</Text>
+            </TouchableOpacity>
+          ),
+          headerTitle: () => (
+            <TouchableOpacity onPress={() => setShowChapters(true)} style={styles.headerTitleContainer}>
+              <Text style={styles.headerTitleText}>
+                {safeBookName} {chapterNum} <Text style={{ color: '#8e8e93' }}>▼</Text>
+              </Text>
+            </TouchableOpacity>
+          ),
+          headerRight: () => (
+            <View style={styles.headerRightContainer}>
+              <TouchableOpacity onPress={analyzeChapter} style={styles.headerIconBtn}>
+                <Ionicons name="school-outline" size={22} color="#AF52DE" />
               </TouchableOpacity>
-            )} />
-        </View>
-      )}
+
+              <TouchableOpacity
+                onPress={() => setFontSize((p) => clamp(p - 2, 12, 40))}
+                style={styles.headerIconBtn}
+              >
+                <Ionicons name="remove" size={22} color="#007AFF" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setFontSize((p) => clamp(p + 2, 12, 40))}
+                style={styles.headerIconBtn}
+              >
+                <Ionicons name="add" size={22} color="#007AFF" />
+              </TouchableOpacity>
+            </View>
+          ),
+        }}
+      />
 
       <View style={{ flex: 1 }}>
-        {loading ? <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 50 }} /> : (
-          <FlatList data={verses} key="text" keyExtractor={i => i.id.toString()} contentContainerStyle={styles.textContainer} showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <TouchableOpacity activeOpacity={0.7} onLongPress={() => analyzeVerse(item)} style={styles.verseBox}>
-                <Text style={[styles.verseText, { fontSize: fontSize }]}>
-                  <Text style={[styles.verseNumber, { fontSize: fontSize * 0.7 }]}>{item.verse}  </Text>
-                  {item.text_pt}
-                </Text>
-              </TouchableOpacity>
-            )} />
+        {loading ? (
+          <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
+        ) : (
+          <>
+            {loadError && (
+              <Text style={{ color: '#D70015', textAlign: 'center', paddingHorizontal: 18, paddingTop: 10 }}>
+                {loadError}
+              </Text>
+            )}
+
+            <FlatList
+              ref={listRef}
+              data={verses}
+              keyExtractor={(item) => String(item.id)}
+              contentContainerStyle={[
+                styles.list,
+                { paddingBottom: 20 + Math.max(insets.bottom, 0) + 62 },
+              ]}
+              showsVerticalScrollIndicator={false}
+              renderItem={renderVerse}
+              onScrollToIndexFailed={() => {
+                setTimeout(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }), 150);
+              }}
+            />
+          </>
         )}
       </View>
 
-      <SafeAreaView style={styles.bottomNavSafe} edges={['bottom']}>
-        <View style={styles.bottomNavContainer}>
-          <TouchableOpacity style={[styles.navButton, selectedChapter <= 1 && styles.disabledButton]} onPress={goPrev} disabled={selectedChapter <= 1}><Ionicons name="chevron-back" size={20} color={selectedChapter <= 1 ? "#ccc" : "#fff"} /><Text style={[styles.navButtonText, selectedChapter <= 1 && styles.disabledText]}> Anterior</Text></TouchableOpacity>
-          <Text style={styles.chapterIndicator}>{selectedChapter} / {totalChapters}</Text>
-          <TouchableOpacity style={[styles.navButton, selectedChapter >= totalChapters && styles.disabledButton]} onPress={goNext} disabled={selectedChapter >= totalChapters}><Text style={[styles.navButtonText, selectedChapter >= totalChapters && styles.disabledText]}>Próximo </Text><Ionicons name="chevron-forward" size={20} color={selectedChapter >= totalChapters ? "#ccc" : "#fff"} /></TouchableOpacity>
-        </View>
-      </SafeAreaView>
+      {/* Barra inferior */}
+      <View style={[styles.bottomWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+        <View style={styles.bottomBar}>
+          <TouchableOpacity
+            style={[styles.navBtn, !canPrev && styles.navBtnDisabled]}
+            onPress={goPrev}
+            disabled={!canPrev}
+          >
+            <Ionicons name="chevron-back" size={18} color={!canPrev ? '#bbb' : '#fff'} />
+            <Text style={[styles.navText, !canPrev && styles.navTextDisabled]}> Anterior</Text>
+          </TouchableOpacity>
 
-      <Modal animationType="slide" visible={aiModalVisible} onRequestClose={() => { setAiModalVisible(false); stopSpeaking(); }}>
-        <View style={{ flex: 1, backgroundColor: '#F2F2F7', paddingTop: Platform.OS === 'ios' ? insets.top + 20 : 20 }}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => { setAiModalVisible(false); setIsEditing(false); stopSpeaking(); }}>
-                <Text style={styles.closeText}>Fechar</Text>
-            </TouchableOpacity>
-            <View style={styles.headerActions}>
-                <TouchableOpacity onPress={speakWithOpenAI} style={styles.playActionBtn} disabled={audioLoading}>
-                    {audioLoading ? <ActivityIndicator size="small" color="#007AFF"/> : 
-                        <>
-                        <Ionicons name={isSpeaking ? "pause-circle" : "play-circle"} size={32} color="#007AFF" />
-                        <Text style={styles.playLabel}>Ouvir</Text>
-                        </>
-                    }
-                </TouchableOpacity>
-                {isEditing ? (
-                    <TouchableOpacity onPress={handleSave} style={{backgroundColor:'#007AFF', paddingHorizontal:12, paddingVertical:8, borderRadius:15}}>
-                        {savingNote ? <ActivityIndicator color="#fff" size="small"/> : <Text style={{color:'#fff', fontWeight:'bold'}}>Salvar Edição</Text>}
-                    </TouchableOpacity>
-                ) : (
-                    <>
-                    <TouchableOpacity onPress={handleSave} style={styles.actionIcon}>
-                        {savingNote ? <ActivityIndicator size="small" color="#007AFF"/> : <Ionicons name="save-outline" size={26} color="#007AFF" />}
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={handleEdit} style={styles.actionIcon}><Ionicons name="pencil-outline" size={26} color="#007AFF" /></TouchableOpacity>
-                    <TouchableOpacity onPress={handleShare} style={styles.actionIcon}><Ionicons name="share-outline" size={26} color="#007AFF" /></TouchableOpacity>
-                    </>
-                )}
-            </View>
-          </View>
-          
-          {aiLoading ? (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" color="#AF52DE" /><Text style={{ marginTop: 20, color: '#666', fontSize: 16 }}>Consultando PhD em Teologia...</Text></View>
-          ) : (
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                {isEditing ? (
-                    <TextInput 
-                        style={styles.textEditor} 
-                        multiline 
-                        value={editedText} 
-                        onChangeText={setEditedText} 
-                        placeholder="Edite sua anotação aqui..."
-                        textAlignVertical="top"
-                    />
-                ) : (
-                    <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
-                      <Text style={styles.analysisSubject}>{aiTitle}</Text>
-                      <InfoCard title="TEMA CENTRAL" icon="bookmark" color="#1C1C1E" text={analysisData?.theme} />
-                      <InfoCard title="CONTEXTO HISTÓRICO" icon="time" color="#FF9500" text={analysisData?.history} />
-                      <InfoCard title="EXEGESE & LINGUÍSTICA" icon="search" color="#007AFF" text={analysisData?.exegesis} />
-                      <InfoCard title="TEOLOGIA SISTEMÁTICA" icon="book" color="#AF52DE" text={analysisData?.theology} />
-                      <InfoCard title="APLICAÇÃO PRÁTICA" icon="leaf" color="#34C759" text={analysisData?.application} />
-                    </ScrollView>
-                )}
-            </KeyboardAvoidingView>
-          )}
+          <Text style={styles.counterText}>
+            {chapterNum} / {totalChapters || '—'}
+          </Text>
+
+          <TouchableOpacity
+            style={[styles.navBtn, !canNext && styles.navBtnDisabled]}
+            onPress={goNext}
+            disabled={!canNext}
+          >
+            <Text style={[styles.navText, !canNext && styles.navTextDisabled]}>Próximo </Text>
+            <Ionicons name="chevron-forward" size={18} color={!canNext ? '#bbb' : '#fff'} />
+          </TouchableOpacity>
         </View>
+      </View>
+
+      {/* Modal Capítulos */}
+      <Modal visible={showChapters} animationType="slide" onRequestClose={() => setShowChapters(false)}>
+        <SafeAreaView style={[styles.modal, { paddingTop: Math.max(insets.top, 12) }]} edges={['top', 'bottom']}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Capítulos — {safeBookName}</Text>
+            <TouchableOpacity onPress={() => setShowChapters(false)}>
+              <Text style={styles.modalClose}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView contentContainerStyle={styles.chapterGrid}>
+            {Array.from({ length: totalChapters || 1 }, (_, i) => i + 1).map((c) => (
+              <TouchableOpacity
+                key={c}
+                style={[styles.chapterBtn, c === chapterNum && styles.chapterActive]}
+                onPress={() => {
+                  setChapterNum(c);
+                  setShowChapters(false);
+                }}
+              >
+                <Text style={[styles.chapterText, c === chapterNum && styles.chapterActiveText]}>{c}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Modal IA */}
+      <Modal visible={aiOpen} animationType="slide" onRequestClose={() => setAiOpen(false)}>
+        <SafeAreaView style={styles.aiSafe} edges={['top', 'bottom']}>
+          <View style={[styles.aiHeader, { paddingTop: Math.max(insets.top, 12) }]}>
+            <TouchableOpacity onPress={() => setAiOpen(false)} style={styles.aiHeaderBtn}>
+              <Text style={styles.aiHeaderText}>Fechar</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.aiHeaderTitle} numberOfLines={1}>
+              {aiTitle}
+            </Text>
+
+            <TouchableOpacity onPress={handleSaveAI} disabled={saving || aiLoading} style={styles.saveBtn}>
+              {saving ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="save-outline" size={18} color="#fff" />
+                  <Text style={styles.saveBtnText}>Salvar</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {aiLoading ? (
+            <View style={styles.aiLoading}>
+              <ActivityIndicator size="large" color="#AF52DE" />
+              <Text style={{ marginTop: 12, color: '#666' }}>Consultando…</Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={styles.aiBody}>
+              <Text style={styles.aiSubject}>{saveReference}</Text>
+
+              {analysisData ? (
+                <>
+                  <InfoCard title="TEMA CENTRAL" icon="bookmark" color="#1C1C1E" text={analysisData.theme} />
+                  <InfoCard title="CONTEXTO HISTÓRICO" icon="time" color="#FF9500" text={analysisData.history} />
+                  <InfoCard title="EXEGESE & LINGUÍSTICA" icon="search" color="#007AFF" text={analysisData.exegesis} />
+                  <InfoCard title="TEOLOGIA" icon="book" color="#AF52DE" text={analysisData.theology} />
+                  <InfoCard title="APLICAÇÃO PRÁTICA" icon="leaf" color="#34C759" text={analysisData.application} />
+                  <Text style={styles.aiHint}>* Dica: segure um versículo para exegese do versículo.</Text>
+                </>
+              ) : (
+                <View style={styles.rawBox}>
+                  <Text style={styles.rawText}>{rawAi || 'Sem resposta.'}</Text>
+                </View>
+              )}
+            </ScrollView>
+          )}
+        </SafeAreaView>
       </Modal>
     </View>
   );
 }
 
+/* =========================
+   STYLES
+========================= */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
+
   headerTitleContainer: { flexDirection: 'row', alignItems: 'center' },
-  headerTitleText: { fontSize: 17, fontWeight: '700' },
-  headerRightContainer: { flexDirection: 'row', paddingRight: 5, alignItems: 'center' },
-  fontButton: { padding: 5, marginLeft: 5 },
-  iconButton: { padding: 5, marginRight: 10 },
-  gridOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff', zIndex: 10, padding: 10 },
-  gridContainer: { alignItems: 'center', paddingBottom: 40 },
-  chapterButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center', margin: 8 },
-  activeChapter: { backgroundColor: '#007AFF' },
-  chapterText: { fontSize: 16, fontWeight: '600' },
-  activeChapterText: { color: '#fff' },
-  textContainer: { padding: 20, paddingBottom: 20 },
-  verseBox: { marginBottom: 15 },
-  verseText: { lineHeight: 32, color: '#222', textAlign: 'justify' },
-  verseNumber: { fontWeight: 'bold', color: '#007AFF' },
-  bottomNavSafe: { backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
-  bottomNavContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12 },
-  navButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#007AFF', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20 },
-  disabledButton: { backgroundColor: '#f0f0f0' },
-  navButtonText: { color: '#fff', fontWeight: '600' },
-  disabledText: { color: '#ccc' },
-  chapterIndicator: { fontSize: 14, color: '#666' },
-  modalHeader: { 
-      flexDirection: 'row', 
-      justifyContent: 'space-between', 
-      alignItems: 'center', 
-      paddingHorizontal: 20, 
-      paddingBottom: 15, 
-      backgroundColor: '#F2F2F7', 
-      borderBottomWidth: 1, 
-      borderBottomColor: '#E5E5EA' 
+  headerTitleText: { fontSize: 17, fontWeight: '900' },
+  headerRightContainer: { flexDirection: 'row', alignItems: 'center' },
+  headerIconBtn: { paddingHorizontal: 8, paddingVertical: 6 },
+
+  list: { paddingHorizontal: 20, paddingTop: 20 },
+  verse: { marginBottom: 14, color: '#222', textAlign: 'justify' },
+  verseNumber: { fontWeight: '900', color: '#007AFF' },
+
+  bottomWrap: {
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    paddingTop: 10,
   },
-  headerActions: { flexDirection: 'row', alignItems: 'center' },
-  playActionBtn: { alignItems: 'center', justifyContent: 'center', marginRight: 15 }, 
-  playLabel: { fontSize: 9, color: '#007AFF', fontWeight: '600', marginTop: -2 },
-  actionIcon: { marginLeft: 15, padding: 0 },
-  closeText: { fontSize: 17, color: '#007AFF', fontWeight: '500' },
-  modalBody: { flex: 1, padding: 20 },
-  textEditor: { flex: 1, padding: 20, fontSize: 16, lineHeight: 24, backgroundColor: '#fff', textAlignVertical: 'top' },
-  analysisSubject: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 25, textAlign: 'center', lineHeight: 28 },
-  cardContainer: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 12, marginBottom: 15, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2, borderWidth: 1, borderColor: '#f0f0f0' },
-  cardBar: { width: 5 }, 
-  cardContent: { flex: 1, padding: 15, paddingVertical: 18 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  cardTitle: { fontSize: 13, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
-  cardBody: { fontSize: 16, lineHeight: 24, color: '#333', textAlign: 'justify' }
+  bottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+  },
+  navBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#007AFF', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  navBtnDisabled: { backgroundColor: '#f1f1f1' },
+  navText: { color: '#fff', fontWeight: '900', fontSize: 13 },
+  navTextDisabled: { color: '#bbb' },
+  counterText: { color: '#666', fontSize: 13, fontWeight: '800' },
+
+  modal: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 16 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  modalTitle: { fontSize: 16, fontWeight: '900' },
+  modalClose: { color: '#007AFF', fontSize: 16, fontWeight: '900' },
+
+  chapterGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingTop: 14, paddingBottom: 30 },
+  chapterBtn: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center', margin: 8 },
+  chapterActive: { backgroundColor: '#007AFF' },
+  chapterText: { fontSize: 16, fontWeight: '900', color: '#111' },
+  chapterActiveText: { color: '#fff' },
+
+  // IA modal
+  aiSafe: { flex: 1, backgroundColor: '#F2F2F7' },
+  aiHeader: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  aiHeaderBtn: { paddingVertical: 6, paddingRight: 10 },
+  aiHeaderText: { color: '#007AFF', fontSize: 16, fontWeight: '900' },
+  aiHeaderTitle: { flex: 1, textAlign: 'center', fontSize: 15, fontWeight: '900', color: '#111', paddingHorizontal: 10 },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#007AFF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, gap: 6 },
+  saveBtnText: { color: '#fff', fontWeight: '900', fontSize: 13 },
+
+  aiLoading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  aiBody: { padding: 16, paddingBottom: 30 },
+  aiSubject: { textAlign: 'center', fontSize: 18, fontWeight: '900', marginBottom: 14, color: '#111' },
+  aiHint: { marginTop: 10, fontSize: 12, color: '#8E8E93', textAlign: 'center' },
+
+  // InfoCards
+  infoCard: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginBottom: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  infoBar: { width: 5 },
+  infoContent: { flex: 1, padding: 14, paddingVertical: 16 },
+  infoHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  infoTitle: { fontSize: 12, fontWeight: '900', letterSpacing: 0.6 },
+  infoText: { fontSize: 15, lineHeight: 22, color: '#333', textAlign: 'justify' },
+
+  rawBox: { backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#eee' },
+  rawText: { fontSize: 15, lineHeight: 22, color: '#222' },
+
+  // Tela de erro sem book
+  centerSafe: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#fff' },
+  centerTitle: { fontSize: 18, fontWeight: '900', marginBottom: 10, color: '#111' },
+  centerText: { color: '#666', textAlign: 'center', marginBottom: 20, lineHeight: 20 },
+  centerBtn: { backgroundColor: '#007AFF', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },
+  centerBtnText: { color: '#fff', fontWeight: '900' },
 });

@@ -1,7 +1,8 @@
+import { getSupabaseOrThrow } from '@/lib/supabaseClient';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { supabase } from '../../lib/supabase';
+
 
 type Event = {
   id: number;
@@ -23,9 +24,9 @@ export default function EventDetailScreen() {
   async function loadEvent() {
     setLoading(true);
 
-    const { data, error } = await supabase
-      .from('events')
-      .select('id, title, description')
+    const sb = getSupabaseOrThrow();
+    const { data, error } = await sb .from('events')
+    .select('id, title, description')
       .eq('id', Number(id))
       .single();
 

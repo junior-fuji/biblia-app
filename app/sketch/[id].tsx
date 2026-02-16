@@ -1,23 +1,26 @@
+import { getSupabaseOrThrow } from '@/lib/supabaseClient';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    Share // <--- Importante: Importamos a ferramenta de compartilhar
-    ,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  Share // <--- Importante: Importamos a ferramenta de compartilhar
+  ,
+
+
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
-import { supabase } from '../../lib/supabase';
+
 
 // Componente do Card (FORA da função principal para não travar o teclado)
 const AnalysisCard = ({ 
@@ -74,8 +77,8 @@ export default function SketchDetailScreen() {
 
   async function fetchSketch() {
     try {
-      const { data, error } = await supabase
-        .from('sketches')
+      const sb = getSupabaseOrThrow();
+      const { data, error } = await sb .from('sketches')
         .select('*')
         .eq('id', id)
         .single();
@@ -100,8 +103,8 @@ export default function SketchDetailScreen() {
   const handleUpdate = async () => {
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('sketches')
+      const sb = getSupabaseOrThrow();
+const { data, error } = await sb.from('sketches')
         .update({ content: editedContent })
         .eq('id', id);
 

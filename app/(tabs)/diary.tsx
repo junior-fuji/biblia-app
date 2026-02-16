@@ -1,3 +1,4 @@
+import { getSupabaseOrThrow } from '@/lib/supabaseClient';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
@@ -14,9 +15,9 @@ import {
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { supabase } from '../../lib/supabase';
 
-// --- LISTA SINCRONIZADA COM O PLANO (26 TÓPICOS) ---
+
+// --- LISTA DE ERAS ---
 const ERAS = [
   '1. Criação e Queda',
   '2. Era Patriarcal (Jó)', 
@@ -46,7 +47,7 @@ const ERAS = [
   '26. Fim e Eternidade'
 ];
 
-export default function ReflectionsScreen() {
+export default function AtlasScreen() {
   const insets = useSafeAreaInsets();
   
   // ESTADOS DO FORMULÁRIO
@@ -67,25 +68,30 @@ export default function ReflectionsScreen() {
     setSaving(true);
     Keyboard.dismiss();
 
+    // Empacota os dados para salvar no JSON
     const studyContent = {
         type: 'personal_study', 
+        theme: `Era: ${selectedEra}`, // Aparecerá como TEMA no visualizador
         era: selectedEra,
+        history: context, // Aparecerá como HISTÓRICO
+        exegesis: `Personagens: ${characters}\nLocal: ${location}`, // Aparecerá como EXEGESE
+        application: reflection, // Aparecerá como APLICAÇÃO
         characters: characters,
-        location: location,
-        context: context,
-        reflection: reflection
+        location: location
     };
 
     try {
-        const { error } = await supabase.from('saved_notes').insert({
-            title: `Estudo: ${selectedEra}`,
-            reference: "Estudo Pessoal",
+          const sb = getSupabaseOrThrow();
+          const { data, error } = await sb.from('saved_notes').insert({
+              title: `Diário: ${selectedEra}`,
+            reference: "Atlas Histórico",
             content: JSON.stringify(studyContent)
         });
 
         if (error) throw error;
 
-        Alert.alert("Sucesso!", "Estudo salvo com sucesso!");
+        Alert.alert("Sucesso!", "Estudo salvo em 'Meus Estudos'!");
+        
         // Limpar campos
         setCharacters('');
         setLocation('');
@@ -102,7 +108,7 @@ export default function ReflectionsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
-      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? insets.top : 40 }]}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? insets.top : 20 }]}>
         <Text style={styles.headerTitle}>Diário das Eras</Text>
       </View>
 
@@ -176,7 +182,7 @@ export default function ReflectionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { backgroundColor: '#fff', paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#E5E5EA', alignItems: 'center' },
+  header: { backgroundColor: '#fff', paddingBottom: 15, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#E5E5EA', alignItems: 'center' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#000' },
   scrollContent: { padding: 20, paddingBottom: 50 },
   sectionTitle: { fontSize: 12, fontWeight: '800', color: '#8E8E93', marginTop: 10, marginBottom: 10, textTransform: 'uppercase' },
