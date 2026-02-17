@@ -1,6 +1,10 @@
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
 
+/* =========================
+   TIPOS
+========================= */
 type Verse = { id: number; verse: number; text_pt: string };
+
 
 type RouteParams = {
   book?: string;
@@ -88,7 +92,7 @@ function InfoCard({
   title: string;
   text?: string;
   color: string;
-  icon: any;https://biblia
+  icon: any;
 }) {
   if (!text) return null;
   return (
@@ -629,7 +633,7 @@ if (!sb) {
 
 /* =========================
    STYLES
-
+========================= */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
 
