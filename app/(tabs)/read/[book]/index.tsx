@@ -1,10 +1,25 @@
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
+import { Ionicons } from '@expo/vector-icons';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /* =========================
    TIPOS
 ========================= */
 type Verse = { id: number; verse: number; text_pt: string };
-
 
 type RouteParams = {
   book?: string;
@@ -74,7 +89,6 @@ function normalizeBaseUrl(base: string) {
 
 const API_BASE_URL = normalizeBaseUrl(API_BASE_URL_RAW);
 
-
 function extractJsonObject(text: string): string | null {
   if (!text) return null;
   const first = text.indexOf('{');
@@ -128,7 +142,6 @@ export default function ReadBookScreen() {
     return Number.isFinite(v) && v > 0 ? v : undefined;
   }, [verse]);
 
-  // Se abrir sem book, NÃO TRAVA.
   if (!book || !Number.isFinite(bookId)) {
     return (
       <SafeAreaView style={styles.centerSafe} edges={['top', 'bottom']}>
@@ -155,7 +168,6 @@ export default function ReadBookScreen() {
   const [showChapters, setShowChapters] = useState(false);
   const [fontSize, setFontSize] = useState(20);
 
-  // IA modal
   const [aiOpen, setAiOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiTitle, setAiTitle] = useState('');
@@ -164,29 +176,24 @@ export default function ReadBookScreen() {
   const [saving, setSaving] = useState(false);
   const [saveReference, setSaveReference] = useState<string>('');
 
-  // Mantém chapterNum sincronizado com URL (sem loop)
   useEffect(() => {
     setChapterNum((current) => (current !== initialChapter ? initialChapter : current));
   }, [initialChapter]);
 
-  // Descobre total de capítulos
   useEffect(() => {
     let alive = true;
 
     async function loadTotal() {
       try {
         const sb = getSupabaseOrNull();
-        setLoading(false);
-return;
-
-if (!sb) {
-  // não crasha: só marca erro/carrega vazio
-  setTotalChapters(0);
-  setVerses([]);
-  setLoadError('Bíblia indisponível no momento (Supabase não configurado neste build).');
-  setLoading(false);
-  return;
-}
+        if (!sb) {
+          if (!alive) return;
+          setTotalChapters(0);
+          setVerses([]);
+          setLoadError('Bíblia indisponível no momento (Supabase não configurado neste build).');
+          setLoading(false);
+          return;
+        }
 
         const { data, error } = await sb
           .from('verses')
@@ -204,23 +211,18 @@ if (!sb) {
         } else {
           setTotalChapters(0);
         }
-      } catch (e) {
+      } catch {
         if (!alive) return;
         setTotalChapters(0);
       }
     }
 
-    if (!sb) {
-      if (!alive) return;
-      setTotalChapters(0);
-      setVerses([]);
-      setLoadError('Bíblia indisponível no momento (Supabase não configurado neste build).');
-      setLoading(false);
-      return;
-    }
-    
+    loadTotal();
+    return () => {
+      alive = false;
+    };
+  }, [bookId]);
 
-  // Carrega versículos do capítulo
   useEffect(() => {
     let alive = true;
 
@@ -231,14 +233,14 @@ if (!sb) {
       try {
         const sb = getSupabaseOrNull();
         if (!sb) {
-          // não crasha: só marca erro/carrega vazio
+          if (!alive) return;
           setTotalChapters(0);
           setVerses([]);
           setLoadError('Bíblia indisponível no momento (Supabase não configurado neste build).');
           setLoading(false);
           return;
         }
-        
+
         const { data, error } = await sb
           .from('verses')
           .select('id, verse, text_pt')
@@ -255,7 +257,7 @@ if (!sb) {
           setVerses((data as Verse[]) ?? []);
           setLoadError(null);
         }
-      } catch (e) {
+      } catch {
         if (!alive) return;
         setVerses([]);
         setLoadError('Não foi possível carregar o capítulo. Verifique sua conexão e tente novamente.');
@@ -270,7 +272,6 @@ if (!sb) {
     };
   }, [bookId, chapterNum]);
 
-  // Voltar inteligente: Search/Plan -> volta para onde veio (returnTo)
   const goBackSmart = useCallback(() => {
     if (returnToStr) {
       router.replace(returnToStr as any);
@@ -367,28 +368,18 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
     [safeBookName, chapterNum]
   );
 
-  const sb = getSupabaseOrNull();
-if (!sb) {
-  Alert.alert('Supabase', 'Supabase não configurado neste build.');
-  return;
-}
-const { error } = await sb.from('saved_notes').insert({
-  title: aiTitle || 'Análise',
-  reference: saveReference,
-  content: contentToSave,
-});
-
-
+  async function handleSaveAI() {
+    if (!analysisData && !rawAi) return;
 
     setSaving(true);
     try {
       const contentToSave = analysisData ? JSON.stringify(analysisData) : rawAi;
 
       const sb = getSupabaseOrNull();
-if (!sb) {
-  Alert.alert('Supabase', 'Supabase não configurado neste build.');
-  return;
-}
+      if (!sb) {
+        Alert.alert('Supabase', 'Supabase não configurado neste build.');
+        return;
+      }
 
       const { error } = await sb.from('saved_notes').insert({
         title: aiTitle || 'Análise',
@@ -409,7 +400,6 @@ if (!sb) {
     }
   }
 
-  // Quando carregar verses: rola até o versículo alvo, se veio via Search/Plan
   useEffect(() => {
     if (!initialVerse || verses.length === 0) return;
 
@@ -522,7 +512,6 @@ if (!sb) {
         )}
       </View>
 
-      {/* Barra inferior */}
       <View style={[styles.bottomWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         <View style={styles.bottomBar}>
           <TouchableOpacity
@@ -549,7 +538,6 @@ if (!sb) {
         </View>
       </View>
 
-      {/* Modal Capítulos */}
       <Modal visible={showChapters} animationType="slide" onRequestClose={() => setShowChapters(false)}>
         <SafeAreaView style={[styles.modal, { paddingTop: Math.max(insets.top, 12) }]} edges={['top', 'bottom']}>
           <View style={styles.modalHeader}>
@@ -576,7 +564,6 @@ if (!sb) {
         </SafeAreaView>
       </Modal>
 
-      {/* Modal IA */}
       <Modal visible={aiOpen} animationType="slide" onRequestClose={() => setAiOpen(false)}>
         <SafeAreaView style={styles.aiSafe} edges={['top', 'bottom']}>
           <View style={[styles.aiHeader, { paddingTop: Math.max(insets.top, 12) }]}>
@@ -658,24 +645,45 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
   },
-  navBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#007AFF', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  navBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
   navBtnDisabled: { backgroundColor: '#f1f1f1' },
   navText: { color: '#fff', fontWeight: '900', fontSize: 13 },
   navTextDisabled: { color: '#bbb' },
   counterText: { color: '#666', fontSize: 13, fontWeight: '800' },
 
   modal: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 16 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
   modalTitle: { fontSize: 16, fontWeight: '900' },
   modalClose: { color: '#007AFF', fontSize: 16, fontWeight: '900' },
 
   chapterGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingTop: 14, paddingBottom: 30 },
-  chapterBtn: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center', margin: 8 },
+  chapterBtn: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: 8,
+  },
   chapterActive: { backgroundColor: '#007AFF' },
   chapterText: { fontSize: 16, fontWeight: '900', color: '#111' },
   chapterActiveText: { color: '#fff' },
 
-  // IA modal
   aiSafe: { flex: 1, backgroundColor: '#F2F2F7' },
   aiHeader: {
     backgroundColor: '#fff',
@@ -689,8 +697,23 @@ const styles = StyleSheet.create({
   },
   aiHeaderBtn: { paddingVertical: 6, paddingRight: 10 },
   aiHeaderText: { color: '#007AFF', fontSize: 16, fontWeight: '900' },
-  aiHeaderTitle: { flex: 1, textAlign: 'center', fontSize: 15, fontWeight: '900', color: '#111', paddingHorizontal: 10 },
-  saveBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#007AFF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, gap: 6 },
+  aiHeaderTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#111',
+    paddingHorizontal: 10,
+  },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    gap: 6,
+  },
   saveBtnText: { color: '#fff', fontWeight: '900', fontSize: 13 },
 
   aiLoading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -698,7 +721,6 @@ const styles = StyleSheet.create({
   aiSubject: { textAlign: 'center', fontSize: 18, fontWeight: '900', marginBottom: 14, color: '#111' },
   aiHint: { marginTop: 10, fontSize: 12, color: '#8E8E93', textAlign: 'center' },
 
-  // InfoCards
   infoCard: {
     flexDirection: 'row',
     backgroundColor: '#fff',
@@ -722,8 +744,13 @@ const styles = StyleSheet.create({
   rawBox: { backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#eee' },
   rawText: { fontSize: 15, lineHeight: 22, color: '#222' },
 
-  // Tela de erro sem book
-  centerSafe: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#fff' },
+  centerSafe: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#fff',
+  },
   centerTitle: { fontSize: 18, fontWeight: '900', marginBottom: 10, color: '#111' },
   centerText: { color: '#666', textAlign: 'center', marginBottom: 20, lineHeight: 20 },
   centerBtn: { backgroundColor: '#007AFF', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },
