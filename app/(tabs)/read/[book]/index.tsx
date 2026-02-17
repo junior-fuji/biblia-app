@@ -1,5 +1,5 @@
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
-========================= */
+
 type Verse = { id: number; verse: number; text_pt: string };
 
 type RouteParams = {
@@ -60,7 +60,7 @@ function clamp(n: number, min: number, max: number) {
 
 const API_BASE_URL_RAW =
   process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '') ||
-  'https://biblia-app-git-main-juniors-projects-2f719266.vercel.app';
+  'https://biblia-app-six.vercel.app';
 
 function normalizeBaseUrl(base: string) {
   if (!base) return '';
@@ -88,7 +88,7 @@ function InfoCard({
   title: string;
   text?: string;
   color: string;
-  icon: any;
+  icon: any;https://biblia
 }) {
   if (!text) return null;
   return (
@@ -368,6 +368,12 @@ if (!sb) {
   Alert.alert('Supabase', 'Supabase não configurado neste build.');
   return;
 }
+const { error } = await sb.from('saved_notes').insert({
+  title: aiTitle || 'Análise',
+  reference: saveReference,
+  content: contentToSave,
+});
+
 
 
     setSaving(true);
@@ -623,7 +629,7 @@ if (!sb) {
 
 /* =========================
    STYLES
-========================= */
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
 
