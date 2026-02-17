@@ -1,23 +1,4 @@
-import { getSupabaseOrThrow } from '@/lib/supabaseClient';
-import { Ionicons } from '@expo/vector-icons';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-
-/* =========================
-   TIPOS
+import { getSupabaseOrNull } from '@/lib/supabaseClient';
 ========================= */
 type Verse = { id: number; verse: number; text_pt: string };
 
@@ -77,9 +58,18 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-const API_BASE_URL =
+const API_BASE_URL_RAW =
   process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '') ||
-  'https://biblia-app-six.vercel.app/';
+  'https://biblia-app-git-main-juniors-projects-2f719266.vercel.app';
+
+function normalizeBaseUrl(base: string) {
+  if (!base) return '';
+  if (!/^https?:\/\//i.test(base)) return `https://${base}`;
+  return base;
+}
+
+const API_BASE_URL = normalizeBaseUrl(API_BASE_URL_RAW);
+
 
 function extractJsonObject(text: string): string | null {
   if (!text) return null;
@@ -181,7 +171,19 @@ export default function ReadBookScreen() {
 
     async function loadTotal() {
       try {
-        const sb = getSupabaseOrThrow();
+        const sb = getSupabaseOrNull();
+        setLoading(false);
+return;
+
+if (!sb) {
+  // não crasha: só marca erro/carrega vazio
+  setTotalChapters(0);
+  setVerses([]);
+  setLoadError('Bíblia indisponível no momento (Supabase não configurado neste build).');
+  setLoading(false);
+  return;
+}
+
         const { data, error } = await sb
           .from('verses')
           .select('chapter')
@@ -204,11 +206,15 @@ export default function ReadBookScreen() {
       }
     }
 
-    loadTotal();
-    return () => {
-      alive = false;
-    };
-  }, [bookId]);
+    if (!sb) {
+      if (!alive) return;
+      setTotalChapters(0);
+      setVerses([]);
+      setLoadError('Bíblia indisponível no momento (Supabase não configurado neste build).');
+      setLoading(false);
+      return;
+    }
+    
 
   // Carrega versículos do capítulo
   useEffect(() => {
@@ -219,7 +225,16 @@ export default function ReadBookScreen() {
       setLoadError(null);
 
       try {
-        const sb = getSupabaseOrThrow();
+        const sb = getSupabaseOrNull();
+        if (!sb) {
+          // não crasha: só marca erro/carrega vazio
+          setTotalChapters(0);
+          setVerses([]);
+          setLoadError('Bíblia indisponível no momento (Supabase não configurado neste build).');
+          setLoading(false);
+          return;
+        }
+        
         const { data, error } = await sb
           .from('verses')
           .select('id, verse, text_pt')
@@ -348,14 +363,23 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
     [safeBookName, chapterNum]
   );
 
-  async function handleSaveAI() {
-    if (!analysisData && !rawAi) return;
+  const sb = getSupabaseOrNull();
+if (!sb) {
+  Alert.alert('Supabase', 'Supabase não configurado neste build.');
+  return;
+}
+
 
     setSaving(true);
     try {
       const contentToSave = analysisData ? JSON.stringify(analysisData) : rawAi;
 
-      const sb = getSupabaseOrThrow();
+      const sb = getSupabaseOrNull();
+if (!sb) {
+  Alert.alert('Supabase', 'Supabase não configurado neste build.');
+  return;
+}
+
       const { error } = await sb.from('saved_notes').insert({
         title: aiTitle || 'Análise',
         reference: saveReference,
