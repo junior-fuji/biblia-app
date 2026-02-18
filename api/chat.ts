@@ -1,13 +1,9 @@
-// api/chat.js
-// Vercel Serverless Function (Node.js)
+// api/chat.ts
 // Endpoint: POST /api/chat
-//
-// Requer env no Vercel:
-// - OPENAI_API_KEY
-// Opcional:
-// - OPENAI_MODEL (default: gpt-4o-mini)
+// Requer env no Vercel: OPENAI_API_KEY
+// Opcional: OPENAI_MODEL (default: gpt-4o-mini)
 
-module.exports = async function handler(req, res) {
+export default async function handler(req: any, res: any) {
   // CORS (útil no mobile)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -24,18 +20,15 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // Em Vercel Functions, req.body pode vir como objeto OU string OU vazio.
-    // Vamos montar um parser robusto:
-    let body = req.body;
-
-    if (!body) {
-      // tenta ler como stream
-      const chunks = [];
-      for await (const chunk of req) chunks.push(chunk);
-      const raw = Buffer.concat(chunks).toString('utf8');
-      body = raw ? JSON.parse(raw) : null;
-    } else if (typeof body === 'string') {
-      body = JSON.parse(body);
+    // Na Vercel, normalmente req.body já vem como objeto
+    // Mas por segurança aceitamos string também
+    let body: any = req.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        body = null;
+      }
     }
 
     const messages = body?.messages;
@@ -60,7 +53,6 @@ module.exports = async function handler(req, res) {
         messages,
         temperature: 0.4,
         max_tokens: 2000,
-
       }),
     });
 
@@ -68,17 +60,16 @@ module.exports = async function handler(req, res) {
 
     if (!upstream.ok) {
       return res.status(upstream.status).json({
-        error: data?.error?.message || 'Erro ao chamar OpenAI',
+        error: (data as any)?.error?.message || 'Erro ao chamar OpenAI',
         raw: data,
       });
     }
 
-    // Retorna no formato OpenAI (choices/message/content)
     return res.status(200).json(data);
-  } catch (err) {
+  } catch (err: any) {
     return res.status(500).json({
       error: 'Erro interno no /api/chat',
-      details: String(err?.message || err),
+      details: err?.message || String(err),
     });
   }
-};
+}
