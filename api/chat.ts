@@ -59,7 +59,8 @@ module.exports = async function handler(req, res) {
         model,
         messages,
         temperature: 0.4,
-        max_tokens: 900,
+        max_tokens: 2000,
+
       }),
     });
 

@@ -75,7 +75,7 @@ function safeParseJson(s: string) {
 // ✅ base url robusta
 const API_BASE_URL_RAW =
   process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ||
-  "https://biblia-app-git-main-juniors-projects-2f719266.vercel.app";
+  "https://biblia-app-six.vercel.app";
 
 function normalizeBaseUrl(base: string) {
   if (!base) return "";
@@ -132,7 +132,6 @@ export async function fetchAIAnalysis(text: string, mode: Mode = "CHAPTER"): Pro
 
 export async function generateSpeech(text: string): Promise<string | null> {
   try {
-    // ✅ endpoint correto
     const url = apiUrl("/api/speech");
 
     const res = await fetch(url, {
@@ -144,10 +143,12 @@ export async function generateSpeech(text: string): Promise<string | null> {
     const body = await res.json().catch(() => ({} as any));
     if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`);
 
-    const base64 = body?.base64 || body?.audioBase64 || null;
+    const base64 = body?.audioBase64 || body?.base64 || null;
     return base64 ? String(base64) : null;
   } catch (e: any) {
     console.error("Erro Speech:", e);
     return null;
   }
 }
+
+
