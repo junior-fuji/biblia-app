@@ -7,7 +7,11 @@
     "icon": "./assets/images/icon.png",
     "scheme": "bibleapp",
     "userInterfaceStyle": "automatic",
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
@@ -15,7 +19,8 @@
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
-        }
+        },
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -49,9 +54,9 @@
     },
     "extra": {
       "router": {},
-      "eas": { "projectId": "8421d644-b91d-4297-8b8e-95862c471e73" },
-      "supabaseUrl": "https://eoefipjqrlhnkfzaigfx.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvZWZpcGpxcmxobmtmemFpZ2Z4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMDQzNjAsImV4cCI6MjA4MjU4MDM2MH0.jJ3vzqdFS1HEfYdxcdInbj1pZ2JaE8Mv2_wGhjFYLuw"
+      "eas": {
+        "projectId": "8421d644-b91d-4297-8b8e-95862c471e73"
+      }
     }
   }
 }

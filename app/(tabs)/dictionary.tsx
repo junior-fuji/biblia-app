@@ -1,5 +1,5 @@
 import { fetchAIAnalysis } from '@/lib/openai';
-import { getSupabaseOrThrow } from '@/lib/supabaseClient';
+import { getSupabaseOrNull } from '@/lib/supabaseClient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
@@ -16,7 +16,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type AnyObj = Record<string, any>;
-const supabase = getSupabaseOrThrow();
 
 function isNonEmptyString(v: any): v is string {
   return typeof v === 'string' && v.trim().length > 0;
@@ -38,7 +37,6 @@ function safeString(v: any): string {
   }
 }
 
-/** Renderiza itens em lista, aceitando string | objeto */
 function renderBullets(items: any[], getLine: (it: any) => string) {
   const lines = items
     .map((it) => getLine(it))
@@ -79,13 +77,14 @@ function SectionCard({
     </View>
   );
 }
-export default function DictionaryScreen() { 
 
-
+export default function DictionaryScreen() {
   const router = useRouter();
+
   const [word, setWord] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnyObj | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const termTitle = useMemo(() => {
     const t = (result?.term || result?.title || word || '').toString();
@@ -96,15 +95,16 @@ export default function DictionaryScreen() {
     const q = word.trim();
     if (!q) return;
 
+    setErrorMsg(null);
     setLoading(true);
     setResult(null);
 
     try {
-      const data = await fetchAIAnalysis(q, 'DICTIONARY'); // você vai ajustar o prompt no passo 1 depois
+      const data = await fetchAIAnalysis(q, 'DICTIONARY');
       if (data) setResult(data as AnyObj);
-      else Alert.alert('Sem resposta', 'A IA não retornou dados.');
-    } catch (e) {
-      Alert.alert('Erro', 'Não foi possível buscar.');
+      else setErrorMsg('A IA não retornou dados (JSON inválido ou resposta vazia).');
+    } catch (e: any) {
+      setErrorMsg(e?.message || 'Não foi possível buscar.');
     } finally {
       setLoading(false);
     }
@@ -112,28 +112,37 @@ export default function DictionaryScreen() {
 
   const handleSave = async () => {
     if (!result) return;
+
+    const sb = getSupabaseOrNull();
+    if (!sb) {
+      Alert.alert('Supabase', 'Supabase não configurado neste build.');
+      return;
+    }
+
     try {
-      const { error } = await supabase.from('saved_notes').insert({
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) {
+        Alert.alert('Login necessário', 'Faça login para salvar no Meus Estudos.');
+        return;
+      }
+
+      const { error } = await sb.from('saved_notes').insert({
+        user_id: user.id,                 // ✅ multiusuário
         title: `Dicionário: ${termTitle}`,
+        reference: `Termo Bíblico — ${termTitle}`, // ✅ nunca null
         content: JSON.stringify(result),
       });
+
       if (error) throw error;
+
       Alert.alert('Salvo!', "Verbete salvo em 'Meus Estudos'.");
-    } catch (e) {
-      console.log(e);
-      Alert.alert('Erro', 'Não foi possível salvar.');
+    } catch (e: any) {
+      Alert.alert('Erro', e?.message || 'Não foi possível salvar.');
     }
   };
 
-  // --------- Normalização tolerante a formatos diferentes ---------
   const definition = useMemo(() => {
-    return (
-      result?.definition ||
-      result?.theme ||
-      result?.meaning ||
-      result?.def ||
-      ''
-    );
+    return result?.definition || result?.theme || result?.meaning || result?.def || '';
   }, [result]);
 
   const originals = useMemo(() => {
@@ -156,7 +165,6 @@ export default function DictionaryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={{ padding: 5 }}>
           <Ionicons name="arrow-back" size={24} color="#000" />
@@ -173,7 +181,6 @@ export default function DictionaryScreen() {
         </View>
       </View>
 
-      {/* Search */}
       <View style={styles.searchBar}>
         <TextInput
           style={styles.input}
@@ -182,15 +189,20 @@ export default function DictionaryScreen() {
           onChangeText={setWord}
           onSubmitEditing={handleSearch}
           returnKeyType="search"
+          autoCapitalize="none"
+          autoCorrect={false}
         />
         <TouchableOpacity style={styles.searchBtn} onPress={handleSearch} disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Ionicons name="search" size={20} color="#fff" />
-          )}
+          {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="search" size={20} color="#fff" />}
         </TouchableOpacity>
       </View>
+
+      {errorMsg ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorTitle}>Erro</Text>
+          <Text style={styles.errorText}>{errorMsg}</Text>
+        </View>
+      ) : null}
 
       <ScrollView contentContainerStyle={styles.content}>
         {!result ? (
@@ -200,12 +212,10 @@ export default function DictionaryScreen() {
           </View>
         ) : (
           <>
-            {/* Título do termo */}
             <View style={styles.termHeader}>
               <Text style={styles.termTitle}>{termTitle}</Text>
             </View>
 
-            {/* Definição */}
             <SectionCard title="DEFINIÇÃO TEOLÓGICA" icon="document-text-outline" color="#111">
               {isNonEmptyString(definition) ? (
                 <Text style={styles.definitionText}>{definition}</Text>
@@ -214,12 +224,10 @@ export default function DictionaryScreen() {
               )}
             </SectionCard>
 
-            {/* Originais */}
             <SectionCard title="TERMOS ORIGINAIS" icon="language-outline" color="#007AFF">
               {renderBullets(originals, (it) => {
                 if (typeof it === 'string') return it;
                 const o = it as AnyObj;
-                // tenta montar um padrão: (gr/he) lemma (translit) — gloss [Strong]
                 const lang = o.language ? String(o.language).toUpperCase() : '';
                 const lemma = o.lemma || o.word || o.term || '';
                 const tr = o.transliteration ? ` (${o.transliteration})` : '';
@@ -232,7 +240,6 @@ export default function DictionaryScreen() {
               }) ?? <Text style={styles.muted}>Sem termos originais retornados.</Text>}
             </SectionCard>
 
-            {/* Textos-chave */}
             <SectionCard title="TEXTOS-CHAVE" icon="book-outline" color="#34C759">
               {renderBullets(keyTexts, (it) => {
                 if (typeof it === 'string') return it;
@@ -246,7 +253,6 @@ export default function DictionaryScreen() {
               }) ?? <Text style={styles.muted}>Sem textos-chave retornados.</Text>}
             </SectionCard>
 
-            {/* Textos de suporte */}
             <SectionCard title="TEXTOS DE SUPORTE" icon="bookmark-outline" color="#FF9500">
               {renderBullets(supportTexts, (it) => {
                 if (typeof it === 'string') return it;
@@ -259,7 +265,6 @@ export default function DictionaryScreen() {
               }) ?? <Text style={styles.muted}>Sem textos de suporte retornados.</Text>}
             </SectionCard>
 
-            {/* Distinções */}
             <SectionCard title="DISTINÇÕES TEOLÓGICAS" icon="git-compare-outline" color="#AF52DE">
               {renderBullets(distinctions, (it) => {
                 if (typeof it === 'string') return it;
@@ -272,20 +277,11 @@ export default function DictionaryScreen() {
               }) ?? <Text style={styles.muted}>Sem distinções retornadas.</Text>}
             </SectionCard>
 
-            {typeof result?.deep_theology === 'string' && result.deep_theology.trim().length > 0 ? (
-  <View style={[styles.card, { borderLeftColor: '#111827' }]}>
-    <Text style={styles.label}>ANÁLISE TEOLÓGICA APROFUNDADA</Text>
-    <Text style={styles.body}>{result.deep_theology}</Text>
-  </View>
-) : null}
-
-
-            {/* fallback (útil enquanto o prompt não estiver perfeito) */}
             {!isNonEmptyString(definition) &&
               originals.length === 0 &&
               keyTexts.length === 0 &&
               supportTexts.length === 0 &&
-              distinctions.length === 0 &&(
+              distinctions.length === 0 && (
                 <SectionCard title="RESPOSTA BRUTA" icon="code-outline" color="#8E8E93">
                   <Text style={styles.rawText}>{rawFallback}</Text>
                 </SectionCard>
@@ -319,6 +315,18 @@ const styles = StyleSheet.create({
 
   content: { padding: 15 },
 
+  errorBox: {
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 12,
+    marginHorizontal: 15,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#FFD1D1',
+  },
+  errorTitle: { color: '#D70015', fontWeight: '800' },
+  errorText: { color: '#D70015', marginTop: 6 },
+
   termHeader: { paddingHorizontal: 4, paddingBottom: 8 },
   termTitle: { fontSize: 22, fontWeight: '900', color: '#111' },
 
@@ -333,20 +341,12 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
   },
 
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   label: { fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
 
   definitionText: { fontSize: 16, fontWeight: '700', color: '#222', lineHeight: 24 },
   body: { fontSize: 15, lineHeight: 22, color: '#333' },
-
   muted: { color: '#999', fontSize: 14 },
-
   rawText: { fontSize: 12, color: '#333' },
 
   emptyState: { alignItems: 'center', marginTop: 50 },

@@ -1,9 +1,7 @@
-import { getSupabaseOrThrow } from '@/lib/supabaseClient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   StyleSheet,
   Text,
@@ -13,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // -----------------------------------------------------------------------------
-// 📚 MAPA DOS 66 LIVROS (ID = banco Supabase)
+// 📚 MAPA DOS 66 LIVROS
 // -----------------------------------------------------------------------------
 const BOOK_MAP: { id: number; name: string; abbrev: string }[] = [
   { id: 1, name: 'Gênesis', abbrev: 'Gn' },
@@ -86,47 +84,10 @@ const BOOK_MAP: { id: number; name: string; abbrev: string }[] = [
 
 export default function ReadIndexScreen() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-
-  // guarda IDs de livros que existem na tabela verses
-  const [availableBooks, setAvailableBooks] = useState<number[]>([]);
-
-  useEffect(() => {
-    loadAvailableBooks();
-  }, []);
-
-  async function loadAvailableBooks() {
-    try {
-      setLoading(true);
-      const supabase = getSupabaseOrThrow();
-
-      // ✅ Aqui é a forma correta: pegar os book_id existentes em verses
-      const { data, error } = await supabase
-        .from('verses')
-        .select('book_id');
-
-      if (error) throw error;
-
-      const ids = (data ?? [])
-        .map((row: any) => Number(row.book_id))
-        .filter((n: number) => Number.isFinite(n));
-
-      const unique = Array.from(new Set(ids)).sort((a, b) => a - b);
-
-      setAvailableBooks(unique);
-    } catch (e) {
-      console.error('Erro ao carregar livros:', e);
-      // Se der erro, não bloqueia o usuário: mostra tudo habilitado
-      setAvailableBooks([]);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   function openBook(bookId: number) {
     router.push(`/read/${bookId}?chapter=1`);
   }
-
 
   const renderBook = ({ item }: { item: typeof BOOK_MAP[0] }) => {
     return (
@@ -140,7 +101,6 @@ export default function ReadIndexScreen() {
       </TouchableOpacity>
     );
   };
-  
 
   return (
     <SafeAreaView style={styles.container}>
@@ -149,18 +109,14 @@ export default function ReadIndexScreen() {
         <Text style={styles.title}>Bíblia Sagrada</Text>
       </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
-      ) : (
-        <FlatList
-          data={BOOK_MAP}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderBook}
-          numColumns={2}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+      <FlatList
+        data={BOOK_MAP}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={renderBook}
+        numColumns={2}
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+      />
     </SafeAreaView>
   );
 }
@@ -181,7 +137,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  disabledCard: { opacity: 0.4 },
   bookAbbrev: { fontSize: 20, fontWeight: '900', color: '#007AFF' },
   bookName: {
     fontSize: 14,

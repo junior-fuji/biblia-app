@@ -15,11 +15,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-
+console.log('SUPABASE URL', process.env.EXPO_PUBLIC_SUPABASE_URL);
 /* =========================
    TIPOS
 ========================= */
-type Verse = { id: number; verse: number; text_pt: string };
+type Verse = { id: number; verse: number; text: string };
 
 type RouteParams = {
   book?: string;
@@ -36,6 +36,8 @@ type AnalysisData = {
   theology?: string;
   application?: string;
 };
+
+type VersionRow = { id: string; code: string; name: string };
 
 const BOOK_MAP: Record<number, { name: string; abbrev: string }> = {
   1: { name: 'Gênesis', abbrev: 'Gn' }, 2: { name: 'Êxodo', abbrev: 'Êx' },
@@ -86,7 +88,6 @@ function normalizeBaseUrl(base: string) {
   if (!/^https?:\/\//i.test(base)) return `https://${base}`;
   return base;
 }
-
 const API_BASE_URL = normalizeBaseUrl(API_BASE_URL_RAW);
 
 function extractJsonObject(text: string): string | null {
@@ -95,6 +96,38 @@ function extractJsonObject(text: string): string | null {
   const last = text.lastIndexOf('}');
   if (first === -1 || last === -1 || last <= first) return null;
   return text.slice(first, last + 1);
+}
+
+/* =========================
+   CACHE (em memória)
+========================= */
+let versionsCache: VersionRow[] | null = null;
+let versionIdByCode: Map<string, string> | null = null;
+
+async function fetchVersions(): Promise<VersionRow[]> {
+  if (versionsCache) return versionsCache;
+
+  const sb = getSupabaseOrNull();
+  if (!sb) throw new Error('Supabase indisponível neste build.');
+
+  const { data, error } = await sb
+    .from('bible_versions')
+    .select('id, code, name')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true });
+
+  if (error) throw error;
+
+  versionsCache = (data ?? []) as VersionRow[];
+  versionIdByCode = new Map(versionsCache.map((v) => [v.code, v.id]));
+  return versionsCache;
+}
+
+async function resolveVersionId(code: string): Promise<string> {
+  if (!versionIdByCode) await fetchVersions();
+  const id = versionIdByCode!.get(code);
+  if (!id) throw new Error(`Versão não encontrada: ${code}`);
+  return id;
 }
 
 function InfoCard({
@@ -142,6 +175,11 @@ export default function ReadBookScreen() {
     return Number.isFinite(v) && v > 0 ? v : undefined;
   }, [verse]);
 
+  // versão selecionada (você pode depois trocar isso por Zustand persistido)
+  const [versionCode, setVersionCode] = useState<'ARA' | 'ARC' | 'NVI'>('ARA');
+  const [versions, setVersions] = useState<VersionRow[]>([]);
+  const [showVersions, setShowVersions] = useState(false);
+
   if (!book || !Number.isFinite(bookId)) {
     return (
       <SafeAreaView style={styles.centerSafe} edges={['top', 'bottom']}>
@@ -164,7 +202,7 @@ export default function ReadBookScreen() {
 
   const [chapterNum, setChapterNum] = useState<number>(initialChapter);
   const [totalChapters, setTotalChapters] = useState(0);
-  const [verses, setVerses] = useState<Verse[]>([]);
+  const [versesState, setVersesState] = useState<Verse[]>([]);
   const [showChapters, setShowChapters] = useState(false);
   const [fontSize, setFontSize] = useState(20);
 
@@ -180,6 +218,32 @@ export default function ReadBookScreen() {
     setChapterNum((current) => (current !== initialChapter ? initialChapter : current));
   }, [initialChapter]);
 
+  // carrega versões 1x
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const list = await fetchVersions();
+        if (!alive) return;
+        setVersions(list);
+        if (list.length > 0 && !list.some((v) => v.code === versionCode)) {
+          setVersionCode(list[0].code as any);
+        }
+      } catch {
+        if (!alive) return;
+        setVersions([
+          { id: 'fallback-ara', code: 'ARA', name: 'ARA' },
+          { id: 'fallback-arc', code: 'ARC', name: 'ARC' },
+          { id: 'fallback-nvi', code: 'NVI', name: 'NVI' },
+        ]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     let alive = true;
 
@@ -189,16 +253,19 @@ export default function ReadBookScreen() {
         if (!sb) {
           if (!alive) return;
           setTotalChapters(0);
-          setVerses([]);
+          setVersesState([]);
           setLoadError('Bíblia indisponível no momento (Supabase não configurado neste build).');
           setLoading(false);
           return;
         }
 
+        const versionId = await resolveVersionId(versionCode);
+
         const { data, error } = await sb
-          .from('verses')
+          .from('bible_verses')
           .select('chapter')
-          .eq('book_id', bookId)
+          .eq('version_id', versionId)
+          .eq('book', bookId)
           .order('chapter', { ascending: false })
           .limit(1);
 
@@ -221,7 +288,7 @@ export default function ReadBookScreen() {
     return () => {
       alive = false;
     };
-  }, [bookId]);
+  }, [bookId, versionCode]);
 
   useEffect(() => {
     let alive = true;
@@ -235,31 +302,34 @@ export default function ReadBookScreen() {
         if (!sb) {
           if (!alive) return;
           setTotalChapters(0);
-          setVerses([]);
+          setVersesState([]);
           setLoadError('Bíblia indisponível no momento (Supabase não configurado neste build).');
           setLoading(false);
           return;
         }
 
+        const versionId = await resolveVersionId(versionCode);
+
         const { data, error } = await sb
-          .from('verses')
-          .select('id, verse, text_pt')
-          .eq('book_id', bookId)
+          .from('bible_verses')
+          .select('id, verse, text')
+          .eq('version_id', versionId)
+          .eq('book', bookId)
           .eq('chapter', chapterNum)
           .order('verse', { ascending: true });
 
         if (!alive) return;
 
         if (error) {
-          setVerses([]);
+          setVersesState([]);
           setLoadError('Não foi possível carregar o capítulo. Verifique sua conexão e tente novamente.');
         } else {
-          setVerses((data as Verse[]) ?? []);
+          setVersesState((data as Verse[]) ?? []);
           setLoadError(null);
         }
       } catch {
         if (!alive) return;
-        setVerses([]);
+        setVersesState([]);
         setLoadError('Não foi possível carregar o capítulo. Verifique sua conexão e tente novamente.');
       } finally {
         if (alive) setLoading(false);
@@ -270,7 +340,7 @@ export default function ReadBookScreen() {
     return () => {
       alive = false;
     };
-  }, [bookId, chapterNum]);
+  }, [bookId, chapterNum, versionCode]);
 
   const goBackSmart = useCallback(() => {
     if (returnToStr) {
@@ -353,19 +423,19 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
     callAI(
       `Analise profundamente ${safeBookName} capítulo ${chapterNum}. Foque em contexto histórico, nuances do original (hebraico/grego) e aplicação pastoral.`,
       `Análise — ${safeBookName} ${chapterNum}`,
-      `${safeBookName} ${chapterNum}`
+      `${safeBookName} ${chapterNum} (${versionCode})`
     );
-  }, [safeBookName, chapterNum]);
+  }, [safeBookName, chapterNum, versionCode]);
 
   const analyzeVerse = useCallback(
     (v: Verse) => {
       callAI(
-        `Faça exegese profunda do versículo: "${v.text_pt}" (referência: ${safeBookName} ${chapterNum}:${v.verse}). Explique nuances do original e implicações teológicas.`,
+        `Faça exegese profunda do versículo: "${v.text}" (referência: ${safeBookName} ${chapterNum}:${v.verse}). Explique nuances do original e implicações teológicas.`,
         `Exegese — ${safeBookName} ${chapterNum}:${v.verse}`,
-        `${safeBookName} ${chapterNum}:${v.verse}`
+        `${safeBookName} ${chapterNum}:${v.verse} (${versionCode})`
       );
     },
-    [safeBookName, chapterNum]
+    [safeBookName, chapterNum, versionCode]
   );
 
   async function handleSaveAI() {
@@ -381,9 +451,18 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
         return;
       }
 
+      const { data: { user }, error: userErr } = await sb.auth.getUser();
+      if (userErr) throw userErr;
+
+      if (!user) {
+        Alert.alert('Login necessário', 'Faça login para salvar.');
+        return;
+      }
+
       const { error } = await sb.from('saved_notes').insert({
+        user_id: user.id,
         title: aiTitle || 'Análise',
-        reference: saveReference,
+        reference: saveReference || '',
         content: contentToSave,
       });
 
@@ -401,9 +480,9 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
   }
 
   useEffect(() => {
-    if (!initialVerse || verses.length === 0) return;
+    if (!initialVerse || versesState.length === 0) return;
 
-    const idx = verses.findIndex((v) => v.verse === initialVerse);
+    const idx = versesState.findIndex((v) => v.verse === initialVerse);
     if (idx < 0) return;
 
     const t = setTimeout(() => {
@@ -411,7 +490,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
     }, 250);
 
     return () => clearTimeout(t);
-  }, [initialVerse, verses]);
+  }, [initialVerse, versesState]);
 
   const canPrev = chapterNum > 1;
   const canNext = totalChapters > 0 && chapterNum < totalChapters;
@@ -431,7 +510,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
           <Text style={[styles.verseNumber, { fontSize: Math.round(fontSize * 0.75) }]}>
             {item.verse}{' '}
           </Text>
-          {item.text_pt}
+          {item.text}
         </Text>
       </TouchableOpacity>
     ),
@@ -461,6 +540,10 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
           ),
           headerRight: () => (
             <View style={styles.headerRightContainer}>
+              <TouchableOpacity onPress={() => setShowVersions(true)} style={styles.headerIconBtn}>
+                <Text style={{ color: '#007AFF', fontWeight: '900' }}>{versionCode}</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity onPress={analyzeChapter} style={styles.headerIconBtn}>
                 <Ionicons name="school-outline" size={22} color="#AF52DE" />
               </TouchableOpacity>
@@ -496,7 +579,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
 
             <FlatList
               ref={listRef}
-              data={verses}
+              data={versesState}
               keyExtractor={(item) => String(item.id)}
               contentContainerStyle={[
                 styles.list,
@@ -538,6 +621,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
         </View>
       </View>
 
+      {/* Modal de capítulos */}
       <Modal visible={showChapters} animationType="slide" onRequestClose={() => setShowChapters(false)}>
         <SafeAreaView style={[styles.modal, { paddingTop: Math.max(insets.top, 12) }]} edges={['top', 'bottom']}>
           <View style={styles.modalHeader}>
@@ -564,6 +648,46 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
         </SafeAreaView>
       </Modal>
 
+      {/* Modal de versões */}
+      <Modal visible={showVersions} animationType="slide" onRequestClose={() => setShowVersions(false)}>
+        <SafeAreaView style={[styles.modal, { paddingTop: Math.max(insets.top, 12) }]} edges={['top', 'bottom']}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Versão da Bíblia</Text>
+            <TouchableOpacity onPress={() => setShowVersions(false)}>
+              <Text style={styles.modalClose}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ paddingTop: 14 }}>
+            {(versions.length ? versions : [
+              { id: 'fallback-ara', code: 'ARA', name: 'ARA' },
+              { id: 'fallback-arc', code: 'ARC', name: 'ARC' },
+              { id: 'fallback-nvi', code: 'NVI', name: 'NVI' },
+            ]).map((v) => {
+              const active = v.code === versionCode;
+              return (
+                <TouchableOpacity
+                  key={v.id}
+                  style={[
+                    { padding: 14, borderRadius: 12, backgroundColor: '#f2f2f7', marginBottom: 10 },
+                    active ? { backgroundColor: '#007AFF' } : null,
+                  ]}
+                  onPress={() => {
+                    setVersionCode(v.code as any);
+                    setShowVersions(false);
+                  }}
+                >
+                  <Text style={{ fontWeight: '900', color: active ? '#fff' : '#111' }}>
+                    {v.code} — {v.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Modal IA */}
       <Modal visible={aiOpen} animationType="slide" onRequestClose={() => setAiOpen(false)}>
         <SafeAreaView style={styles.aiSafe} edges={['top', 'bottom']}>
           <View style={[styles.aiHeader, { paddingTop: Math.max(insets.top, 12) }]}>

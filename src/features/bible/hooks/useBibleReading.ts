@@ -1,89 +1,56 @@
-import { useEffect, useState } from 'react';
-import { Alert } from 'react-native';
-// ⚠️ IMPORTANTE: Ajuste o caminho abaixo para onde está seu arquivo 'lib/supabase.ts'
-// Se der erro, tente: '../../../../lib/supabase' ou '@/lib/supabase'
-import { getSupabaseOrThrow } from '@/lib/supabaseClient';
+import { getSupabaseOrThrow } from "@/lib/supabaseClient"; // ajuste se necessário
+import { useEffect, useMemo, useState } from "react";
+import { getVersionIdByCode } from "../api/bibleVersions.cache";
+import { useBibleStore } from "../state/bibleStore";
 
-export type Verse = { 
-    id: string; 
-    verse: number; 
-    text_pt: string 
-};
+type Verse = { book: number; chapter: number; verse: number; text: string };
 
-export function useBibleReading(bookId: string | string[], initialChapter: number = 1) {
-    const [loading, setLoading] = useState(true);
-    const [verses, setVerses] = useState<Verse[]>([]);
-    const [totalChapters, setTotalChapters] = useState(0);
-    const [currentChapter, setCurrentChapter] = useState(initialChapter);
-    const supabase = getSupabaseOrThrow();
+export function useBibleReading(book: number, chapter: number) {
+  const versionCode = useBibleStore((s) => s.versionCode);
+  const setLastRead = useBibleStore((s) => s.setLastRead);
 
-    // Converte o bookId (que vem da rota como string ou array) para número
-    const numericBookId = parseInt(Array.isArray(bookId) ? bookId[0] : bookId || '1');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [verses, setVerses] = useState<Verse[]>([]);
 
-    // 1. Descobrir quantos capítulos o livro tem (Metadados)
-    useEffect(() => {
-        async function fetchMetadata() {
-            try {
-                const { data } = await supabase
-                    .from('verses')
-                    .select('chapter')
-                    .eq('book_id', numericBookId)
-                    .order('chapter', { ascending: false })
-                    .limit(1);
+  const key = useMemo(() => `${versionCode}:${book}:${chapter}`, [versionCode, book, chapter]);
 
-                if (data && data.length > 0) {
-                    setTotalChapters(data[0].chapter);
-                }
-            } catch (e) {
-                console.error("Erro ao buscar metadados do livro", e);
-            }
-        }
-        fetchMetadata();
-    }, [numericBookId]);
+  useEffect(() => {
+    let cancelled = false;
 
-    // 2. Buscar os versículos do capítulo atual
-    useEffect(() => {
-        let isMounted = true;
+    async function run() {
+      setLoading(true);
+      setError(null);
 
-        async function fetchVerses() {
-            setLoading(true);
-            const { data, error } = await supabase
-                .from('verses')
-                .select('id, verse, text_pt')
-                .eq('book_id', numericBookId)
-                .eq('chapter', currentChapter)
-                .order('verse', { ascending: true });
+      try {
+        const supabase = await getSupabaseOrThrow();
+        const versionId = await getVersionIdByCode(versionCode);
 
-            if (error) {
-                console.error(error);
-                Alert.alert("Erro", "Falha ao carregar as escrituras sagradas.");
-            } else if (isMounted) {
-                setVerses(data || []);
-            }
-            setLoading(false);
-        }
+        const { data, error } = await supabase
+          .from("bible_verses")
+          .select("book, chapter, verse, text")
+          .eq("version_id", versionId)
+          .eq("book", book)
+          .eq("chapter", chapter)
+          .order("verse", { ascending: true });
 
-        fetchVerses();
+        if (error) throw error;
+        if (cancelled) return;
 
-        return () => { isMounted = false; };
-    }, [numericBookId, currentChapter]);
+        setVerses((data ?? []) as Verse[]);
+        setLastRead({ versionCode, book, chapter });
+      } catch (e) {
+        if (!cancelled) setError(e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
 
-    // Funções de Navegação
-    const nextChapter = () => {
-        if (currentChapter < totalChapters) setCurrentChapter(c => c + 1);
+    run();
+    return () => {
+      cancelled = true;
     };
+  }, [key, versionCode, book, chapter, setLastRead]);
 
-    const prevChapter = () => {
-        if (currentChapter > 1) setCurrentChapter(c => c - 1);
-    };
-
-    return {
-        verses,
-        loading,
-        currentChapter,
-        totalChapters,
-        setChapter: setCurrentChapter,
-        nextChapter,
-        prevChapter
-    };
+  return { loading, error, verses, versionCode };
 }

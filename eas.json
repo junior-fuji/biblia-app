@@ -12,7 +12,12 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://biblia-app-six.vercel.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://eoefipjqrlhnkfzaigfx.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "SUA_CHAVE_AQUI"
+      }
     }
   },
   "submit": {

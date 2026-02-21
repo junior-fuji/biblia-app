@@ -1,51 +1,38 @@
-// lib/supabaseClient.ts
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import "react-native-url-polyfill/auto";
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import Constants from 'expo-constants';
+import 'react-native-url-polyfill/auto';
+
+const extra = (Constants.expoConfig?.extra ?? Constants.manifest2?.extra ?? {}) as any;
+
+const supabaseUrl =
+  process.env.EXPO_PUBLIC_SUPABASE_URL ||
+  extra.supabaseUrl;
+
+const supabaseAnonKey =
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  extra.supabaseAnonKey;
 
 let _client: SupabaseClient | null = null;
 
-function buildClient(): SupabaseClient | null {
-  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) return null;
-
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: false,
-    },
+if (supabaseUrl && supabaseAnonKey) {
+  _client = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
   });
 }
 
-export function getSupabaseOrNull(): SupabaseClient | null {
-  if (_client) return _client;
-
-  const c = buildClient();
-  if (!c) {
-    if (__DEV__) {
-      console.warn(
-        "Supabase não configurado. Faltam ENV: EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY"
-      );
-    }
-    return null;
+export function getSupabaseOrThrow(): SupabaseClient {
+  if (!_client) {
+    throw new Error(
+      'Supabase não configurado. Faltam ENV: EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY'
+    );
   }
-
-  _client = c;
   return _client;
 }
 
-export function getSupabaseOrThrow(): SupabaseClient {
-  const c = getSupabaseOrNull();
-  if (!c) {
-    throw new Error(
-      "Supabase não configurado. Faltam ENV: EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY"
-    );
-  }
-  return c;
+export function getSupabaseOrNull(): SupabaseClient | null {
+  return _client;
 }
 
 export function isSupabaseConfigured(): boolean {
-  return Boolean(getSupabaseOrNull());
+  return Boolean(_client);
 }
