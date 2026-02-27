@@ -10,8 +10,6 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-console.log("URL:", process.env.EXPO_PUBLIC_SUPABASE_URL)
-console.log("KEY:", process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)
 
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 

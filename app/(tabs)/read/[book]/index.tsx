@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-console.log('SUPABASE URL', process.env.EXPO_PUBLIC_SUPABASE_URL);
+
 /* =========================
    TIPOS
 ========================= */
@@ -40,39 +40,72 @@ type AnalysisData = {
 type VersionRow = { id: string; code: string; name: string };
 
 const BOOK_MAP: Record<number, { name: string; abbrev: string }> = {
-  1: { name: 'Gênesis', abbrev: 'Gn' }, 2: { name: 'Êxodo', abbrev: 'Êx' },
-  3: { name: 'Levítico', abbrev: 'Lv' }, 4: { name: 'Números', abbrev: 'Nm' },
-  5: { name: 'Deuteronômio', abbrev: 'Dt' }, 6: { name: 'Josué', abbrev: 'Js' },
-  7: { name: 'Juízes', abbrev: 'Jz' }, 8: { name: 'Rute', abbrev: 'Rt' },
-  9: { name: '1 Samuel', abbrev: '1Sm' }, 10: { name: '2 Samuel', abbrev: '2Sm' },
-  11: { name: '1 Reis', abbrev: '1Rs' }, 12: { name: '2 Reis', abbrev: '2Rs' },
-  13: { name: '1 Crônicas', abbrev: '1Cr' }, 14: { name: '2 Crônicas', abbrev: '2Cr' },
-  15: { name: 'Esdras', abbrev: 'Ed' }, 16: { name: 'Neemias', abbrev: 'Ne' },
-  17: { name: 'Ester', abbrev: 'Et' }, 18: { name: 'Jó', abbrev: 'Jó' },
-  19: { name: 'Salmos', abbrev: 'Sl' }, 20: { name: 'Provérbios', abbrev: 'Pv' },
-  21: { name: 'Eclesiastes', abbrev: 'Ec' }, 22: { name: 'Cânticos', abbrev: 'Ct' },
-  23: { name: 'Isaías', abbrev: 'Is' }, 24: { name: 'Jeremias', abbrev: 'Jr' },
-  25: { name: 'Lamentações', abbrev: 'Lm' }, 26: { name: 'Ezequiel', abbrev: 'Ez' },
-  27: { name: 'Daniel', abbrev: 'Dn' }, 28: { name: 'Oseias', abbrev: 'Os' },
-  29: { name: 'Joel', abbrev: 'Jl' }, 30: { name: 'Amós', abbrev: 'Am' },
-  31: { name: 'Obadias', abbrev: 'Ob' }, 32: { name: 'Jonas', abbrev: 'Jn' },
-  33: { name: 'Miqueias', abbrev: 'Mq' }, 34: { name: 'Naum', abbrev: 'Na' },
-  35: { name: 'Habacuque', abbrev: 'Hc' }, 36: { name: 'Sofonias', abbrev: 'Sf' },
-  37: { name: 'Ageu', abbrev: 'Ag' }, 38: { name: 'Zacarias', abbrev: 'Zc' },
-  39: { name: 'Malaquias', abbrev: 'Ml' }, 40: { name: 'Mateus', abbrev: 'Mt' },
-  41: { name: 'Marcos', abbrev: 'Mc' }, 42: { name: 'Lucas', abbrev: 'Lc' },
-  43: { name: 'João', abbrev: 'Jo' }, 44: { name: 'Atos', abbrev: 'At' },
-  45: { name: 'Romanos', abbrev: 'Rm' }, 46: { name: '1 Coríntios', abbrev: '1Co' },
-  47: { name: '2 Coríntios', abbrev: '2Co' }, 48: { name: 'Gálatas', abbrev: 'Gl' },
-  49: { name: 'Efésios', abbrev: 'Ef' }, 50: { name: 'Filipenses', abbrev: 'Fp' },
-  51: { name: 'Colossenses', abbrev: 'Cl' }, 52: { name: '1 Tessalonicenses', abbrev: '1Ts' },
-  53: { name: '2 Tessalonicenses', abbrev: '2Ts' }, 54: { name: '1 Timóteo', abbrev: '1Tm' },
-  55: { name: '2 Timóteo', abbrev: '2Tm' }, 56: { name: 'Tito', abbrev: 'Tt' },
-  57: { name: 'Filemom', abbrev: 'Fm' }, 58: { name: 'Hebreus', abbrev: 'Hb' },
-  59: { name: 'Tiago', abbrev: 'Tg' }, 60: { name: '1 Pedro', abbrev: '1Pe' },
-  61: { name: '2 Pedro', abbrev: '2Pe' }, 62: { name: '1 João', abbrev: '1Jo' },
-  63: { name: '2 João', abbrev: '2Jo' }, 64: { name: '3 João', abbrev: '3Jo' },
-  65: { name: 'Judas', abbrev: 'Jd' }, 66: { name: 'Apocalipse', abbrev: 'Ap' },
+  1: { name: 'Gênesis', abbrev: 'Gn' },
+  2: { name: 'Êxodo', abbrev: 'Êx' },
+  3: { name: 'Levítico', abbrev: 'Lv' },
+  4: { name: 'Números', abbrev: 'Nm' },
+  5: { name: 'Deuteronômio', abbrev: 'Dt' },
+  6: { name: 'Josué', abbrev: 'Js' },
+  7: { name: 'Juízes', abbrev: 'Jz' },
+  8: { name: 'Rute', abbrev: 'Rt' },
+  9: { name: '1 Samuel', abbrev: '1Sm' },
+  10: { name: '2 Samuel', abbrev: '2Sm' },
+  11: { name: '1 Reis', abbrev: '1Rs' },
+  12: { name: '2 Reis', abbrev: '2Rs' },
+  13: { name: '1 Crônicas', abbrev: '1Cr' },
+  14: { name: '2 Crônicas', abbrev: '2Cr' },
+  15: { name: 'Esdras', abbrev: 'Ed' },
+  16: { name: 'Neemias', abbrev: 'Ne' },
+  17: { name: 'Ester', abbrev: 'Et' },
+  18: { name: 'Jó', abbrev: 'Jó' },
+  19: { name: 'Salmos', abbrev: 'Sl' },
+  20: { name: 'Provérbios', abbrev: 'Pv' },
+  21: { name: 'Eclesiastes', abbrev: 'Ec' },
+  22: { name: 'Cânticos', abbrev: 'Ct' },
+  23: { name: 'Isaías', abbrev: 'Is' },
+  24: { name: 'Jeremias', abbrev: 'Jr' },
+  25: { name: 'Lamentações', abbrev: 'Lm' },
+  26: { name: 'Ezequiel', abbrev: 'Ez' },
+  27: { name: 'Daniel', abbrev: 'Dn' },
+  28: { name: 'Oseias', abbrev: 'Os' },
+  29: { name: 'Joel', abbrev: 'Jl' },
+  30: { name: 'Amós', abbrev: 'Am' },
+  31: { name: 'Obadias', abbrev: 'Ob' },
+  32: { name: 'Jonas', abbrev: 'Jn' },
+  33: { name: 'Miqueias', abbrev: 'Mq' },
+  34: { name: 'Naum', abbrev: 'Na' },
+  35: { name: 'Habacuque', abbrev: 'Hc' },
+  36: { name: 'Sofonias', abbrev: 'Sf' },
+  37: { name: 'Ageu', abbrev: 'Ag' },
+  38: { name: 'Zacarias', abbrev: 'Zc' },
+  39: { name: 'Malaquias', abbrev: 'Ml' },
+  40: { name: 'Mateus', abbrev: 'Mt' },
+  41: { name: 'Marcos', abbrev: 'Mc' },
+  42: { name: 'Lucas', abbrev: 'Lc' },
+  43: { name: 'João', abbrev: 'Jo' },
+  44: { name: 'Atos', abbrev: 'At' },
+  45: { name: 'Romanos', abbrev: 'Rm' },
+  46: { name: '1 Coríntios', abbrev: '1Co' },
+  47: { name: '2 Coríntios', abbrev: '2Co' },
+  48: { name: 'Gálatas', abbrev: 'Gl' },
+  49: { name: 'Efésios', abbrev: 'Ef' },
+  50: { name: 'Filipenses', abbrev: 'Fp' },
+  51: { name: 'Colossenses', abbrev: 'Cl' },
+  52: { name: '1 Tessalonicenses', abbrev: '1Ts' },
+  53: { name: '2 Tessalonicenses', abbrev: '2Ts' },
+  54: { name: '1 Timóteo', abbrev: '1Tm' },
+  55: { name: '2 Timóteo', abbrev: '2Tm' },
+  56: { name: 'Tito', abbrev: 'Tt' },
+  57: { name: 'Filemom', abbrev: 'Fm' },
+  58: { name: 'Hebreus', abbrev: 'Hb' },
+  59: { name: 'Tiago', abbrev: 'Tg' },
+  60: { name: '1 Pedro', abbrev: '1Pe' },
+  61: { name: '2 Pedro', abbrev: '2Pe' },
+  62: { name: '1 João', abbrev: '1Jo' },
+  63: { name: '2 João', abbrev: '2Jo' },
+  64: { name: '3 João', abbrev: '3Jo' },
+  65: { name: 'Judas', abbrev: 'Jd' },
+  66: { name: 'Apocalipse', abbrev: 'Ap' },
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -80,8 +113,7 @@ function clamp(n: number, min: number, max: number) {
 }
 
 const API_BASE_URL_RAW =
-  process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '') ||
-  'https://biblia-app-six.vercel.app';
+  process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '') || 'https://biblia-app-six.vercel.app';
 
 function normalizeBaseUrl(base: string) {
   if (!base) return '';
@@ -163,6 +195,7 @@ export default function ReadBookScreen() {
 
   const { book, chapter, verse, returnTo } = useLocalSearchParams<RouteParams>();
   const bookId = Number(book);
+  const isValidBook = !!book && Number.isFinite(bookId);
   const returnToStr = typeof returnTo === 'string' ? returnTo : undefined;
 
   const initialChapter = useMemo(() => {
@@ -175,27 +208,15 @@ export default function ReadBookScreen() {
     return Number.isFinite(v) && v > 0 ? v : undefined;
   }, [verse]);
 
-  // versão selecionada (você pode depois trocar isso por Zustand persistido)
+  const bookData = isValidBook
+    ? BOOK_MAP[bookId] ?? { name: 'Livro', abbrev: '' }
+    : { name: 'Livro', abbrev: '' };
+  const safeBookName = bookData.name || 'Livro';
+
+  // versão selecionada
   const [versionCode, setVersionCode] = useState<'ARA' | 'ARC' | 'NVI'>('ARA');
   const [versions, setVersions] = useState<VersionRow[]>([]);
   const [showVersions, setShowVersions] = useState(false);
-
-  if (!book || !Number.isFinite(bookId)) {
-    return (
-      <SafeAreaView style={styles.centerSafe} edges={['top', 'bottom']}>
-        <Text style={styles.centerTitle}>Livro não informado</Text>
-        <Text style={styles.centerText}>
-          Essa tela precisa abrir com um livro (ex: /read/1). Volte e selecione um livro.
-        </Text>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/read' as any)} style={styles.centerBtn}>
-          <Text style={styles.centerBtnText}>Ir para a lista de livros</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
-
-  const bookData = BOOK_MAP[bookId] ?? { name: 'Livro', abbrev: '' };
-  const safeBookName = bookData.name || 'Livro';
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -248,6 +269,8 @@ export default function ReadBookScreen() {
     let alive = true;
 
     async function loadTotal() {
+      if (!isValidBook) return;
+
       try {
         const sb = getSupabaseOrNull();
         if (!sb) {
@@ -288,7 +311,7 @@ export default function ReadBookScreen() {
     return () => {
       alive = false;
     };
-  }, [bookId, versionCode]);
+  }, [isValidBook, bookId, versionCode]);
 
   useEffect(() => {
     let alive = true;
@@ -296,6 +319,14 @@ export default function ReadBookScreen() {
     async function loadVerses() {
       setLoading(true);
       setLoadError(null);
+
+      if (!isValidBook) {
+        setTotalChapters(0);
+        setVersesState([]);
+        setLoadError('Livro não informado.');
+        setLoading(false);
+        return;
+      }
 
       try {
         const sb = getSupabaseOrNull();
@@ -340,7 +371,7 @@ export default function ReadBookScreen() {
     return () => {
       alive = false;
     };
-  }, [bookId, chapterNum, versionCode]);
+  }, [isValidBook, bookId, chapterNum, versionCode]);
 
   const goBackSmart = useCallback(() => {
     if (returnToStr) {
@@ -389,11 +420,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((body as any)?.error || `HTTP ${res.status}`);
 
-      const content: string =
-        (body as any)?.choices?.[0]?.message?.content ??
-        (body as any)?.output_text ??
-        '';
-
+      const content: string = (body as any)?.choices?.[0]?.message?.content ?? (body as any)?.output_text ?? '';
       const maybeJson = extractJsonObject(String(content));
 
       if (maybeJson) {
@@ -451,7 +478,10 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
         return;
       }
 
-      const { data: { user }, error: userErr } = await sb.auth.getUser();
+      const {
+        data: { user },
+        error: userErr,
+      } = await sb.auth.getUser();
       if (userErr) throw userErr;
 
       if (!user) {
@@ -517,6 +547,21 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
     [analyzeVerse, fontSize]
   );
 
+  // ✅ agora o "Livro não informado" fica DEPOIS de todos os hooks (lint ok)
+  if (!isValidBook) {
+    return (
+      <SafeAreaView style={styles.centerSafe} edges={['top', 'bottom']}>
+        <Text style={styles.centerTitle}>Livro não informado</Text>
+        <Text style={styles.centerText}>
+          Essa tela precisa abrir com um livro (ex: /read/1). Volte e selecione um livro.
+        </Text>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)/read' as any)} style={styles.centerBtn}>
+          <Text style={styles.centerBtnText}>Ir para a lista de livros</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Stack.Screen
@@ -548,17 +593,11 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
                 <Ionicons name="school-outline" size={22} color="#AF52DE" />
               </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={() => setFontSize((p) => clamp(p - 2, 12, 40))}
-                style={styles.headerIconBtn}
-              >
+              <TouchableOpacity onPress={() => setFontSize((p) => clamp(p - 2, 12, 40))} style={styles.headerIconBtn}>
                 <Ionicons name="remove" size={22} color="#007AFF" />
               </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={() => setFontSize((p) => clamp(p + 2, 12, 40))}
-                style={styles.headerIconBtn}
-              >
+              <TouchableOpacity onPress={() => setFontSize((p) => clamp(p + 2, 12, 40))} style={styles.headerIconBtn}>
                 <Ionicons name="add" size={22} color="#007AFF" />
               </TouchableOpacity>
             </View>
@@ -581,10 +620,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
               ref={listRef}
               data={versesState}
               keyExtractor={(item) => String(item.id)}
-              contentContainerStyle={[
-                styles.list,
-                { paddingBottom: 20 + Math.max(insets.bottom, 0) + 62 },
-              ]}
+              contentContainerStyle={[styles.list, { paddingBottom: 20 + Math.max(insets.bottom, 0) + 62 }]}
               showsVerticalScrollIndicator={false}
               renderItem={renderVerse}
               onScrollToIndexFailed={() => {
@@ -597,11 +633,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
 
       <View style={[styles.bottomWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         <View style={styles.bottomBar}>
-          <TouchableOpacity
-            style={[styles.navBtn, !canPrev && styles.navBtnDisabled]}
-            onPress={goPrev}
-            disabled={!canPrev}
-          >
+          <TouchableOpacity style={[styles.navBtn, !canPrev && styles.navBtnDisabled]} onPress={goPrev} disabled={!canPrev}>
             <Ionicons name="chevron-back" size={18} color={!canPrev ? '#bbb' : '#fff'} />
             <Text style={[styles.navText, !canPrev && styles.navTextDisabled]}> Anterior</Text>
           </TouchableOpacity>
@@ -610,11 +642,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
             {chapterNum} / {totalChapters || '—'}
           </Text>
 
-          <TouchableOpacity
-            style={[styles.navBtn, !canNext && styles.navBtnDisabled]}
-            onPress={goNext}
-            disabled={!canNext}
-          >
+          <TouchableOpacity style={[styles.navBtn, !canNext && styles.navBtnDisabled]} onPress={goNext} disabled={!canNext}>
             <Text style={[styles.navText, !canNext && styles.navTextDisabled]}>Próximo </Text>
             <Ionicons name="chevron-forward" size={18} color={!canNext ? '#bbb' : '#fff'} />
           </TouchableOpacity>
@@ -659,11 +687,14 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
           </View>
 
           <View style={{ paddingTop: 14 }}>
-            {(versions.length ? versions : [
-              { id: 'fallback-ara', code: 'ARA', name: 'ARA' },
-              { id: 'fallback-arc', code: 'ARC', name: 'ARC' },
-              { id: 'fallback-nvi', code: 'NVI', name: 'NVI' },
-            ]).map((v) => {
+            {(versions.length
+              ? versions
+              : [
+                  { id: 'fallback-ara', code: 'ARA', name: 'ARA' },
+                  { id: 'fallback-arc', code: 'ARC', name: 'ARC' },
+                  { id: 'fallback-nvi', code: 'NVI', name: 'NVI' },
+                ]
+            ).map((v) => {
               const active = v.code === versionCode;
               return (
                 <TouchableOpacity
