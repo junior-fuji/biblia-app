@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 // -----------------------------------------------------------------------------
 // 📚 MAPA DOS 66 LIVROS
 // -----------------------------------------------------------------------------
-const BOOK_MAP: { id: number; name: string; abbrev: string }[] = [
+const BOOK_MAP = [
   { id: 1, name: 'Gênesis', abbrev: 'Gn' },
   { id: 2, name: 'Êxodo', abbrev: 'Êx' },
   { id: 3, name: 'Levítico', abbrev: 'Lv' },
@@ -89,7 +89,17 @@ export default function ReadIndexScreen() {
     router.push(`/read/${bookId}?chapter=1`);
   }
 
-  const renderBook = ({ item }: { item: typeof BOOK_MAP[0] }) => {
+  const OLD_TESTAMENT = useMemo(
+    () => BOOK_MAP.filter((b) => b.id <= 39),
+    []
+  );
+
+  const NEW_TESTAMENT = useMemo(
+    () => BOOK_MAP.filter((b) => b.id >= 40),
+    []
+  );
+
+  function renderBook({ item }: { item: typeof BOOK_MAP[0] }) {
     return (
       <TouchableOpacity
         style={styles.bookCard}
@@ -97,24 +107,43 @@ export default function ReadIndexScreen() {
         activeOpacity={0.85}
       >
         <Text style={styles.bookAbbrev}>{item.abbrev}</Text>
-        <Text style={styles.bookName}>{item.name}</Text>
+        <Text style={styles.bookName} numberOfLines={1}>
+          {item.name}
+        </Text>
       </TouchableOpacity>
     );
-  };
+  }
+
+  function renderSection(title: string, data: typeof BOOK_MAP) {
+    return (
+      <>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <FlatList
+          data={data}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderBook}
+          numColumns={2}
+          scrollEnabled={false}
+        />
+      </>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Ionicons name="book" size={28} color="#007AFF" />
+        <Ionicons name="book" size={26} color="#007AFF" />
         <Text style={styles.title}>Bíblia Sagrada</Text>
       </View>
 
       <FlatList
-        data={BOOK_MAP}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderBook}
-        numColumns={2}
-        contentContainerStyle={styles.list}
+        data={[{ key: 'content' }]}
+        renderItem={() => (
+          <View style={styles.content}>
+            {renderSection('ANTIGO TESTAMENTO', OLD_TESTAMENT)}
+            {renderSection('NOVO TESTAMENTO', NEW_TESTAMENT)}
+          </View>
+        )}
         showsVerticalScrollIndicator={false}
       />
     </SafeAreaView>
@@ -123,24 +152,55 @@ export default function ReadIndexScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 20 },
-  title: { fontSize: 24, fontWeight: '800', color: '#111' },
-  list: { paddingHorizontal: 16, paddingBottom: 40 },
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#111',
+  },
+
+  content: {
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+  },
+
+  sectionTitle: {
+    marginTop: 20,
+    marginBottom: 12,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#8E8E93',
+    letterSpacing: 1,
+  },
 
   bookCard: {
     flex: 1,
-    backgroundColor: '#F2F4F7',
-    margin: 8,
-    borderRadius: 16,
-    paddingVertical: 20,
-    paddingHorizontal: 12,
+    backgroundColor: '#F4F6F8',
+    margin: 6,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bookAbbrev: { fontSize: 20, fontWeight: '900', color: '#007AFF' },
+
+  bookAbbrev: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#007AFF',
+  },
+
   bookName: {
-    fontSize: 14,
-    marginTop: 6,
+    fontSize: 13,
+    marginTop: 4,
     textAlign: 'center',
     fontWeight: '600',
     color: '#333',

@@ -11,6 +11,7 @@ import {
   View
 } from 'react-native';
 
+
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
@@ -124,7 +125,17 @@ export default function HomeScreen() {
             <Text style={styles.cardTitle}>Bíblia</Text>
             <Text style={styles.cardSub}>Leitura</Text>
           </TouchableOpacity>
-
+          <TouchableOpacity
+  style={styles.card}
+  onPress={() => router.push('/harpa')}
+  activeOpacity={0.85}
+>
+  <View style={[styles.cardIcon, { backgroundColor: '#E0F7FA' }]}>
+    <Ionicons name="musical-notes-outline" size={24} color="#0097A7" />
+  </View>
+  <Text style={styles.cardTitle}>Harpa</Text>
+  <Text style={styles.cardSub}>Hinos</Text>
+</TouchableOpacity>
           <TouchableOpacity style={styles.card} onPress={() => router.push('/studies')} activeOpacity={0.85}>
             <View style={[styles.cardIcon, { backgroundColor: '#E8F5E9' }]}>
               <Ionicons name="create-outline" size={24} color="#34C759" />

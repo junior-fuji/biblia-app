@@ -21,7 +21,7 @@ if (supabaseUrl && supabaseAnonKey) {
     },
   });
 }
-
+export * from '@/lib/supabaseClient';
 export function getSupabaseOrNull() {
   return _client;
 }

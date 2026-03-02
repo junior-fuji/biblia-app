@@ -1,69 +1,84 @@
-import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
-import React, { useEffect } from "react";
-import { invalidateBibleVersionsCache } from "../../src/features/bible/api/bibleVersions.cache"; // caminho relativo (sem @)
+import { invalidateBibleVersionsCache } from "@/src/features/bible/api/bibleVersions.cache";
+import { Ionicons } from '@expo/vector-icons';
+import { Tabs } from 'expo-router';
+import React, { useEffect } from 'react';
 
+useEffect(() => {
+  // TEMP: rode uma vez e depois você pode remover
+  invalidateBibleVersionsCache().catch(() => {});
+}, []);
 export default function TabLayout() {
-  useEffect(() => {
-    invalidateBibleVersionsCache().catch(() => {});
-  }, []);
-
   return (
-    <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: "#007AFF" }}>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: '#007AFF',
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
-          title: "Início",
-          tabBarLabel: "Início",
-          tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" color={color} size={size} />,
+          title: 'Início',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home-outline" color={color} size={size} />
+          ),
         }}
       />
 
       <Tabs.Screen
         name="diary"
         options={{
-          title: "Diário",
-          tabBarLabel: "Diário",
-          tabBarIcon: ({ color, size }) => <Ionicons name="book-outline" color={color} size={size} />,
+          title: 'Diário',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="book-outline" color={color} size={size} />
+          ),
         }}
       />
 
       <Tabs.Screen
         name="studies"
         options={{
-          title: "Estudos",
-          tabBarLabel: "Estudos",
-          tabBarIcon: ({ color, size }) => <Ionicons name="create-outline" color={color} size={size} />,
+          title: 'Estudos',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="create-outline" color={color} size={size} />
+          ),
         }}
       />
 
-      {/* ✅ Aqui é o certo */}
+      {/* ✅ Bíblia (lista de livros) */}
       <Tabs.Screen
-        name="read"
+  name="read"
+  options={{
+    title: "Bíblia",
+    tabBarLabel: "Bíblia",
+    tabBarIcon: ({ color, size }) => (
+      <Ionicons name="book-outline" color={color} size={size} />
+    ),
+  }}
+/>
+<Tabs.Screen name="dictionary" 
         options={{
-          title: "Bíblia",
-          tabBarLabel: "Bíblia",
-          tabBarIcon: ({ color, size }) => <Ionicons name="book-outline" color={color} size={size} />,
-        }}
-      />
-
-      <Tabs.Screen
-        name="dictionary"
-        options={{
-          title: "Dicionário",
-          tabBarLabel: "Dicionário",
-          tabBarIcon: ({ color, size }) => <Ionicons name="library-outline" color={color} size={size} />,
+          title: 'Dicionário',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="library-outline" color={color} size={size} />
+          ),
         }}
       />
 
       <Tabs.Screen
         name="plan"
         options={{
-          title: "Plano",
-          tabBarLabel: "Plano",
-          tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" color={color} size={size} />,
+          title: 'Plano',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar-outline" color={color} size={size} />
+          ),
         }}
       />
+
+      {/* ✅ esconder telas internas do tab bar */}
+      
+      <Tabs.Screen name="read/[book]/index" options={{ href: null }} />
+      {/* se você tiver também read/[book]/[chapter] etc, esconda aqui */}
     </Tabs>
   );
 }

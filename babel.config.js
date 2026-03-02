@@ -3,13 +3,13 @@ module.exports = function (api) {
   return {
     presets: ["babel-preset-expo"],
     plugins: [
+      require.resolve("expo-router/babel"),
       [
         "module-resolver",
         {
-          root: ["."],
-          alias: {
-            "@": ".",
-          },
+          root: ["./"],
+          alias: { "@": "./" },
+          extensions: [".ts", ".tsx", ".js", ".jsx", ".json"],
         },
       ],
     ],

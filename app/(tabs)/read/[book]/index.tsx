@@ -213,8 +213,8 @@ export default function ReadBookScreen() {
     : { name: 'Livro', abbrev: '' };
   const safeBookName = bookData.name || 'Livro';
 
-  // versão selecionada
-  const [versionCode, setVersionCode] = useState<'ARA' | 'ARC' | 'NVI'>('ARA');
+  // ✅ deixe isso como string (para aceitar ARA/ARC/ACF/NVI/KJA sem quebrar)
+  const [versionCode, setVersionCode] = useState<string>('ARA');
   const [versions, setVersions] = useState<VersionRow[]>([]);
   const [showVersions, setShowVersions] = useState(false);
 
@@ -247,15 +247,22 @@ export default function ReadBookScreen() {
         const list = await fetchVersions();
         if (!alive) return;
         setVersions(list);
+
+        // se a versão atual não existir no banco, pega a primeira
         if (list.length > 0 && !list.some((v) => v.code === versionCode)) {
-          setVersionCode(list[0].code as any);
+          setVersionCode(list[0].code);
         }
-      } catch {
+      } catch (e) {
+        console.log('FETCH_VERSIONS_ERROR', e);
         if (!alive) return;
+
+        // fallback local (não depende de banco)
         setVersions([
           { id: 'fallback-ara', code: 'ARA', name: 'ARA' },
           { id: 'fallback-arc', code: 'ARC', name: 'ARC' },
+          { id: 'fallback-acf', code: 'ACF', name: 'ACF' },
           { id: 'fallback-nvi', code: 'NVI', name: 'NVI' },
+          { id: 'fallback-kja', code: 'KJA', name: 'KJA' },
         ]);
       }
     })();
@@ -277,7 +284,7 @@ export default function ReadBookScreen() {
           if (!alive) return;
           setTotalChapters(0);
           setVersesState([]);
-          setLoadError('Bíblia indisponível no momento (Supabase não configurado neste build).');
+          setLoadError('Bíblia indisponível (Supabase não configurado neste build).');
           setLoading(false);
           return;
         }
@@ -301,7 +308,8 @@ export default function ReadBookScreen() {
         } else {
           setTotalChapters(0);
         }
-      } catch {
+      } catch (e) {
+        console.log('LOAD_TOTAL_ERROR', e);
         if (!alive) return;
         setTotalChapters(0);
       }
@@ -334,7 +342,7 @@ export default function ReadBookScreen() {
           if (!alive) return;
           setTotalChapters(0);
           setVersesState([]);
-          setLoadError('Bíblia indisponível no momento (Supabase não configurado neste build).');
+          setLoadError('Bíblia indisponível (Supabase não configurado neste build).');
           setLoading(false);
           return;
         }
@@ -352,13 +360,15 @@ export default function ReadBookScreen() {
         if (!alive) return;
 
         if (error) {
+          console.log('LOAD_VERSES_ERROR', error);
           setVersesState([]);
           setLoadError('Não foi possível carregar o capítulo. Verifique sua conexão e tente novamente.');
         } else {
           setVersesState((data as Verse[]) ?? []);
           setLoadError(null);
         }
-      } catch {
+      } catch (e) {
+        console.log('LOAD_VERSES_FATAL', e);
         if (!alive) return;
         setVersesState([]);
         setLoadError('Não foi possível carregar o capítulo. Verifique sua conexão e tente novamente.');
@@ -470,39 +480,57 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
 
     setSaving(true);
     try {
-      const contentToSave = analysisData ? JSON.stringify(analysisData) : rawAi;
-
       const sb = getSupabaseOrNull();
       if (!sb) {
         Alert.alert('Supabase', 'Supabase não configurado neste build.');
         return;
       }
 
-      const {
-        data: { user },
-        error: userErr,
-      } = await sb.auth.getUser();
-      if (userErr) throw userErr;
+      // ✅ usar getSession é mais confiável no RN
+      const { data: sessionData, error: sessionErr } = await sb.auth.getSession();
+      if (sessionErr) {
+        console.log('AUTH_GET_SESSION_ERROR', sessionErr);
+        throw sessionErr;
+      }
+
+      const user = sessionData.session?.user;
 
       if (!user) {
-        Alert.alert('Login necessário', 'Faça login para salvar.');
+        Alert.alert('Login necessário', 'Faça login para salvar.', [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Ir para login',
+            onPress: () => router.push('/(auth)/login' as any),
+          },
+        ]);
         return;
       }
 
-      const { error } = await sb.from('saved_notes').insert({
+      const contentToSave = analysisData ? JSON.stringify(analysisData) : rawAi;
+
+      const payload = {
         user_id: user.id,
         title: aiTitle || 'Análise',
         reference: saveReference || '',
         content: contentToSave,
-      });
+      };
+
+      const { data, error } = await sb
+        .from('saved_notes')
+        .insert(payload)
+        .select('id')
+        .single();
 
       if (error) {
-        Alert.alert('Erro ao salvar', error.message);
+        console.log('SAVE_NOTE_ERROR', error);
+        Alert.alert('Erro ao salvar', `${error.message}\n(code: ${(error as any).code ?? '-'})`);
         return;
       }
 
+      console.log('SAVED_NOTE_ID', data?.id);
       Alert.alert('Salvo', 'Análise salva em Meus Estudos.');
     } catch (e: any) {
+      console.log('HANDLE_SAVE_AI_FATAL', e);
       Alert.alert('Erro ao salvar', e?.message || 'Falha inesperada.');
     } finally {
       setSaving(false);
@@ -547,7 +575,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
     [analyzeVerse, fontSize]
   );
 
-  // ✅ agora o "Livro não informado" fica DEPOIS de todos os hooks (lint ok)
+  // ✅ retorno condicional DEPOIS de todos os hooks
   if (!isValidBook) {
     return (
       <SafeAreaView style={styles.centerSafe} edges={['top', 'bottom']}>
@@ -692,7 +720,9 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
               : [
                   { id: 'fallback-ara', code: 'ARA', name: 'ARA' },
                   { id: 'fallback-arc', code: 'ARC', name: 'ARC' },
+                  { id: 'fallback-acf', code: 'ACF', name: 'ACF' },
                   { id: 'fallback-nvi', code: 'NVI', name: 'NVI' },
+                  { id: 'fallback-kja', code: 'KJA', name: 'KJA' },
                 ]
             ).map((v) => {
               const active = v.code === versionCode;
@@ -704,7 +734,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
                     active ? { backgroundColor: '#007AFF' } : null,
                   ]}
                   onPress={() => {
-                    setVersionCode(v.code as any);
+                    setVersionCode(v.code);
                     setShowVersions(false);
                   }}
                 >
