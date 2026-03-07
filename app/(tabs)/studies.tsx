@@ -91,9 +91,8 @@ function toLocalId(studyId: number) {
   return String(studyId);
 }
 
-function generateLocalStudyId(existing: Study[]) {
-  const maxId = existing.reduce((acc, s) => Math.max(acc, Number(s.id) || 0), 0);
-  return maxId + 1;
+function generateLocalStudyId() {
+  return Date.now();
 }
 
 async function getLocalStudies(): Promise<Study[]> {
@@ -125,28 +124,24 @@ export default function StudiesScreen() {
   const [modalVisible, setModalVisible] = useState(false);
 
   const [isEditing, setIsEditing] = useState(false);
+
   function normalizeId(v: any): number {
-    // id bigint pode vir como number ou string
     const n = typeof v === 'number' ? v : Number(String(v));
     return Number.isFinite(n) ? n : Date.now();
   }
-  
+
   function normalizeCreatedAt(v: any): string {
     if (!v) return new Date().toISOString();
-  
+
     const s = String(v).trim();
-  
-    // Formato vindo do Supabase no SQL editor:
-    // "2026-01-27 15:44:08.115015+00"
-    // Converte para ISO:
-    // "2026-01-27T15:44:08.115015Z"
     const isoish = s.includes(' ') ? s.replace(' ', 'T') : s;
     const z = isoish.endsWith('+00') ? isoish.replace(/\+00$/, 'Z') : isoish;
-  
+
     const d = new Date(z);
     if (Number.isNaN(d.getTime())) return new Date().toISOString();
     return d.toISOString();
   }
+
   async function importJsonToLocal() {
     try {
       const raw = importText.trim();
@@ -154,46 +149,42 @@ export default function StudiesScreen() {
         Alert.alert('Importar', 'Cole o JSON exportado do Supabase.');
         return;
       }
-  
+
       const parsed = JSON.parse(raw);
-  
+
       if (!Array.isArray(parsed)) {
         Alert.alert('Importar', 'O JSON precisa ser um array de registros.');
         return;
       }
-  
-      // Converte para o formato local esperado
+
       const imported: Study[] = parsed.map((r: any) => ({
         id: normalizeId(r.id),
         title: String(r.title ?? 'Sem Título'),
         reference: r.reference != null ? String(r.reference) : null,
         content: r.content != null ? String(r.content) : '',
-        // seu app usa só content + title + reference; campos legados ficam null
         observation: null,
         application: null,
         prayer: null,
         created_at: normalizeCreatedAt(r.created_at),
-
       }));
-  
-      // Ordena por data desc (igual você faz no fetch)
+
       imported.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  
+
       await saveLocalStudies(imported);
       setStudies(imported);
-  
+
       setImportVisible(false);
       setImportText('');
-  
+
       Alert.alert('Importado', `Foram importados ${imported.length} estudos para o modo local.`);
     } catch (e: any) {
       console.error('Import error:', e);
       Alert.alert('Erro', e?.message || 'Falha ao importar JSON.');
     }
   }
-  
-  // teclado
+
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+
   useEffect(() => {
     const show = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
@@ -203,25 +194,23 @@ export default function StudiesScreen() {
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => setKeyboardHeight(0)
     );
+
     return () => {
       show.remove();
       hide.remove();
     };
   }, []);
 
-  // campos editáveis
   const [editTheme, setEditTheme] = useState('');
   const [editHistory, setEditHistory] = useState('');
   const [editExegesis, setEditExegesis] = useState('');
   const [editTheology, setEditTheology] = useState('');
   const [editApplication, setEditApplication] = useState('');
 
-  // preservar formato original ao salvar
   const [parsedKind, setParsedKind] = useState<ParsedKind>('plain');
   const [parsedEnvelope, setParsedEnvelope] = useState<Envelope | null>(null);
   const [parsedOld, setParsedOld] = useState<OldJson | null>(null);
 
-  // ref estruturada para “abrir na Bíblia”
   const [openRef, setOpenRef] = useState<{
     book_id: number;
     chapter: number;
@@ -238,7 +227,11 @@ export default function StudiesScreen() {
         const tb = new Date(b.created_at).getTime();
         return tb - ta;
       });
-      setStudies(sorted);
+
+      setStudies((prev) => {
+        if (JSON.stringify(prev) === JSON.stringify(sorted)) return prev;
+        return sorted;
+      });
     } catch (e) {
       console.error('Erro ao buscar local:', e);
     } finally {
@@ -309,7 +302,6 @@ export default function StudiesScreen() {
       exegesis = study.content || '';
     }
 
-    // concatena colunas antigas (se existirem)
     if (study.observation) {
       exegesis = exegesis ? `${exegesis}\n\n[Obs]: ${study.observation}` : study.observation;
     }
@@ -331,6 +323,7 @@ export default function StudiesScreen() {
 
   const handleOpenBible = () => {
     if (!openRef) return;
+
     router.push({
       pathname: '/read/[book]',
       params: {
@@ -338,6 +331,7 @@ export default function StudiesScreen() {
         chapter: String(openRef.chapter),
       },
     });
+
     setModalVisible(false);
   };
 
@@ -370,7 +364,6 @@ export default function StudiesScreen() {
             const updated = local.filter((s) => toLocalId(s.id) !== toLocalId(selectedStudy.id));
             await saveLocalStudies(updated);
 
-            // update otimista
             setStudies((prev) => prev.filter((s) => s.id !== selectedStudy.id));
             setModalVisible(false);
             setSelectedStudy(null);
@@ -430,9 +423,9 @@ export default function StudiesScreen() {
             }
           : s
       );
+
       await saveLocalStudies(updated);
 
-      // update otimista
       const nextSelected: Study = { ...selectedStudy, title: editTheme, content: newContent };
       setSelectedStudy(nextSelected);
 
@@ -459,10 +452,9 @@ export default function StudiesScreen() {
     }
   };
 
-  /** Criar um estudo local "vazio" */
   const createLocalBlankStudy = async () => {
     const local = await getLocalStudies();
-    const nextId = generateLocalStudyId(local);
+    const nextId = generateLocalStudyId();
     const now = new Date().toISOString();
 
     const blank: Study = {
@@ -479,27 +471,20 @@ export default function StudiesScreen() {
     const updated = [blank, ...local];
     await saveLocalStudies(updated);
 
-    // update otimista
     setStudies((prev) => [blank, ...prev]);
   };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* HEADER */}
       <View style={styles.header}>
-      <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-  <TouchableOpacity
-    onPress={() => setImportVisible(true)}
-    style={{ width: 24, alignItems: 'flex-end' }}
-  >
-    <Ionicons name="download-outline" size={24} color="#000" />
-  </TouchableOpacity>
-
-  <TouchableOpacity onPress={createLocalBlankStudy} style={{ width: 24, alignItems: 'flex-end' }}>
-    <Ionicons name="add" size={24} color="#000" />
-  </TouchableOpacity>
-</View>
-
+        <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+          <TouchableOpacity
+            onPress={() => setImportVisible(true)}
+            style={{ width: 24, alignItems: 'flex-end' }}
+          >
+            <Ionicons name="download-outline" size={24} color="#000" />
+          </TouchableOpacity>
+        </View>
 
         <Text style={styles.headerTitle}>Meus Estudos</Text>
 
@@ -508,7 +493,6 @@ export default function StudiesScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* LISTA */}
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#AF52DE" />
@@ -516,7 +500,7 @@ export default function StudiesScreen() {
       ) : (
         <FlatList
           data={studies}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item) => String(item.id)}
           contentContainerStyle={{ padding: 20 }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
@@ -541,7 +525,6 @@ export default function StudiesScreen() {
         />
       )}
 
-      {/* MODAL */}
       <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -581,51 +564,7 @@ export default function StudiesScreen() {
                   </>
                 )}
               </View>
-              <Modal visible={importVisible} animationType="slide" onRequestClose={() => setImportVisible(false)}>
-  <KeyboardAvoidingView
-    style={{ flex: 1, backgroundColor: '#fff' }}
-    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-  >
-    <View style={{ paddingTop: Platform.OS === 'ios' ? 40 : 0 }}>
-      <View style={styles.modalHeader}>
-        <TouchableOpacity onPress={() => setImportVisible(false)}>
-          <Text style={styles.closeText}>Fechar</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={importJsonToLocal}>
-          <Text style={styles.saveText}>Importar</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={{ padding: 16 }}>
-        <Text style={{ fontWeight: '700', marginBottom: 10 }}>
-          Cole aqui o JSON exportado do Supabase
-        </Text>
-
-        <TextInput
-          value={importText}
-          onChangeText={setImportText}
-          placeholder='Ex.: [{"id":1,"created_at":"...","title":"...","reference":"...","content":"..."}]'
-          multiline
-          textAlignVertical="top"
-          style={[
-            styles.inputInline,
-            { minHeight: 260, fontSize: 13, lineHeight: 18, fontFamily: Platform.OS === 'ios' ? 'Menlo' : undefined },
-          ]}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-
-        <Text style={{ color: '#666', marginTop: 10, fontSize: 12, lineHeight: 18 }}>
-          Dica: no Supabase, exporte as colunas id, created_at, title, reference, content.  
-          O campo content pode conter JSON (Envelope/OldJson) e será preservado.
-        </Text>
-      </View>
-    </View>
-  </KeyboardAvoidingView>
-</Modal>
-</View>
+            </View>
 
             <ScrollView
               keyboardShouldPersistTaps="handled"
@@ -728,12 +667,63 @@ export default function StudiesScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal visible={importVisible} animationType="slide" onRequestClose={() => setImportVisible(false)}>
+        <KeyboardAvoidingView
+          style={{ flex: 1, backgroundColor: '#fff' }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        >
+          <View style={{ paddingTop: Platform.OS === 'ios' ? 40 : 0 }}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => setImportVisible(false)}>
+                <Text style={styles.closeText}>Fechar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={importJsonToLocal}>
+                <Text style={styles.saveText}>Importar</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ padding: 16 }}>
+              <Text style={{ fontWeight: '700', marginBottom: 10 }}>
+                Cole aqui o JSON exportado do Supabase
+              </Text>
+
+              <TextInput
+                value={importText}
+                onChangeText={setImportText}
+                placeholder='Ex.: [{"id":1,"created_at":"...","title":"...","reference":"...","content":"..."}]'
+                multiline
+                textAlignVertical="top"
+                style={[
+                  styles.inputInline,
+                  {
+                    minHeight: 260,
+                    fontSize: 13,
+                    lineHeight: 18,
+                    fontFamily: Platform.OS === 'ios' ? 'Menlo' : undefined,
+                  },
+                ]}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              <Text style={{ color: '#666', marginTop: 10, fontSize: 12, lineHeight: 18 }}>
+                Dica: no Supabase, exporte as colunas id, created_at, title, reference, content.
+                O campo content pode conter JSON (Envelope/OldJson) e será preservado.
+              </Text>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F2F7' },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -743,9 +733,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: '#eee',
   },
+
   backBtn: { padding: 5 },
   headerTitle: { fontSize: 18, fontWeight: '700' },
+
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
   emptyContainer: { alignItems: 'center', marginTop: 100, padding: 20 },
   emptyText: { fontSize: 18, fontWeight: 'bold', color: '#666', marginTop: 10 },
 
@@ -761,6 +754,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 1,
   },
+
   cardIcon: {
     width: 40,
     height: 40,
@@ -770,10 +764,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 15,
   },
+
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#333' },
   cardDate: { fontSize: 12, color: '#888' },
 
   modalContainer: { flex: 1, backgroundColor: '#fff' },
+
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -782,10 +778,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: '#eee',
   },
+
   closeText: { fontSize: 17, color: '#007AFF' },
   saveText: { fontSize: 17, fontWeight: 'bold', color: '#007AFF' },
+
   modalActions: { flexDirection: 'row', gap: 20 },
   actionIcon: { padding: 5 },
+
   modalContent: { padding: 20 },
 
   section: {
@@ -799,6 +798,7 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 2,
   },
+
   sectionHeader: {
     fontSize: 11,
     fontWeight: '900',
@@ -806,6 +806,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     letterSpacing: 1,
   },
+
   viewBody: { fontSize: 16, lineHeight: 26, color: '#333', textAlign: 'justify' },
 
   inputInline: {

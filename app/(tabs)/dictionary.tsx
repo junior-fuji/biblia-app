@@ -1,5 +1,5 @@
 import { fetchAIAnalysis } from '@/lib/openai';
-import { getSupabaseOrNull } from '@/lib/supabaseClient';
+import { upsertNoteHybrid } from '@/lib/studiesStorage';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
@@ -49,7 +49,8 @@ function renderBullets(items: any[], getLine: (it: any) => string) {
     <View style={{ gap: 10 }}>
       {lines.map((line, idx) => (
         <Text key={idx} style={styles.body}>
-          {'• '}{line}
+          {'• '}
+          {line}
         </Text>
       ))}
     </View>
@@ -110,32 +111,27 @@ export default function DictionaryScreen() {
     }
   };
 
+  // ✅ OFFLINE-FIRST: salva sempre (local), e se logado sincroniza (cloud)
   const handleSave = async () => {
     if (!result) return;
 
-    const sb = getSupabaseOrNull();
-    if (!sb) {
-      Alert.alert('Supabase', 'Supabase não configurado neste build.');
-      return;
-    }
-
     try {
-      const { data: { user } } = await sb.auth.getUser();
-      if (!user) {
-        Alert.alert('Login necessário', 'Faça login para salvar no Meus Estudos.');
-        return;
-      }
+      const payloadContent = JSON.stringify(result);
 
-      const { error } = await sb.from('saved_notes').insert({
-        user_id: user.id,                 // ✅ multiusuário
+      const { mode } = await upsertNoteHybrid({
+        id: '',
         title: `Dicionário: ${termTitle}`,
-        reference: `Termo Bíblico — ${termTitle}`, // ✅ nunca null
-        content: JSON.stringify(result),
+        reference: `Termo Bíblico — ${termTitle}`,
+        content: payloadContent,
+        created_at: new Date().toISOString(),
       });
 
-      if (error) throw error;
-
-      Alert.alert('Salvo!', "Verbete salvo em 'Meus Estudos'.");
+      Alert.alert(
+        'Salvo!',
+        mode === 'cloud'
+          ? "Verbete salvo e sincronizado em 'Meus Estudos'."
+          : "Verbete salvo no dispositivo (modo offline)."
+      );
     } catch (e: any) {
       Alert.alert('Erro', e?.message || 'Não foi possível salvar.');
     }
@@ -193,7 +189,11 @@ export default function DictionaryScreen() {
           autoCorrect={false}
         />
         <TouchableOpacity style={styles.searchBtn} onPress={handleSearch} disabled={loading}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="search" size={20} color="#fff" />}
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Ionicons name="search" size={20} color="#fff" />
+          )}
         </TouchableOpacity>
       </View>
 

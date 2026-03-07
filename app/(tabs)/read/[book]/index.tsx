@@ -1,3 +1,6 @@
+import { cacheChapter, getCachedChapter } from '@/lib/bibleCache';
+import { getDefaultBibleVersion } from '@/lib/deviceLanguage';
+import { upsertNoteHybrid } from '@/lib/studiesStorage';
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -131,7 +134,7 @@ function extractJsonObject(text: string): string | null {
 }
 
 /* =========================
-   CACHE (em memória)
+   CACHE versions (memória)
 ========================= */
 let versionsCache: VersionRow[] | null = null;
 let versionIdByCode: Map<string, string> | null = null;
@@ -211,10 +214,10 @@ export default function ReadBookScreen() {
   const bookData = isValidBook
     ? BOOK_MAP[bookId] ?? { name: 'Livro', abbrev: '' }
     : { name: 'Livro', abbrev: '' };
+
   const safeBookName = bookData.name || 'Livro';
 
-  // ✅ deixe isso como string (para aceitar ARA/ARC/ACF/NVI/KJA sem quebrar)
-  const [versionCode, setVersionCode] = useState<string>('ARA');
+  const [versionCode, setVersionCode] = useState(getDefaultBibleVersion());
   const [versions, setVersions] = useState<VersionRow[]>([]);
   const [showVersions, setShowVersions] = useState(false);
 
@@ -248,7 +251,6 @@ export default function ReadBookScreen() {
         if (!alive) return;
         setVersions(list);
 
-        // se a versão atual não existir no banco, pega a primeira
         if (list.length > 0 && !list.some((v) => v.code === versionCode)) {
           setVersionCode(list[0].code);
         }
@@ -256,7 +258,6 @@ export default function ReadBookScreen() {
         console.log('FETCH_VERSIONS_ERROR', e);
         if (!alive) return;
 
-        // fallback local (não depende de banco)
         setVersions([
           { id: 'fallback-ara', code: 'ARA', name: 'ARA' },
           { id: 'fallback-arc', code: 'ARC', name: 'ARC' },
@@ -272,6 +273,7 @@ export default function ReadBookScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // total capítulos
   useEffect(() => {
     let alive = true;
 
@@ -321,6 +323,7 @@ export default function ReadBookScreen() {
     };
   }, [isValidBook, bookId, versionCode]);
 
+  // capítulos/versos (com cache)
   useEffect(() => {
     let alive = true;
 
@@ -336,11 +339,25 @@ export default function ReadBookScreen() {
         return;
       }
 
+      // ✅ 1) tenta cache primeiro (offline)
+      try {
+        const cached = await getCachedChapter(versionCode, bookId, chapterNum);
+        if (!alive) return;
+
+        if (cached && cached.length > 0) {
+          setVersesState(cached as Verse[]);
+          setLoading(false);
+          return;
+        }
+      } catch {
+        // cache é opcional; se falhar segue normal
+      }
+
+      // ✅ 2) se não tem cache, busca do Supabase
       try {
         const sb = getSupabaseOrNull();
         if (!sb) {
           if (!alive) return;
-          setTotalChapters(0);
           setVersesState([]);
           setLoadError('Bíblia indisponível (Supabase não configurado neste build).');
           setLoading(false);
@@ -364,8 +381,19 @@ export default function ReadBookScreen() {
           setVersesState([]);
           setLoadError('Não foi possível carregar o capítulo. Verifique sua conexão e tente novamente.');
         } else {
-          setVersesState((data as Verse[]) ?? []);
+          const next = ((data ?? []) as Verse[]).map((v) => ({
+            id: Number(v.id),
+            verse: Number(v.verse),
+            text: String(v.text ?? ''),
+          }));
+
+          setVersesState(next);
           setLoadError(null);
+
+          // ✅ 3) salva no cache offline
+          try {
+            await cacheChapter(versionCode, bookId, chapterNum, next);
+          } catch {}
         }
       } catch (e) {
         console.log('LOAD_VERSES_FATAL', e);
@@ -475,60 +503,28 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
     [safeBookName, chapterNum, versionCode]
   );
 
+  // ✅ OFFLINE-FIRST: salva SEM pedir login (local), e se logado sincroniza (cloud)
   async function handleSaveAI() {
     if (!analysisData && !rawAi) return;
 
     setSaving(true);
     try {
-      const sb = getSupabaseOrNull();
-      if (!sb) {
-        Alert.alert('Supabase', 'Supabase não configurado neste build.');
-        return;
-      }
-
-      // ✅ usar getSession é mais confiável no RN
-      const { data: sessionData, error: sessionErr } = await sb.auth.getSession();
-      if (sessionErr) {
-        console.log('AUTH_GET_SESSION_ERROR', sessionErr);
-        throw sessionErr;
-      }
-
-      const user = sessionData.session?.user;
-
-      if (!user) {
-        Alert.alert('Login necessário', 'Faça login para salvar.', [
-          { text: 'Cancelar', style: 'cancel' },
-          {
-            text: 'Ir para login',
-            onPress: () => router.push('/(auth)/login' as any),
-          },
-        ]);
-        return;
-      }
-
       const contentToSave = analysisData ? JSON.stringify(analysisData) : rawAi;
 
-      const payload = {
-        user_id: user.id,
+      const { mode } = await upsertNoteHybrid({
+        id: Date.now().toString(),
         title: aiTitle || 'Análise',
         reference: saveReference || '',
         content: contentToSave,
-      };
+        created_at: new Date().toISOString(),
+      });
 
-      const { data, error } = await sb
-        .from('saved_notes')
-        .insert(payload)
-        .select('id')
-        .single();
-
-      if (error) {
-        console.log('SAVE_NOTE_ERROR', error);
-        Alert.alert('Erro ao salvar', `${error.message}\n(code: ${(error as any).code ?? '-'})`);
-        return;
-      }
-
-      console.log('SAVED_NOTE_ID', data?.id);
-      Alert.alert('Salvo', 'Análise salva em Meus Estudos.');
+      Alert.alert(
+        'Salvo',
+        mode === 'cloud'
+          ? 'Análise salva e sincronizada em Meus Estudos.'
+          : 'Análise salva no dispositivo (offline).'
+      );
     } catch (e: any) {
       console.log('HANDLE_SAVE_AI_FATAL', e);
       Alert.alert('Erro ao salvar', e?.message || 'Falha inesperada.');
@@ -565,9 +561,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
     ({ item }: { item: Verse }) => (
       <TouchableOpacity activeOpacity={0.9} onLongPress={() => analyzeVerse(item)}>
         <Text style={[styles.verse, { fontSize, lineHeight: Math.round(fontSize * 1.6) }]}>
-          <Text style={[styles.verseNumber, { fontSize: Math.round(fontSize * 0.75) }]}>
-            {item.verse}{' '}
-          </Text>
+          <Text style={[styles.verseNumber, { fontSize: Math.round(fontSize * 0.75) }]}>{item.verse} </Text>
           {item.text}
         </Text>
       </TouchableOpacity>

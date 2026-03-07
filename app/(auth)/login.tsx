@@ -6,31 +6,28 @@ import { Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function Login() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { session, loading } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   useEffect(() => {
     // Se já estiver logado, vai direto pras tabs
-    if (!loading && user) {
+    if (!loading && session?.user) {
       router.replace('/(tabs)');
     }
-  }, [user, loading]);
+  }, [session, loading, router]);
 
   async function signIn() {
     try {
       const sb = getSupabaseOrThrow();
-
       const { error } = await sb.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
-
       if (error) throw error;
 
-      // NÃO precisa navegar aqui
-      // AuthProvider vai detectar e o useEffect acima redireciona
+      // Não navega aqui — o useEffect acima redireciona
     } catch (e: any) {
       Alert.alert('Login', e?.message || 'Erro ao entrar');
     }
@@ -43,10 +40,9 @@ export default function Login() {
         email: email.trim(),
         password,
       });
-
       if (error) throw error;
 
-      Alert.alert('Cadastro', 'Conta criada. Verifique seu e-mail.');
+      Alert.alert('Cadastro', 'Conta criada. Se necessário, verifique seu e-mail.');
     } catch (e: any) {
       Alert.alert('Cadastro', e?.message || 'Erro ao cadastrar');
     }
@@ -89,6 +85,7 @@ export default function Login() {
           borderRadius: 12,
           borderWidth: 1,
           borderColor: '#ddd',
+          backgroundColor: '#fff',
         }}
       >
         <Text style={{ fontWeight: '800', textAlign: 'center' }}>

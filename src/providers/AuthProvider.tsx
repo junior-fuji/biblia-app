@@ -1,9 +1,11 @@
 'use client';
 
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
+import { syncLocalNotesToCloud } from '@/lib/syncNotes';
+import { processSyncQueue } from '@/lib/syncQueue';
+import { syncLocalStudies } from '@/lib/syncStudies';
 import { Session } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-
 type AuthContextType = {
   session: Session | null;
   loading: boolean;
@@ -23,7 +25,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const sb = getSupabaseOrNull();
     if (!sb) {
-      // Sem ENV do Supabase: modo público/local
       if (mounted) {
         setSession(null);
         setLoading(false);
@@ -33,16 +34,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
     }
 
-    sb.auth.getSession().then(({ data }) => {
+    async function syncAll() {
+      try {
+        await syncLocalNotesToCloud();
+        await syncLocalStudies();
+        await processSyncQueue();console.log('Sincronização completa.');
+      } catch (err) {
+        console.log('Erro na sincronização.');
+      }
+    }
+
+    // 🔹 1. Sessão inicial
+    sb.auth.getSession().then(async ({ data }) => {
       if (!mounted) return;
+
       setSession(data.session ?? null);
       setLoading(false);
+
+      if (data.session?.user) {
+        await syncAll();
+      }
     });
 
-    const { data: listener } = sb.auth.onAuthStateChange((_event, nextSession) => {
-      if (!mounted) return;
-      setSession(nextSession ?? null);
-    });
+    // 🔹 2. Listener de login/logout
+    const { data: listener } = sb.auth.onAuthStateChange(
+      async (_event, nextSession) => {
+        if (!mounted) return;
+
+        setSession(nextSession ?? null);
+
+        // 🔥 sincroniza quando loga
+        if (nextSession?.user) {
+          await syncAll();
+        }
+      }
+    );
 
     return () => {
       mounted = false;
