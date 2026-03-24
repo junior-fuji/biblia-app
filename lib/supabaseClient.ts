@@ -18,6 +18,8 @@ if (supabaseUrl && supabaseAnonKey) {
       autoRefreshToken: true,
       detectSessionInUrl: false,
       storage: Platform.OS === 'web' ? undefined : AsyncStorage, // <-- AQUI
+      flowType: 'pkce',
+      debug: true,
     },
   });
 }

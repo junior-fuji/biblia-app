@@ -14,8 +14,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Importar só as que estão 0
 const versions = [
-  { code: 'ACF', file: './ACF.json' },
-  { code: 'KJA', file: './KJA.json' },
+  { code: 'ARC', file: './ARC.json' },
+  { code: 'NVI', file: './NVI.json' },
 ];
 
 async function getVersionId(code) {
@@ -29,7 +29,7 @@ async function getVersionId(code) {
     console.error(`❌ Não achei bible_versions.code='${code}':`, error.message);
     return null;
   }
-  return data.id; // UUID
+  return data.id;
 }
 
 async function upsertBatch(rows) {

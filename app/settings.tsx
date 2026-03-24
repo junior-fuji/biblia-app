@@ -9,7 +9,7 @@ import {
   Switch,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -66,15 +66,12 @@ function OptionRow({
 export default function SettingsScreen() {
   const router = useRouter();
 
-  // Estados locais (mock / UI)
   const [darkMode, setDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(true);
 
-  // Modais simples
   const [versionModal, setVersionModal] = useState(false);
   const [fontModal, setFontModal] = useState(false);
 
-  // Mock de versão e fonte (você vai ligar no global store depois)
   const versions = useMemo(() => ['NVI', 'ARA', 'ACF', 'ARC', 'KJA'], []);
   const [bibleVersion, setBibleVersion] = useState('NVI');
 
@@ -99,7 +96,6 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={28} color="#007AFF" />
@@ -112,7 +108,6 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* PERFIL (mock) */}
         <View style={styles.profileSection}>
           <View style={styles.avatarPlaceholder}>
             <Ionicons name="person" size={40} color="#fff" />
@@ -124,14 +119,16 @@ export default function SettingsScreen() {
           <TouchableOpacity
             style={styles.editProfileBtn}
             onPress={() =>
-              Alert.alert('Em breve', 'Quando o login voltar, você edita seu perfil aqui.')
+              Alert.alert(
+                'Perfil',
+                'Quando o login estiver funcionando novamente, você poderá editar seu perfil aqui.'
+              )
             }
           >
             <Text style={styles.editProfileText}>Editar Perfil</Text>
           </TouchableOpacity>
         </View>
 
-        {/* GERAL */}
         <Text style={styles.sectionTitle}>GERAL</Text>
         <View style={styles.section}>
           <OptionRow
@@ -151,7 +148,6 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* CONTEÚDO */}
         <Text style={styles.sectionTitle}>CONTEÚDO</Text>
         <View style={styles.section}>
           <OptionRow
@@ -178,7 +174,6 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* CONTA */}
         <Text style={styles.sectionTitle}>CONTA</Text>
         <View style={styles.section}>
           <OptionRow
@@ -200,7 +195,6 @@ export default function SettingsScreen() {
         <Text style={styles.version}>Versão 1.0.0 (Beta)</Text>
       </ScrollView>
 
-      {/* MODAL: Versão */}
       <Modal visible={versionModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -231,7 +225,6 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* MODAL: Fonte */}
       <Modal visible={fontModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>

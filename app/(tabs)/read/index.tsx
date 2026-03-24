@@ -10,10 +10,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// -----------------------------------------------------------------------------
-// 📚 MAPA DOS 66 LIVROS
-// -----------------------------------------------------------------------------
-const BOOK_MAP = [
+type BookItem = {
+  id: number;
+  name: string;
+  abbrev: string;
+};
+
+const BOOK_MAP: BookItem[] = [
   { id: 1, name: 'Gênesis', abbrev: 'Gn' },
   { id: 2, name: 'Êxodo', abbrev: 'Êx' },
   { id: 3, name: 'Levítico', abbrev: 'Lv' },
@@ -85,10 +88,6 @@ const BOOK_MAP = [
 export default function ReadIndexScreen() {
   const router = useRouter();
 
-  function openBook(bookId: number) {
-    router.push(`/read/${bookId}?chapter=1`);
-  }
-
   const OLD_TESTAMENT = useMemo(
     () => BOOK_MAP.filter((b) => b.id <= 39),
     []
@@ -99,7 +98,11 @@ export default function ReadIndexScreen() {
     []
   );
 
-  function renderBook({ item }: { item: typeof BOOK_MAP[0] }) {
+  function openBook(bookId: number) {
+    router.push(`/read/${bookId}?chapter=1&returnTo=/(tabs)/read` as any);
+  }
+
+  function renderBook({ item }: { item: BookItem }) {
     return (
       <TouchableOpacity
         style={styles.bookCard}
@@ -114,9 +117,9 @@ export default function ReadIndexScreen() {
     );
   }
 
-  function renderSection(title: string, data: typeof BOOK_MAP) {
+  function renderSection(title: string, data: BookItem[]) {
     return (
-      <>
+      <View style={styles.sectionBlock}>
         <Text style={styles.sectionTitle}>{title}</Text>
         <FlatList
           data={data}
@@ -125,7 +128,7 @@ export default function ReadIndexScreen() {
           numColumns={2}
           scrollEnabled={false}
         />
-      </>
+      </View>
     );
   }
 
@@ -138,6 +141,7 @@ export default function ReadIndexScreen() {
 
       <FlatList
         data={[{ key: 'content' }]}
+        keyExtractor={(item) => item.key}
         renderItem={() => (
           <View style={styles.content}>
             {renderSection('ANTIGO TESTAMENTO', OLD_TESTAMENT)}
@@ -151,7 +155,10 @@ export default function ReadIndexScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
 
   header: {
     flexDirection: 'row',
@@ -170,6 +177,10 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingBottom: 40,
+  },
+
+  sectionBlock: {
+    marginTop: 8,
   },
 
   sectionTitle: {

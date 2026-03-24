@@ -1,11 +1,10 @@
-'use client';
-
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
 import { syncLocalNotesToCloud } from '@/lib/syncNotes';
 import { processSyncQueue } from '@/lib/syncQueue';
 import { syncLocalStudies } from '@/lib/syncStudies';
 import { Session } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
+
 type AuthContextType = {
   session: Session | null;
   loading: boolean;
@@ -24,11 +23,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
 
     const sb = getSupabaseOrNull();
+
     if (!sb) {
-      if (mounted) {
-        setSession(null);
-        setLoading(false);
-      }
+      setSession(null);
+      setLoading(false);
+
       return () => {
         mounted = false;
       };
@@ -38,43 +37,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         await syncLocalNotesToCloud();
         await syncLocalStudies();
-        await processSyncQueue();console.log('Sincronização completa.');
+        await processSyncQueue();
+        console.log('Sincronização completa.');
       } catch (err) {
-        console.log('Erro na sincronização.');
+        console.log('Erro na sincronização.', err);
       }
     }
 
-    // 🔹 1. Sessão inicial
-    sb.auth.getSession().then(async ({ data }) => {
-      if (!mounted) return;
+    async function loadInitialSession() {
+      try {
+        const { data, error } = await sb.auth.getSession();
 
-      setSession(data.session ?? null);
-      setLoading(false);
+        if (!mounted) return;
 
-      if (data.session?.user) {
-        await syncAll();
+        if (error) {
+          console.log('Erro ao obter sessão inicial:', error.message);
+          setSession(null);
+          setLoading(false);
+          return;
+        }
+
+        const currentSession = data.session ?? null;
+        setSession(currentSession);
+        setLoading(false);
+
+        if (currentSession?.user) {
+          syncAll();
+        }
+      } catch (err) {
+        if (!mounted) return;
+        console.log('Erro inesperado ao carregar sessão:', err);
+        setSession(null);
+        setLoading(false);
       }
-    });
+    }
 
-    // 🔹 2. Listener de login/logout
-    const { data: listener } = sb.auth.onAuthStateChange(
-      async (_event, nextSession) => {
+    loadInitialSession();
+
+    const { data: authListener } = sb.auth.onAuthStateChange(
+      (_event, nextSession) => {
         if (!mounted) return;
 
         setSession(nextSession ?? null);
+        setLoading(false);
 
-        // 🔥 sincroniza quando loga
         if (nextSession?.user) {
-          await syncAll();
+          syncAll();
         }
       }
     );
 
     return () => {
       mounted = false;
-      try {
-        listener?.subscription?.unsubscribe();
-      } catch {}
+      authListener?.subscription?.unsubscribe();
     };
   }, []);
 

@@ -3,11 +3,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
 
-useEffect(() => {
-  // TEMP: rode uma vez e depois você pode remover
-  invalidateBibleVersionsCache().catch(() => {});
-}, []);
 export default function TabLayout() {
+  useEffect(() => {
+    invalidateBibleVersionsCache().catch(() => {});
+  }, []);
+
   return (
     <Tabs
       screenOptions={{
@@ -45,18 +45,19 @@ export default function TabLayout() {
         }}
       />
 
-      {/* ✅ Bíblia (lista de livros) */}
       <Tabs.Screen
-  name="read"
-  options={{
-    title: "Bíblia",
-    tabBarLabel: "Bíblia",
-    tabBarIcon: ({ color, size }) => (
-      <Ionicons name="book-outline" color={color} size={size} />
-    ),
-  }}
-/>
-<Tabs.Screen name="dictionary" 
+        name="read"
+        options={{
+          title: 'Bíblia',
+          tabBarLabel: 'Bíblia',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="book-outline" color={color} size={size} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="dictionary"
         options={{
           title: 'Dicionário',
           tabBarIcon: ({ color, size }) => (
@@ -75,10 +76,7 @@ export default function TabLayout() {
         }}
       />
 
-      {/* ✅ esconder telas internas do tab bar */}
-      
       <Tabs.Screen name="read/[book]/index" options={{ href: null }} />
-      {/* se você tiver também read/[book]/[chapter] etc, esconda aqui */}
     </Tabs>
   );
 }
