@@ -1,5 +1,11 @@
+import {
+  deleteLocalNote,
+  getAllNotes,
+  SavedNote,
+  saveLocalNote,
+  updateLocalNote,
+} from '@/lib/studiesStorage';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -21,7 +27,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Study = {
-  id: number;
+  id: string;
   title: string;
   content: string | null;
   reference: string | null;
@@ -55,6 +61,7 @@ type Envelope = {
     exegesis?: string;
     theology?: string;
     application?: string;
+    original_terms?: string;
   } | null;
   raw?: string | null;
 };
@@ -82,38 +89,24 @@ function isOldJson(obj: any): obj is OldJson {
   return obj && typeof obj === 'object' && ('theme' in obj || 'exegesis' in obj || 'application' in obj);
 }
 
-/** =========================
- *  Local storage (SEM login)
- ========================= */
-const LOCAL_KEY = 'LOCAL_SAVED_NOTES_V1';
-
-function toLocalId(studyId: number) {
-  return String(studyId);
+function toStudy(note: SavedNote): Study {
+  return {
+    id: String(note.id),
+    title: String(note.title ?? 'Sem Título'),
+    reference: note.reference != null ? String(note.reference) : null,
+    content: note.content != null ? String(note.content) : '',
+    observation: null,
+    application: null,
+    prayer: null,
+    created_at: note.created_at || new Date().toISOString(),
+  };
 }
 
 function generateLocalStudyId() {
-  return Date.now();
-}
-
-async function getLocalStudies(): Promise<Study[]> {
-  try {
-    const raw = await AsyncStorage.getItem(LOCAL_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed as Study[];
-  } catch {
-    return [];
-  }
-}
-
-async function saveLocalStudies(data: Study[]) {
-  await AsyncStorage.setItem(LOCAL_KEY, JSON.stringify(data));
+  return Date.now().toString();
 }
 
 export default function StudiesScreen() {
-  const [importVisible, setImportVisible] = useState(false);
-  const [importText, setImportText] = useState('');
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -124,82 +117,7 @@ export default function StudiesScreen() {
   const [modalVisible, setModalVisible] = useState(false);
 
   const [isEditing, setIsEditing] = useState(false);
-
-  function normalizeId(v: any): number {
-    const n = typeof v === 'number' ? v : Number(String(v));
-    return Number.isFinite(n) ? n : Date.now();
-  }
-
-  function normalizeCreatedAt(v: any): string {
-    if (!v) return new Date().toISOString();
-
-    const s = String(v).trim();
-    const isoish = s.includes(' ') ? s.replace(' ', 'T') : s;
-    const z = isoish.endsWith('+00') ? isoish.replace(/\+00$/, 'Z') : isoish;
-
-    const d = new Date(z);
-    if (Number.isNaN(d.getTime())) return new Date().toISOString();
-    return d.toISOString();
-  }
-
-  async function importJsonToLocal() {
-    try {
-      const raw = importText.trim();
-      if (!raw) {
-        Alert.alert('Importar', 'Cole o JSON exportado do Supabase.');
-        return;
-      }
-
-      const parsed = JSON.parse(raw);
-
-      if (!Array.isArray(parsed)) {
-        Alert.alert('Importar', 'O JSON precisa ser um array de registros.');
-        return;
-      }
-
-      const imported: Study[] = parsed.map((r: any) => ({
-        id: normalizeId(r.id),
-        title: String(r.title ?? 'Sem Título'),
-        reference: r.reference != null ? String(r.reference) : null,
-        content: r.content != null ? String(r.content) : '',
-        observation: null,
-        application: null,
-        prayer: null,
-        created_at: normalizeCreatedAt(r.created_at),
-      }));
-
-      imported.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-      await saveLocalStudies(imported);
-      setStudies(imported);
-
-      setImportVisible(false);
-      setImportText('');
-
-      Alert.alert('Importado', `Foram importados ${imported.length} estudos para o modo local.`);
-    } catch (e: any) {
-      console.error('Import error:', e);
-      Alert.alert('Erro', e?.message || 'Falha ao importar JSON.');
-    }
-  }
-
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  useEffect(() => {
-    const show = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => setKeyboardHeight(e.endCoordinates?.height ?? 0)
-    );
-    const hide = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => setKeyboardHeight(0)
-    );
-
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
 
   const [editTheme, setEditTheme] = useState('');
   const [editHistory, setEditHistory] = useState('');
@@ -218,22 +136,30 @@ export default function StudiesScreen() {
     label?: string;
   } | null>(null);
 
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => setKeyboardHeight(e.endCoordinates?.height ?? 0)
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardHeight(0)
+    );
+
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
   async function fetchStudies() {
     setLoading(true);
     try {
-      const local = await getLocalStudies();
-      const sorted = [...local].sort((a, b) => {
-        const ta = new Date(a.created_at).getTime();
-        const tb = new Date(b.created_at).getTime();
-        return tb - ta;
-      });
-
-      setStudies((prev) => {
-        if (JSON.stringify(prev) === JSON.stringify(sorted)) return prev;
-        return sorted;
-      });
+      const notes = await getAllNotes();
+      setStudies(notes.map(toStudy));
     } catch (e) {
-      console.error('Erro ao buscar local:', e);
+      console.error('Erro ao buscar estudos:', e);
+      setStudies([]);
     } finally {
       setLoading(false);
     }
@@ -360,15 +286,12 @@ export default function StudiesScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            const local = await getLocalStudies();
-            const updated = local.filter((s) => toLocalId(s.id) !== toLocalId(selectedStudy.id));
-            await saveLocalStudies(updated);
-
+            await deleteLocalNote(selectedStudy.id);
             setStudies((prev) => prev.filter((s) => s.id !== selectedStudy.id));
             setModalVisible(false);
             setSelectedStudy(null);
           } catch (e) {
-            console.error('Erro ao excluir local:', e);
+            console.error('Erro ao excluir:', e);
             Alert.alert('Erro', 'Falha ao excluir.');
           }
         },
@@ -380,7 +303,7 @@ export default function StudiesScreen() {
     if (!selectedStudy) return;
 
     try {
-      let newContent: string | null = null;
+      let newContent = '';
 
       if (parsedKind === 'envelope' && parsedEnvelope) {
         const next: Envelope = {
@@ -410,81 +333,72 @@ export default function StudiesScreen() {
         newContent = String(editExegesis || '');
       }
 
-      const local = await getLocalStudies();
-      const updated = local.map((s) =>
-        toLocalId(s.id) === toLocalId(selectedStudy.id)
-          ? {
-              ...s,
-              title: editTheme,
-              content: newContent,
-              observation: null,
-              application: null,
-              prayer: null,
-            }
-          : s
-      );
+      await updateLocalNote(selectedStudy.id, {
+        title: editTheme,
+        reference: selectedStudy.reference ?? '',
+        content: newContent,
+      });
 
-      await saveLocalStudies(updated);
+      const nextSelected: Study = {
+        ...selectedStudy,
+        title: editTheme,
+        content: newContent,
+        observation: null,
+        application: null,
+        prayer: null,
+      };
 
-      const nextSelected: Study = { ...selectedStudy, title: editTheme, content: newContent };
       setSelectedStudy(nextSelected);
 
-      setStudies((prev) => {
-        const idx = prev.findIndex((s) => s.id === selectedStudy.id);
-        if (idx < 0) return prev;
-        const copy = [...prev];
-        copy[idx] = {
-          ...copy[idx],
-          title: editTheme,
-          content: newContent,
-          observation: null,
-          application: null,
-          prayer: null,
-        };
-        return copy;
-      });
+      setStudies((prev) =>
+        prev.map((s) =>
+          s.id === selectedStudy.id
+            ? {
+                ...s,
+                title: editTheme,
+                content: newContent,
+                observation: null,
+                application: null,
+                prayer: null,
+              }
+            : s
+        )
+      );
 
       Alert.alert('Sucesso', 'Estudo atualizado!');
       setIsEditing(false);
     } catch (e: any) {
-      console.error('Erro ao salvar local:', e);
+      console.error('Erro ao salvar:', e);
       Alert.alert('Erro', e?.message || 'Falha ao salvar alterações.');
     }
   };
 
   const createLocalBlankStudy = async () => {
-    const local = await getLocalStudies();
-    const nextId = generateLocalStudyId();
-    const now = new Date().toISOString();
+    try {
+      const now = new Date().toISOString();
 
-    const blank: Study = {
-      id: nextId,
-      title: 'Novo Estudo',
-      content: '',
-      reference: null,
-      observation: null,
-      application: null,
-      prayer: null,
-      created_at: now,
-    };
+      const blank: SavedNote = {
+        id: generateLocalStudyId(),
+        title: 'Novo Estudo',
+        reference: '',
+        content: '',
+        created_at: now,
+      };
 
-    const updated = [blank, ...local];
-    await saveLocalStudies(updated);
+      const saved = await saveLocalNote(blank);
+      const nextStudy = toStudy(saved);
 
-    setStudies((prev) => [blank, ...prev]);
+      setStudies((prev) => [nextStudy, ...prev]);
+    } catch (e) {
+      console.error('Erro ao criar estudo:', e);
+      Alert.alert('Erro', 'Não foi possível criar o estudo.');
+    }
   };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-          <TouchableOpacity
-            onPress={() => setImportVisible(true)}
-            style={{ width: 24, alignItems: 'flex-end' }}
-          >
-            <Ionicons name="download-outline" size={24} color="#000" />
-          </TouchableOpacity>
-        </View>
+        <View style={{ width: 24 }} />
 
         <Text style={styles.headerTitle}>Meus Estudos</Text>
 
@@ -517,7 +431,14 @@ export default function StudiesScreen() {
                 <Text style={styles.cardTitle} numberOfLines={1}>
                   {item.title || 'Sem Título'}
                 </Text>
-                <Text style={styles.cardDate}>{new Date(item.created_at).toLocaleDateString()}</Text>
+                {!!item.reference && (
+                  <Text style={styles.cardReference} numberOfLines={1}>
+                    {item.reference}
+                  </Text>
+                )}
+                <Text style={styles.cardDate}>
+                  {new Date(item.created_at).toLocaleDateString()}
+                </Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#ccc" />
             </TouchableOpacity>
@@ -667,56 +588,6 @@ export default function StudiesScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-
-      <Modal visible={importVisible} animationType="slide" onRequestClose={() => setImportVisible(false)}>
-        <KeyboardAvoidingView
-          style={{ flex: 1, backgroundColor: '#fff' }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-        >
-          <View style={{ paddingTop: Platform.OS === 'ios' ? 40 : 0 }}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => setImportVisible(false)}>
-                <Text style={styles.closeText}>Fechar</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={importJsonToLocal}>
-                <Text style={styles.saveText}>Importar</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={{ padding: 16 }}>
-              <Text style={{ fontWeight: '700', marginBottom: 10 }}>
-                Cole aqui o JSON exportado do Supabase
-              </Text>
-
-              <TextInput
-                value={importText}
-                onChangeText={setImportText}
-                placeholder='Ex.: [{"id":1,"created_at":"...","title":"...","reference":"...","content":"..."}]'
-                multiline
-                textAlignVertical="top"
-                style={[
-                  styles.inputInline,
-                  {
-                    minHeight: 260,
-                    fontSize: 13,
-                    lineHeight: 18,
-                    fontFamily: Platform.OS === 'ios' ? 'Menlo' : undefined,
-                  },
-                ]}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-
-              <Text style={{ color: '#666', marginTop: 10, fontSize: 12, lineHeight: 18 }}>
-                Dica: no Supabase, exporte as colunas id, created_at, title, reference, content.
-                O campo content pode conter JSON (Envelope/OldJson) e será preservado.
-              </Text>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
     </View>
   );
 }
@@ -734,7 +605,6 @@ const styles = StyleSheet.create({
     borderColor: '#eee',
   },
 
-  backBtn: { padding: 5 },
   headerTitle: { fontSize: 18, fontWeight: '700' },
 
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -766,7 +636,8 @@ const styles = StyleSheet.create({
   },
 
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#333' },
-  cardDate: { fontSize: 12, color: '#888' },
+  cardReference: { fontSize: 12, color: '#666', marginTop: 2 },
+  cardDate: { fontSize: 12, color: '#888', marginTop: 4 },
 
   modalContainer: { flex: 1, backgroundColor: '#fff' },
 

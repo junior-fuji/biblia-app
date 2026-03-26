@@ -1,7 +1,5 @@
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
-import { syncLocalNotesToCloud } from '@/lib/syncNotes';
 import { processSyncQueue } from '@/lib/syncQueue';
-import { syncLocalStudies } from '@/lib/syncStudies';
 import { Session } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
@@ -35,12 +33,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function syncAll() {
       try {
-        await syncLocalNotesToCloud();
-        await syncLocalStudies();
-        await processSyncQueue();
-        console.log('Sincronização completa.');
+        const result = await processSyncQueue();
+        console.log('SYNC_QUEUE_DONE', result);
       } catch (err) {
-        console.log('Erro na sincronização.', err);
+        console.log('SYNC_QUEUE_ERROR', err);
       }
     }
 
@@ -51,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!mounted) return;
 
         if (error) {
-          console.log('Erro ao obter sessão inicial:', error.message);
+          console.log('AUTH_INITIAL_SESSION_ERROR', error.message);
           setSession(null);
           setLoading(false);
           return;
@@ -62,11 +58,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
 
         if (currentSession?.user) {
-          syncAll();
+          await syncAll();
         }
       } catch (err) {
         if (!mounted) return;
-        console.log('Erro inesperado ao carregar sessão:', err);
+        console.log('AUTH_INITIAL_SESSION_FATAL', err);
         setSession(null);
         setLoading(false);
       }
@@ -75,14 +71,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadInitialSession();
 
     const { data: authListener } = sb.auth.onAuthStateChange(
-      (_event, nextSession) => {
+      async (_event, nextSession) => {
         if (!mounted) return;
 
         setSession(nextSession ?? null);
         setLoading(false);
 
         if (nextSession?.user) {
-          syncAll();
+          await syncAll();
         }
       }
     );
