@@ -124,16 +124,18 @@ export default function HarpaProjectorScreen() {
     );
   }
 
-  return (
-    <ProjectorScreen
-      title={`${hymn.number} — ${hymn.title}`}
-      subtitle="Harpa Cristã"
-      slides={slides}
-      onClose={() => router.back()}
-      onPrevGroup={currentNumber > 1 ? prev : undefined}
-      onNextGroup={currentNumber < 640 ? next : undefined}
-      prevGroupLabel="Hino anterior"
-      nextGroupLabel="Próximo hino"
-    />
-  );
+ return (
+  <ProjectorScreen
+    title={`${hymn.number} — ${hymn.title}`}
+    subtitle="Harpa Cristã"
+    slides={slides}
+    onClose={() => router.back()}
+    onPrevGroup={currentNumber > 1 ? prev : undefined}
+    onNextGroup={currentNumber < 640 ? next : undefined}
+    prevGroupLabel="Hino anterior"
+    nextGroupLabel="Próximo hino"
+    baseFontSize={40}
+    uniformFontSize
+  />
+ );
 }
