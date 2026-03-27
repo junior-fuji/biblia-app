@@ -1,12 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Modal,
   Platform,
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -29,6 +27,12 @@ type Props = {
   onNextGroup?: () => void;
   prevGroupLabel?: string;
   nextGroupLabel?: string;
+
+  // ✅ novo: base fixa opcional
+  baseFontSize?: number;
+
+  // ✅ novo: mantém padrão igual em todos os slides
+  uniformFontSize?: boolean;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -37,9 +41,9 @@ function clamp(n: number, min: number, max: number) {
 
 function getBaseFontSize(kind?: ProjectorSlide['kind']) {
   if (kind === 'verse') return 34;
-  if (kind === 'stanza') return 30;
-  if (kind === 'chorus') return 30;
-  return 32;
+  if (kind === 'stanza') return 34;
+  if (kind === 'chorus') return 34;
+  return 34;
 }
 
 export default function ProjectorScreen({
@@ -52,11 +56,11 @@ export default function ProjectorScreen({
   onNextGroup,
   prevGroupLabel = 'Anterior',
   nextGroupLabel = 'Próximo',
+  baseFontSize,
+  uniformFontSize = false,
 }: Props) {
   const [manualOffset, setManualOffset] = useState(0);
   const [slideIndex, setSlideIndex] = useState(initialIndex);
-  const [jumpOpen, setJumpOpen] = useState(false);
-  const [jumpValue, setJumpValue] = useState('');
 
   useEffect(() => {
     setSlideIndex(clamp(initialIndex, 0, Math.max(slides.length - 1, 0)));
@@ -74,26 +78,8 @@ export default function ProjectorScreen({
     setSlideIndex((prev) => Math.min(prev + 1, slides.length - 1));
   };
 
-  const openJump = () => {
-    setJumpValue(String(slides.length ? slideIndex + 1 : 1));
-    setJumpOpen(true);
-  };
-
-  const confirmJump = () => {
-    const parsed = Number(jumpValue);
-    if (!Number.isFinite(parsed)) {
-      setJumpOpen(false);
-      return;
-    }
-
-    const target = clamp(Math.floor(parsed), 1, Math.max(slides.length, 1));
-    setSlideIndex(target - 1);
-    setJumpOpen(false);
-  };
-
-  useEffect(() => {
-    setManualOffset(0);
-  }, [currentSlide?.kind]);
+  // ✅ NÃO resetar fonte ao trocar de slide
+  // removido: useEffect(() => setManualOffset(0), [currentSlide?.kind])
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -124,37 +110,33 @@ export default function ProjectorScreen({
 
       if (e.key === 'Escape') {
         e.preventDefault?.();
-        if (jumpOpen) {
-          setJumpOpen(false);
-          return;
-        }
         onClose();
       }
 
       if (e.key === '+' || e.key === '=') {
-        setManualOffset((s) => clamp(s + 2, -10, 10));
+        setManualOffset((s) => clamp(s + 2, -10, 18));
       }
 
       if (e.key === '-' || e.key === '_') {
-        setManualOffset((s) => clamp(s - 2, -10, 10));
-      }
-
-      if ((e.key === 'g' || e.key === 'G') && slides.length > 0) {
-        e.preventDefault?.();
-        openJump();
+        setManualOffset((s) => clamp(s - 2, -10, 18));
       }
     };
 
     win.addEventListener('keydown', onKeyDown);
     return () => win.removeEventListener('keydown', onKeyDown);
-  }, [jumpOpen, onClose, onNextGroup, onPrevGroup, slideIndex, slides.length]);
+  }, [onClose, onNextGroup, onPrevGroup]);
 
   const fontSize = useMemo(() => {
-    const base = getBaseFontSize(currentSlide?.kind);
-    return clamp(base + manualOffset, 20, 44);
-  }, [currentSlide?.kind, manualOffset]);
+    const base = typeof baseFontSize === 'number'
+      ? baseFontSize
+      : uniformFontSize
+      ? 36
+      : getBaseFontSize(currentSlide?.kind);
 
-  const lineHeight = Math.round(fontSize * 1.4);
+    return clamp(base + manualOffset, 20, 56);
+  }, [baseFontSize, uniformFontSize, currentSlide?.kind, manualOffset]);
+
+  const lineHeight = Math.round(fontSize * 1.38);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -180,14 +162,14 @@ export default function ProjectorScreen({
 
         <View style={styles.topActions}>
           <TouchableOpacity
-            onPress={() => setManualOffset((s) => clamp(s - 2, -10, 10))}
+            onPress={() => setManualOffset((s) => clamp(s - 2, -10, 18))}
             style={styles.topMiniBtn}
           >
             <Text style={styles.control}>A-</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setManualOffset((s) => clamp(s + 2, -10, 10))}
+            onPress={() => setManualOffset((s) => clamp(s + 2, -10, 18))}
             style={styles.topMiniBtn}
           >
             <Text style={styles.control}>A+</Text>
@@ -252,21 +234,6 @@ export default function ProjectorScreen({
         </TouchableOpacity>
 
         <View style={styles.counterBlock}>
-          <TouchableOpacity
-            onPress={openJump}
-            style={[styles.jumpBtn, !slides.length && styles.jumpBtnDisabled]}
-            disabled={!slides.length}
-          >
-            <Ionicons
-              name="locate-outline"
-              size={16}
-              color={slides.length ? '#ffffffcc' : '#7c7c7c'}
-            />
-            <Text style={[styles.jumpBtnText, !slides.length && styles.navTextDisabled]}>
-              Ir para
-            </Text>
-          </TouchableOpacity>
-
           <Text style={styles.counter}>
             Slide {slides.length ? slideIndex + 1 : 0} de {slides.length}
           </Text>
@@ -321,35 +288,6 @@ export default function ProjectorScreen({
           </TouchableOpacity>
         </View>
       )}
-
-      <Modal visible={jumpOpen} transparent animationType="fade" onRequestClose={() => setJumpOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Ir para o slide</Text>
-            <Text style={styles.modalHint}>
-              Digite um número entre 1 e {Math.max(slides.length, 1)}.
-            </Text>
-
-            <TextInput
-              value={jumpValue}
-              onChangeText={setJumpValue}
-              keyboardType="number-pad"
-              placeholder="Ex.: 25"
-              placeholderTextColor="#8a8a8a"
-              style={styles.modalInput}
-              autoFocus
-            />
-
-            <TouchableOpacity style={styles.modalPrimaryBtn} onPress={confirmJump}>
-              <Text style={styles.modalPrimaryBtnText}>Abrir</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.modalSecondaryBtn} onPress={() => setJumpOpen(false)}>
-              <Text style={styles.modalSecondaryBtnText}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -439,7 +377,7 @@ const styles = StyleSheet.create({
     width: '100%',
     color: '#F8F8F8',
     textAlign: 'center',
-    fontWeight: '500',
+    fontWeight: '600',
     letterSpacing: 0.2,
   },
 
@@ -491,36 +429,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
-    gap: 6,
   },
 
   counter: {
     color: '#ffffff99',
     fontSize: 12,
     fontWeight: '600',
-  },
-
-  jumpBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
-
-  jumpBtnDisabled: {
-    opacity: 0.45,
-  },
-
-  jumpBtnText: {
-    marginLeft: 6,
-    color: '#ffffffcc',
-    fontSize: 12,
-    fontWeight: '700',
   },
 
   groupNavBar: {
@@ -547,77 +461,5 @@ const styles = StyleSheet.create({
 
   groupNavTextDisabled: {
     color: '#666',
-  },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-
-  modalCard: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: '#111',
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-
-  modalTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-
-  modalHint: {
-    marginTop: 8,
-    color: '#b5b5b5',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-
-  modalInput: {
-    marginTop: 14,
-    backgroundColor: '#1b1b1b',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    color: '#fff',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    textAlign: 'center',
-  },
-
-  modalPrimaryBtn: {
-    marginTop: 14,
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-
-  modalPrimaryBtnText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-
-  modalSecondaryBtn: {
-    marginTop: 10,
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-
-  modalSecondaryBtnText: {
-    color: '#b5b5b5',
-    fontSize: 14,
-    fontWeight: '600',
   },
 });
