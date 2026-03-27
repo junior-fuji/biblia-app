@@ -1,13 +1,18 @@
+import { getSupabaseOrNull } from '@/lib/supabaseClient';
+import { useAuth } from '@/src/providers/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -23,6 +28,22 @@ type OptionRowProps = {
   onPress?: () => void;
   rightText?: string;
 };
+
+const SETTINGS_KEYS = {
+  darkMode: 'APP_SETTINGS_DARK_MODE',
+  notifications: 'APP_SETTINGS_NOTIFICATIONS',
+  bibleVersion: 'APP_SETTINGS_BIBLE_VERSION',
+  fontSize: 'APP_SETTINGS_FONT_SIZE',
+};
+
+function timeoutAfter(ms: number) {
+  return new Promise((_, reject) => {
+    const id = setTimeout(() => {
+      clearTimeout(id);
+      reject(new Error('Tempo esgotado ao salvar perfil. Verifique conexão e permissões.'));
+    }, ms);
+  });
+}
 
 function OptionRow({
   icon,
@@ -54,23 +75,27 @@ function OptionRow({
         <Switch value={value} onValueChange={onToggle} />
       ) : rightText ? (
         <Text style={styles.rightText}>{rightText}</Text>
-      ) : (
-        !isDestructive && (
-          <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
-        )
-      )}
+      ) : !isDestructive ? (
+        <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
+      ) : null}
     </TouchableOpacity>
   );
 }
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const { session, loading, refreshSession } = useAuth();
 
+  const [profileName, setProfileName] = useState('');
   const [darkMode, setDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(true);
 
   const [versionModal, setVersionModal] = useState(false);
   const [fontModal, setFontModal] = useState(false);
+
+  const [editNameModal, setEditNameModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   const versions = useMemo(() => ['NVI', 'ARA', 'ACF', 'ARC', 'KJA'], []);
   const [bibleVersion, setBibleVersion] = useState('NVI');
@@ -86,13 +111,179 @@ export default function SettingsScreen() {
   );
   const [fontSize, setFontSize] = useState(16);
 
-  const handleLogoutMock = () => {
-    Alert.alert(
-      'Conta (desativada)',
-      'Login/conta está desativado por enquanto. Você vai ativar isso depois.',
-      [{ text: 'OK' }]
-    );
-  };
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadProfile() {
+      const sb = getSupabaseOrNull();
+      const userId = session?.user?.id;
+
+      if (!sb || !userId) {
+        setProfileName('');
+        return;
+      }
+
+      try {
+        const result = await Promise.race([
+          sb.from('profiles').select('name').eq('id', userId).maybeSingle(),
+          timeoutAfter(10000),
+        ]);
+
+        if (!mounted) return;
+
+        const { data, error } = result as any;
+
+        if (error) {
+          console.log('LOAD_PROFILE_SETTINGS_ERROR', error);
+          setProfileName('');
+          return;
+        }
+
+        setProfileName(String(data?.name ?? '').trim());
+      } catch (e) {
+        if (!mounted) return;
+        console.log('LOAD_PROFILE_SETTINGS_FATAL', e);
+        setProfileName('');
+      }
+    }
+
+    loadProfile();
+
+    return () => {
+      mounted = false;
+    };
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    AsyncStorage.setItem(SETTINGS_KEYS.darkMode, JSON.stringify(darkMode)).catch(() => {});
+  }, [darkMode]);
+
+  useEffect(() => {
+    AsyncStorage.setItem(SETTINGS_KEYS.notifications, JSON.stringify(notifications)).catch(() => {});
+  }, [notifications]);
+
+  useEffect(() => {
+    AsyncStorage.setItem(SETTINGS_KEYS.bibleVersion, bibleVersion).catch(() => {});
+  }, [bibleVersion]);
+
+  useEffect(() => {
+    AsyncStorage.setItem(SETTINGS_KEYS.fontSize, String(fontSize)).catch(() => {});
+  }, [fontSize]);
+
+  async function loadSettings() {
+    try {
+      const [darkModeRaw, notificationsRaw, bibleVersionRaw, fontSizeRaw] = await Promise.all([
+        AsyncStorage.getItem(SETTINGS_KEYS.darkMode),
+        AsyncStorage.getItem(SETTINGS_KEYS.notifications),
+        AsyncStorage.getItem(SETTINGS_KEYS.bibleVersion),
+        AsyncStorage.getItem(SETTINGS_KEYS.fontSize),
+      ]);
+
+      if (darkModeRaw != null) setDarkMode(JSON.parse(darkModeRaw));
+      if (notificationsRaw != null) setNotifications(JSON.parse(notificationsRaw));
+      if (bibleVersionRaw) setBibleVersion(bibleVersionRaw);
+
+      if (fontSizeRaw) {
+        const parsed = Number(fontSizeRaw);
+        if (Number.isFinite(parsed)) setFontSize(parsed);
+      }
+    } catch (e) {
+      console.log('LOAD_SETTINGS_ERROR', e);
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      const sb = getSupabaseOrNull();
+
+      if (!sb) {
+        Alert.alert('Conta', 'Supabase indisponível neste build.');
+        return;
+      }
+
+      const { error } = await sb.auth.signOut();
+      if (error) throw error;
+
+      await refreshSession();
+      Alert.alert('Conta', 'Você saiu da conta com sucesso.');
+      router.replace('/login' as any);
+    } catch (e: any) {
+      Alert.alert('Conta', e?.message || 'Não foi possível sair da conta.');
+    }
+  }
+
+  async function handleSaveName() {
+    if (!session?.user) {
+      Alert.alert('Perfil', 'Faça login para editar o perfil.');
+      return;
+    }
+
+    const nextName = editName.trim();
+
+    if (!nextName) {
+      Alert.alert('Perfil', 'Digite um nome válido.');
+      return;
+    }
+
+    try {
+      setSavingName(true);
+
+      const sb = getSupabaseOrNull();
+      if (!sb) throw new Error('Supabase indisponível');
+
+      const updateResult = await Promise.race([
+        sb
+          .from('profiles')
+          .update({ name: nextName })
+          .eq('id', session.user.id)
+          .select('id')
+          .maybeSingle(),
+        timeoutAfter(12000),
+      ]);
+
+      const { data: updatedData, error: updateError } = updateResult as any;
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      if (!updatedData) {
+        const insertResult = await Promise.race([
+          sb
+            .from('profiles')
+            .insert({
+              id: session.user.id,
+              name: nextName,
+            })
+            .select('id')
+            .maybeSingle(),
+          timeoutAfter(12000),
+        ]);
+
+        const { error: insertError } = insertResult as any;
+
+        if (insertError) {
+          throw insertError;
+        }
+      }
+
+      setProfileName(nextName);
+      setEditNameModal(false);
+      Alert.alert('Perfil', 'Nome atualizado com sucesso.');
+    } catch (e: any) {
+      console.log('SAVE_PROFILE_NAME_ERROR', e);
+      Alert.alert('Erro', e?.message || 'Erro ao atualizar nome.');
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  const userEmail = session?.user?.email || 'Não autenticado';
+  const displayName = profileName || session?.user?.email?.split('@')[0] || 'Usuário';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -113,19 +304,26 @@ export default function SettingsScreen() {
             <Ionicons name="person" size={40} color="#fff" />
           </View>
 
-          <Text style={styles.profileName}>Usuário</Text>
-          <Text style={styles.profileRole}>Conta desativada (modo desenvolvimento)</Text>
+          <Text style={styles.profileName}>{displayName}</Text>
+          <Text style={styles.profileRole}>
+            {loading ? 'Verificando sessão...' : userEmail}
+          </Text>
 
           <TouchableOpacity
             style={styles.editProfileBtn}
-            onPress={() =>
-              Alert.alert(
-                'Perfil',
-                'Quando o login estiver funcionando novamente, você poderá editar seu perfil aqui.'
-              )
-            }
+            onPress={() => {
+              if (!session?.user) {
+                Alert.alert('Conta', 'Faça login para editar seu perfil.');
+                return;
+              }
+
+              setEditName(profileName || '');
+              setEditNameModal(true);
+            }}
           >
-            <Text style={styles.editProfileText}>Editar Perfil</Text>
+            <Text style={styles.editProfileText}>
+              {session?.user ? 'Editar Perfil' : 'Entrar na conta'}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -170,26 +368,48 @@ export default function SettingsScreen() {
             icon="tv"
             color="#111827"
             label="Modo Projetor"
-            onPress={() => Alert.alert('Em breve', 'Vamos implementar o modo projetor.')}
+            onPress={() =>
+              Alert.alert(
+                'Modo Projetor',
+                'O projetor já funciona nas telas suportadas da web. Depois podemos centralizar preferências avançadas aqui.'
+              )
+            }
           />
         </View>
 
         <Text style={styles.sectionTitle}>CONTA</Text>
         <View style={styles.section}>
+          {!session?.user ? (
+            <>
+              <OptionRow
+                icon="log-in"
+                color="#007AFF"
+                label="Entrar / Criar conta"
+                onPress={() => router.push('/login' as any)}
+              />
+              <View style={styles.divider} />
+            </>
+          ) : null}
+
           <OptionRow
             icon="help-circle"
             color="#8E8E93"
             label="Ajuda e Suporte"
             onPress={() => Alert.alert('Contato', 'Suporte via WhatsApp (definir).')}
           />
-          <View style={styles.divider} />
-          <OptionRow
-            icon="log-out"
-            color="#FF3B30"
-            label="Sair da Conta"
-            isDestructive
-            onPress={handleLogoutMock}
-          />
+
+          {session?.user ? (
+            <>
+              <View style={styles.divider} />
+              <OptionRow
+                icon="log-out"
+                color="#FF3B30"
+                label="Sair da Conta"
+                isDestructive
+                onPress={handleLogout}
+              />
+            </>
+          ) : null}
         </View>
 
         <Text style={styles.version}>Versão 1.0.0 (Beta)</Text>
@@ -254,6 +474,43 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={editNameModal} transparent animationType="fade" onRequestClose={() => setEditNameModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Editar nome</Text>
+
+            <TextInput
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Seu nome"
+              style={styles.inputInline}
+              placeholderTextColor="#8E8E93"
+              editable={!savingName}
+            />
+
+            <TouchableOpacity
+              onPress={handleSaveName}
+              disabled={savingName}
+              style={styles.primaryActionBtn}
+            >
+              {savingName ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.primaryActionBtnText}>Salvar</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => !savingName && setEditNameModal(false)}
+              style={styles.secondaryActionBtn}
+              disabled={savingName}
+            >
+              <Text style={styles.secondaryActionBtnText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -304,8 +561,18 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     marginTop: 20,
   },
-  section: { backgroundColor: '#fff', borderRadius: 10, overflow: 'hidden', marginHorizontal: 15 },
-  row: { flexDirection: 'row', alignItems: 'center', padding: 12, justifyContent: 'space-between' },
+  section: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginHorizontal: 15,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    justifyContent: 'space-between',
+  },
   iconBox: {
     width: 30,
     height: 30,
@@ -345,4 +612,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalCloseText: { color: '#fff', fontWeight: '800' },
+
+  inputInline: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 16,
+    color: '#000',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    lineHeight: 24,
+  },
+
+  primaryActionBtn: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  primaryActionBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+  },
+
+  secondaryActionBtn: {
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  secondaryActionBtnText: {
+    color: '#666',
+  },
 });

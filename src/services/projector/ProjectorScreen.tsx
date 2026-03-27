@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Modal,
   Platform,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -52,28 +54,46 @@ export default function ProjectorScreen({
   nextGroupLabel = 'Próximo',
 }: Props) {
   const [manualOffset, setManualOffset] = useState(0);
-  const [slideIndex, setSlideIndex] = useState(0);
+  const [slideIndex, setSlideIndex] = useState(initialIndex);
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const [jumpValue, setJumpValue] = useState('');
 
   useEffect(() => {
-    const maxIndex = Math.max(slides.length - 1, 0);
-    setSlideIndex(clamp(initialIndex, 0, maxIndex));
-  }, [initialIndex, slides]);
+    setSlideIndex(clamp(initialIndex, 0, Math.max(slides.length - 1, 0)));
+  }, [initialIndex, slides.length]);
 
   const currentSlide = slides[slideIndex] ?? null;
   const canPrevSlide = slideIndex > 0;
   const canNextSlide = slideIndex < slides.length - 1;
 
-  const prevSlide = useCallback(() => {
+  const prevSlide = () => {
     setSlideIndex((prev) => Math.max(prev - 1, 0));
-  }, []);
+  };
 
-  const nextSlide = useCallback(() => {
-    setSlideIndex((prev) => Math.min(prev + 1, Math.max(slides.length - 1, 0)));
-  }, [slides.length]);
+  const nextSlide = () => {
+    setSlideIndex((prev) => Math.min(prev + 1, slides.length - 1));
+  };
+
+  const openJump = () => {
+    setJumpValue(String(slides.length ? slideIndex + 1 : 1));
+    setJumpOpen(true);
+  };
+
+  const confirmJump = () => {
+    const parsed = Number(jumpValue);
+    if (!Number.isFinite(parsed)) {
+      setJumpOpen(false);
+      return;
+    }
+
+    const target = clamp(Math.floor(parsed), 1, Math.max(slides.length, 1));
+    setSlideIndex(target - 1);
+    setJumpOpen(false);
+  };
 
   useEffect(() => {
     setManualOffset(0);
-  }, [currentSlide?.id]);
+  }, [currentSlide?.kind]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -81,54 +101,53 @@ export default function ProjectorScreen({
     const win = globalThis?.window;
     if (!win) return;
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      const key = e.key;
-
-      if (key === 'ArrowRight' || key === ' ' || key === 'Enter') {
+    const onKeyDown = (e: any) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
         e.preventDefault?.();
         nextSlide();
-        return;
       }
 
-      if (key === 'ArrowLeft') {
+      if (e.key === 'ArrowLeft') {
         e.preventDefault?.();
         prevSlide();
-        return;
       }
 
-      if (key === 'PageDown' && onNextGroup) {
+      if (e.key === 'PageDown' && onNextGroup) {
         e.preventDefault?.();
         onNextGroup();
-        return;
       }
 
-      if (key === 'PageUp' && onPrevGroup) {
+      if (e.key === 'PageUp' && onPrevGroup) {
         e.preventDefault?.();
         onPrevGroup();
-        return;
       }
 
-      if (key === 'Escape') {
+      if (e.key === 'Escape') {
         e.preventDefault?.();
+        if (jumpOpen) {
+          setJumpOpen(false);
+          return;
+        }
         onClose();
-        return;
       }
 
-      if (key === '+' || key === '=') {
-        e.preventDefault?.();
+      if (e.key === '+' || e.key === '=') {
         setManualOffset((s) => clamp(s + 2, -10, 10));
-        return;
       }
 
-      if (key === '-' || key === '_') {
-        e.preventDefault?.();
+      if (e.key === '-' || e.key === '_') {
         setManualOffset((s) => clamp(s - 2, -10, 10));
+      }
+
+      if ((e.key === 'g' || e.key === 'G') && slides.length > 0) {
+        e.preventDefault?.();
+        openJump();
       }
     };
 
     win.addEventListener('keydown', onKeyDown);
     return () => win.removeEventListener('keydown', onKeyDown);
-  }, [nextSlide, onClose, onNextGroup, onPrevGroup, prevSlide]);
+  }, [jumpOpen, onClose, onNextGroup, onPrevGroup, slideIndex, slides.length]);
 
   const fontSize = useMemo(() => {
     const base = getBaseFontSize(currentSlide?.kind);
@@ -142,7 +161,7 @@ export default function ProjectorScreen({
       <StatusBar hidden />
 
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={onClose} style={styles.topMiniBtn} activeOpacity={0.8}>
+        <TouchableOpacity onPress={onClose} style={styles.topMiniBtn}>
           <Ionicons name="close" size={18} color="#ffffff99" />
         </TouchableOpacity>
 
@@ -152,7 +171,6 @@ export default function ProjectorScreen({
               {title}
             </Text>
           )}
-
           {!!subtitle && (
             <Text style={styles.topSubtitle} numberOfLines={1}>
               {subtitle}
@@ -164,7 +182,6 @@ export default function ProjectorScreen({
           <TouchableOpacity
             onPress={() => setManualOffset((s) => clamp(s - 2, -10, 10))}
             style={styles.topMiniBtn}
-            activeOpacity={0.8}
           >
             <Text style={styles.control}>A-</Text>
           </TouchableOpacity>
@@ -172,7 +189,6 @@ export default function ProjectorScreen({
           <TouchableOpacity
             onPress={() => setManualOffset((s) => clamp(s + 2, -10, 10))}
             style={styles.topMiniBtn}
-            activeOpacity={0.8}
           >
             <Text style={styles.control}>A+</Text>
           </TouchableOpacity>
@@ -224,7 +240,6 @@ export default function ProjectorScreen({
           onPress={prevSlide}
           style={[styles.navBtn, !canPrevSlide && styles.navBtnDisabled]}
           disabled={!canPrevSlide}
-          activeOpacity={0.8}
         >
           <Ionicons
             name="chevron-back"
@@ -237,6 +252,21 @@ export default function ProjectorScreen({
         </TouchableOpacity>
 
         <View style={styles.counterBlock}>
+          <TouchableOpacity
+            onPress={openJump}
+            style={[styles.jumpBtn, !slides.length && styles.jumpBtnDisabled]}
+            disabled={!slides.length}
+          >
+            <Ionicons
+              name="locate-outline"
+              size={16}
+              color={slides.length ? '#ffffffcc' : '#7c7c7c'}
+            />
+            <Text style={[styles.jumpBtnText, !slides.length && styles.navTextDisabled]}>
+              Ir para
+            </Text>
+          </TouchableOpacity>
+
           <Text style={styles.counter}>
             Slide {slides.length ? slideIndex + 1 : 0} de {slides.length}
           </Text>
@@ -246,9 +276,8 @@ export default function ProjectorScreen({
           onPress={nextSlide}
           style={[styles.navBtn, !canNextSlide && styles.navBtnDisabled]}
           disabled={!canNextSlide}
-          activeOpacity={0.8}
         >
-          <Text style={[styles.navTextRight, !canNextSlide && styles.navTextDisabled]}>
+          <Text style={[styles.navText, !canNextSlide && styles.navTextDisabled]}>
             Próximo slide
           </Text>
           <Ionicons
@@ -263,9 +292,8 @@ export default function ProjectorScreen({
         <View style={styles.groupNavBar}>
           <TouchableOpacity
             onPress={onPrevGroup}
-            style={[styles.groupNavBtn, !onPrevGroup && styles.groupNavBtnDisabled]}
+            style={styles.groupNavBtn}
             disabled={!onPrevGroup}
-            activeOpacity={0.8}
           >
             <Ionicons
               name="play-skip-back"
@@ -279,9 +307,8 @@ export default function ProjectorScreen({
 
           <TouchableOpacity
             onPress={onNextGroup}
-            style={[styles.groupNavBtn, !onNextGroup && styles.groupNavBtnDisabled]}
+            style={styles.groupNavBtn}
             disabled={!onNextGroup}
-            activeOpacity={0.8}
           >
             <Text style={[styles.groupNavText, !onNextGroup && styles.groupNavTextDisabled]}>
               {nextGroupLabel}
@@ -294,6 +321,35 @@ export default function ProjectorScreen({
           </TouchableOpacity>
         </View>
       )}
+
+      <Modal visible={jumpOpen} transparent animationType="fade" onRequestClose={() => setJumpOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Ir para o slide</Text>
+            <Text style={styles.modalHint}>
+              Digite um número entre 1 e {Math.max(slides.length, 1)}.
+            </Text>
+
+            <TextInput
+              value={jumpValue}
+              onChangeText={setJumpValue}
+              keyboardType="number-pad"
+              placeholder="Ex.: 25"
+              placeholderTextColor="#8a8a8a"
+              style={styles.modalInput}
+              autoFocus
+            />
+
+            <TouchableOpacity style={styles.modalPrimaryBtn} onPress={confirmJump}>
+              <Text style={styles.modalPrimaryBtnText}>Abrir</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modalSecondaryBtn} onPress={() => setJumpOpen(false)}>
+              <Text style={styles.modalSecondaryBtnText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -360,15 +416,15 @@ const styles = StyleSheet.create({
   },
 
   sideTap: {
-    width: 32,
+    width: 20,
   },
 
   slideContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
-    paddingVertical: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
   },
 
   slideTitle: {
@@ -404,7 +460,7 @@ const styles = StyleSheet.create({
   },
 
   navBtn: {
-    minWidth: 140,
+    minWidth: 118,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -427,13 +483,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  navTextRight: {
-    marginRight: 6,
-    color: '#ffffffcc',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-
   navTextDisabled: {
     color: '#7c7c7c',
   },
@@ -442,12 +491,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
+    gap: 6,
   },
 
   counter: {
     color: '#ffffff99',
     fontSize: 12,
     fontWeight: '600',
+  },
+
+  jumpBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+
+  jumpBtnDisabled: {
+    opacity: 0.45,
+  },
+
+  jumpBtnText: {
+    marginLeft: 6,
+    color: '#ffffffcc',
+    fontSize: 12,
+    fontWeight: '700',
   },
 
   groupNavBar: {
@@ -465,10 +538,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
 
-  groupNavBtnDisabled: {
-    opacity: 0.55,
-  },
-
   groupNavText: {
     marginHorizontal: 6,
     color: '#ffffffaa',
@@ -478,5 +547,77 @@ const styles = StyleSheet.create({
 
   groupNavTextDisabled: {
     color: '#666',
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+
+  modalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#111',
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+
+  modalTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+
+  modalHint: {
+    marginTop: 8,
+    color: '#b5b5b5',
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+
+  modalInput: {
+    marginTop: 14,
+    backgroundColor: '#1b1b1b',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    color: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    textAlign: 'center',
+  },
+
+  modalPrimaryBtn: {
+    marginTop: 14,
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+
+  modalPrimaryBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+
+  modalSecondaryBtn: {
+    marginTop: 10,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+
+  modalSecondaryBtnText: {
+    color: '#b5b5b5',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

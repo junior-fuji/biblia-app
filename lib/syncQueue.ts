@@ -105,7 +105,13 @@ export async function processSyncQueue() {
           created_at: item.payload.created_at || new Date().toISOString(),
         };
 
-        const { error } = await sb.from('saved_notes').insert(payload);
+        const { error } = await sb.from('saved_notes').upsert(
+          {
+            user_id: user.id,
+            ...item.payload,
+          },
+          { onConflict: 'client_id' }
+        );
 
         if (error) {
           console.log('SYNC_QUEUE_NOTE_INSERT_ERROR', error);

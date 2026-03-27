@@ -1,6 +1,8 @@
+import { getSupabaseOrNull } from '@/lib/supabaseClient';
+import { useAuth } from '@/src/providers/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ScrollView,
   StatusBar,
@@ -8,17 +10,18 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
-
-
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { session } = useAuth();
+
   const [greeting, setGreeting] = useState('Graça e Paz');
   const [quickQuery, setQuickQuery] = useState('');
+  const [profileName, setProfileName] = useState<string>('');
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -27,6 +30,73 @@ export default function HomeScreen() {
     else setGreeting('Boa noite');
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadProfile() {
+      const sb = getSupabaseOrNull();
+      const userId = session?.user?.id;
+
+      if (!sb || !userId) {
+        setProfileName('');
+        return;
+      }
+
+      try {
+        const { data, error } = await sb
+          .from('profiles')
+          .select('name')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (!mounted) return;
+
+        if (error) {
+          console.log('LOAD_PROFILE_HOME_ERROR', error);
+          setProfileName('');
+          return;
+        }
+
+        setProfileName(String(data?.name ?? '').trim());
+      } catch (e) {
+        if (!mounted) return;
+        console.log('LOAD_PROFILE_HOME_FATAL', e);
+        setProfileName('');
+      }
+    }
+
+    loadProfile();
+
+    return () => {
+      mounted = false;
+    };
+  }, [session?.user?.id]);
+
+  const displayName = useMemo(() => {
+    if (profileName) return profileName;
+
+    const email = session?.user?.email?.trim();
+    if (!email) return 'Visitante';
+
+    const base = email.split('@')[0]?.trim();
+    if (!base) return 'Usuário';
+
+    return base.charAt(0).toUpperCase() + base.slice(1);
+  }, [profileName, session]);
+
+  const avatarLabel = useMemo(() => {
+    const source = profileName || session?.user?.email || 'US';
+    const cleaned = source.replace(/[^a-zA-Z]/g, '').toUpperCase();
+    return cleaned.slice(0, 2) || 'US';
+  }, [profileName, session]);
+
+  function handleQuickSearch() {
+    const q = quickQuery.trim();
+    if (q.length < 2) return;
+
+    router.push({ pathname: '/search', params: { q } });
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" />
@@ -34,14 +104,15 @@ export default function HomeScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: Math.max(insets.top, 12) }
+          { paddingTop: Math.max(insets.top, 12) },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* HEADER */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>{greeting}, Junior</Text>
+            <Text style={styles.greeting}>
+              {greeting}, {displayName}
+            </Text>
             <Text style={styles.subGreeting}>Vamos examinar as Escrituras?</Text>
           </View>
 
@@ -52,11 +123,10 @@ export default function HomeScreen() {
             accessibilityRole="button"
             accessibilityLabel="Abrir configurações"
           >
-            <Text style={styles.avatarText}>JR</Text>
+            <Text style={styles.avatarText}>{avatarLabel}</Text>
           </TouchableOpacity>
         </View>
-
-        {/* VERSÍCULO DO DIA */}
+        <Text style={{ color: 'red', fontWeight: '900' }}>BUILD TESTE 27/03</Text>
         <View style={styles.dailyCard}>
           <View style={styles.iconCircle}>
             <Ionicons name="book" size={20} color="#fff" />
@@ -68,7 +138,6 @@ export default function HomeScreen() {
           <Text style={styles.dailyRef}>SALMOS 119:105</Text>
         </View>
 
-        {/* BARRA DE BUSCA */}
         <Text style={styles.sectionTitle}>Pesquisa Rápida</Text>
 
         <View style={styles.quickSearchWrap}>
@@ -82,12 +151,7 @@ export default function HomeScreen() {
             returnKeyType="search"
             autoCorrect={false}
             autoCapitalize="none"
-            onSubmitEditing={() => {
-              const q = quickQuery.trim();
-              if (q.length >= 2) {
-                router.push({ pathname: '/search', params: { q } });
-              }
-            }}
+            onSubmitEditing={handleQuickSearch}
           />
 
           {quickQuery.length > 0 ? (
@@ -100,12 +164,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              onPress={() => {
-                const q = quickQuery.trim();
-                if (q.length >= 2) {
-                  router.push({ pathname: '/search', params: { q } });
-                }
-              }}
+              onPress={handleQuickSearch}
               style={styles.quickGoBtn}
               accessibilityLabel="Pesquisar"
             >
@@ -114,29 +173,38 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* MENU PRINCIPAL */}
         <Text style={styles.sectionTitle}>Menu Principal</Text>
 
         <View style={styles.grid}>
-          <TouchableOpacity style={styles.card} onPress={() => router.push('/read')} activeOpacity={0.85}>
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => router.push('/read')}
+            activeOpacity={0.85}
+          >
             <View style={[styles.cardIcon, { backgroundColor: '#E3F2FD' }]}>
               <Ionicons name="book-outline" size={24} color="#007AFF" />
             </View>
             <Text style={styles.cardTitle}>Bíblia</Text>
             <Text style={styles.cardSub}>Leitura</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
-  style={styles.card}
-  onPress={() => router.push('/harpa')}
-  activeOpacity={0.85}
->
-  <View style={[styles.cardIcon, { backgroundColor: '#E0F7FA' }]}>
-    <Ionicons name="musical-notes-outline" size={24} color="#0097A7" />
-  </View>
-  <Text style={styles.cardTitle}>Harpa</Text>
-  <Text style={styles.cardSub}>Hinos</Text>
-</TouchableOpacity>
-          <TouchableOpacity style={styles.card} onPress={() => router.push('/studies')} activeOpacity={0.85}>
+            style={styles.card}
+            onPress={() => router.push('/harpa')}
+            activeOpacity={0.85}
+          >
+            <View style={[styles.cardIcon, { backgroundColor: '#E0F7FA' }]}>
+              <Ionicons name="musical-notes-outline" size={24} color="#0097A7" />
+            </View>
+            <Text style={styles.cardTitle}>Harpa</Text>
+            <Text style={styles.cardSub}>Hinos</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => router.push('/studies')}
+            activeOpacity={0.85}
+          >
             <View style={[styles.cardIcon, { backgroundColor: '#E8F5E9' }]}>
               <Ionicons name="create-outline" size={24} color="#34C759" />
             </View>
@@ -144,7 +212,11 @@ export default function HomeScreen() {
             <Text style={styles.cardSub}>Anotações</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.card} onPress={() => router.push('/plan')} activeOpacity={0.85}>
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => router.push('/plan')}
+            activeOpacity={0.85}
+          >
             <View style={[styles.cardIcon, { backgroundColor: '#F3E5F5' }]}>
               <Ionicons name="calendar-outline" size={24} color="#AF52DE" />
             </View>
@@ -152,12 +224,11 @@ export default function HomeScreen() {
             <Text style={styles.cardSub}>Anual</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.card} 
-          onPress={() => router.push({ pathname: '/(tabs)/dictionary' } as any)
-
-
-} 
-            activeOpacity={0.85}>
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => router.push('/dictionary')}
+            activeOpacity={0.85}
+          >
             <View style={[styles.cardIcon, { backgroundColor: '#FFF3E0' }]}>
               <Ionicons name="library-outline" size={24} color="#FF9500" />
             </View>
@@ -201,27 +272,85 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FAFAFA' },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 20 },
 
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
   greeting: { fontSize: 22, fontWeight: '800', color: '#000' },
   subGreeting: { fontSize: 14, color: '#666', marginTop: 2 },
-  avatar: { width: 45, height: 45, borderRadius: 25, backgroundColor: '#E0E0E0', justifyContent: 'center', alignItems: 'center' },
+  avatar: {
+    width: 45,
+    height: 45,
+    borderRadius: 25,
+    backgroundColor: '#E0E0E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   avatarText: { fontWeight: 'bold', color: '#666' },
 
-  dailyCard: { backgroundColor: '#007AFF', padding: 22, borderRadius: 20, marginBottom: 18 },
-  iconCircle: { width: 40, height: 40, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  dailyTitle: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '800', letterSpacing: 0.6, marginBottom: 6 },
-  dailyText: { color: '#fff', fontSize: 17, fontWeight: '600', fontStyle: 'italic', lineHeight: 25 },
-  dailyRef: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: 'bold', marginTop: 12, letterSpacing: 0.6 },
+  dailyCard: {
+    backgroundColor: '#007AFF',
+    padding: 22,
+    borderRadius: 20,
+    marginBottom: 18,
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  dailyTitle: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    marginBottom: 6,
+  },
+  dailyText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600',
+    fontStyle: 'italic',
+    lineHeight: 25,
+  },
+  dailyRef: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginTop: 12,
+    letterSpacing: 0.6,
+  },
 
   sectionTitle: { fontSize: 18, fontWeight: '800', marginBottom: 12, color: '#333' },
 
-  searchBar: { flexDirection: 'row', backgroundColor: '#fff', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 16, alignItems: 'center', marginBottom: 18, borderWidth: 1, borderColor: '#eee' },
-  searchPlaceholder: { flex: 1, color: '#999', marginLeft: 10, fontSize: 14 },
-  searchBtn: { backgroundColor: '#111', width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 14 },
-  card: { width: '48%', backgroundColor: '#fff', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#f0f0f0' },
-  cardIcon: { width: 50, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  card: {
+    width: '48%',
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  cardIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   cardTitle: { fontSize: 16, fontWeight: '800', color: '#333' },
   cardSub: { fontSize: 12, color: '#999', marginTop: 2 },
 });

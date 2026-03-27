@@ -4,6 +4,7 @@ import { upsertNoteHybrid } from '@/lib/studiesStorage';
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
 import ProjectorScreen, { ProjectorSlide } from '@/src/services/projector/ProjectorScreen';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -40,6 +41,11 @@ type AnalysisData = {
 };
 
 type VersionRow = { id: string; code: string; name: string };
+
+const SETTINGS_KEYS = {
+  bibleVersion: 'APP_SETTINGS_BIBLE_VERSION',
+  fontSize: 'APP_SETTINGS_FONT_SIZE',
+};
 
 const BOOK_MAP: Record<number, { name: string; abbrev: string }> = {
   1: { name: 'Gênesis', abbrev: 'Gn' },
@@ -257,6 +263,48 @@ export default function ReadBookScreen() {
   const [rawAi, setRawAi] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [saveReference, setSaveReference] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadReadingPreferences() {
+      try {
+        const [savedVersion, savedFontSize] = await Promise.all([
+          AsyncStorage.getItem(SETTINGS_KEYS.bibleVersion),
+          AsyncStorage.getItem(SETTINGS_KEYS.fontSize),
+        ]);
+
+        if (!mounted) return;
+
+        if (savedVersion?.trim()) {
+          setVersionCode(savedVersion.trim().toUpperCase());
+        }
+
+        if (savedFontSize) {
+          const parsed = Number(savedFontSize);
+          if (Number.isFinite(parsed)) {
+            setFontSize(clamp(parsed, 12, 40));
+          }
+        }
+      } catch (e) {
+        console.log('LOAD_READING_PREFERENCES_ERROR', e);
+      }
+    }
+
+    loadReadingPreferences();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(SETTINGS_KEYS.bibleVersion, versionCode).catch(() => {});
+  }, [versionCode]);
+
+  useEffect(() => {
+    AsyncStorage.setItem(SETTINGS_KEYS.fontSize, String(fontSize)).catch(() => {});
+  }, [fontSize]);
 
   useEffect(() => {
     setChapterNum((current) => (current !== initialChapter ? initialChapter : current));
