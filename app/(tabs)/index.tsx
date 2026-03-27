@@ -14,6 +14,144 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+type DailyVerseItem = {
+  text: string;
+  reference: string;
+};
+
+const DAILY_VERSES: DailyVerseItem[] = [
+  {
+    text: '“Lâmpada para os meus pés é a tua palavra e luz para o meu caminho.”',
+    reference: 'SALMOS 119:105',
+  },
+  {
+    text: '“Escondi a tua palavra no meu coração, para eu não pecar contra ti.”',
+    reference: 'SALMOS 119:11',
+  },
+  {
+    text: '“Entrega o teu caminho ao Senhor; confia nele, e ele tudo fará.”',
+    reference: 'SALMOS 37:5',
+  },
+  {
+    text: '“O Senhor é o meu pastor; nada me faltará.”',
+    reference: 'SALMOS 23:1',
+  },
+  {
+    text: '“Clama a mim, e responder-te-ei, e anunciar-te-ei coisas grandes e firmes, que não sabes.”',
+    reference: 'JEREMIAS 33:3',
+  },
+  {
+    text: '“Mas os que esperam no Senhor renovarão as suas forças.”',
+    reference: 'ISAÍAS 40:31',
+  },
+  {
+    text: '“As misericórdias do Senhor são a causa de não sermos consumidos.”',
+    reference: 'LAMENTAÇÕES 3:22',
+  },
+  {
+    text: '“Bem-aventurados os que têm fome e sede de justiça, porque eles serão fartos.”',
+    reference: 'MATEUS 5:6',
+  },
+  {
+    text: '“Buscai primeiro o reino de Deus, e a sua justiça, e todas estas coisas vos serão acrescentadas.”',
+    reference: 'MATEUS 6:33',
+  },
+  {
+    text: '“Vinde a mim, todos os que estais cansados e oprimidos, e eu vos aliviarei.”',
+    reference: 'MATEUS 11:28',
+  },
+  {
+    text: '“Porque Deus amou o mundo de tal maneira que deu o seu Filho unigênito.”',
+    reference: 'JOÃO 3:16',
+  },
+  {
+    text: '“Eu sou o caminho, e a verdade e a vida.”',
+    reference: 'JOÃO 14:6',
+  },
+  {
+    text: '“Conhecereis a verdade, e a verdade vos libertará.”',
+    reference: 'JOÃO 8:32',
+  },
+  {
+    text: '“Recebereis a virtude do Espírito Santo, que há de vir sobre vós.”',
+    reference: 'ATOS 1:8',
+  },
+  {
+    text: '“O justo viverá da fé.”',
+    reference: 'ROMANOS 1:17',
+  },
+  {
+    text: '“E sabemos que todas as coisas contribuem juntamente para o bem daqueles que amam a Deus.”',
+    reference: 'ROMANOS 8:28',
+  },
+  {
+    text: '“Se Deus é por nós, quem será contra nós?”',
+    reference: 'ROMANOS 8:31',
+  },
+  {
+    text: '“Portanto, se alguém está em Cristo, nova criatura é.”',
+    reference: '2 CORÍNTIOS 5:17',
+  },
+  {
+    text: '“Porque pela graça sois salvos, por meio da fé.”',
+    reference: 'EFÉSIOS 2:8',
+  },
+  {
+    text: '“Não andeis ansiosos por coisa alguma.”',
+    reference: 'FILIPENSES 4:6',
+  },
+  {
+    text: '“Posso todas as coisas naquele que me fortalece.”',
+    reference: 'FILIPENSES 4:13',
+  },
+  {
+    text: '“A palavra de Cristo habite em vós abundantemente.”',
+    reference: 'COLOSSENSES 3:16',
+  },
+  {
+    text: '“Orai sem cessar.”',
+    reference: '1 TESSALONICENSES 5:17',
+  },
+  {
+    text: '“Combati o bom combate, acabei a carreira, guardei a fé.”',
+    reference: '2 TIMÓTEO 4:7',
+  },
+  {
+    text: '“A fé é o firme fundamento das coisas que se esperam.”',
+    reference: 'HEBREUS 11:1',
+  },
+  {
+    text: '“Cheguemo-nos, pois, com confiança ao trono da graça.”',
+    reference: 'HEBREUS 4:16',
+  },
+  {
+    text: '“Sede cumpridores da palavra, e não somente ouvintes.”',
+    reference: 'TIAGO 1:22',
+  },
+  {
+    text: '“Lançando sobre ele toda a vossa ansiedade, porque ele tem cuidado de vós.”',
+    reference: '1 PEDRO 5:7',
+  },
+  {
+    text: '“Deus é amor.”',
+    reference: '1 JOÃO 4:8',
+  },
+  {
+    text: '“Eis que estou à porta e bato.”',
+    reference: 'APOCALIPSE 3:20',
+  },
+];
+
+function getDayOfYear(date: Date) {
+  const start = new Date(date.getFullYear(), 0, 1);
+  const diff =
+    date.getTime() -
+    start.getTime() +
+    (start.getTimezoneOffset() - date.getTimezoneOffset()) * 60 * 1000;
+
+  return Math.floor(diff / 86400000) + 1;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -90,6 +228,13 @@ export default function HomeScreen() {
     return cleaned.slice(0, 2) || 'US';
   }, [profileName, session]);
 
+  const dailyVerse = useMemo(() => {
+    const now = new Date();
+    const dayOfYear = getDayOfYear(now);
+    const index = (dayOfYear - 1) % DAILY_VERSES.length;
+    return DAILY_VERSES[index];
+  }, []);
+
   function handleQuickSearch() {
     const q = quickQuery.trim();
     if (q.length < 2) return;
@@ -132,10 +277,8 @@ export default function HomeScreen() {
             <Ionicons name="book" size={20} color="#fff" />
           </View>
           <Text style={styles.dailyTitle}>Versículo do Dia</Text>
-          <Text style={styles.dailyText}>
-            “Lâmpada para os meus pés é a tua palavra e luz para o meu caminho.”
-          </Text>
-          <Text style={styles.dailyRef}>SALMOS 119:105</Text>
+          <Text style={styles.dailyText}>{dailyVerse.text}</Text>
+          <Text style={styles.dailyRef}>{dailyVerse.reference}</Text>
         </View>
 
         <Text style={styles.sectionTitle}>Pesquisa Rápida</Text>
