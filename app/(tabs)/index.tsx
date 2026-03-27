@@ -126,7 +126,7 @@ export default function HomeScreen() {
             <Text style={styles.avatarText}>{avatarLabel}</Text>
           </TouchableOpacity>
         </View>
-        <Text style={{ color: 'red', fontWeight: '900' }}>BUILD TESTE 27/03</Text>
+
         <View style={styles.dailyCard}>
           <View style={styles.iconCircle}>
             <Ionicons name="book" size={20} color="#fff" />
