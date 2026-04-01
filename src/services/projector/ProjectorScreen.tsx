@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Modal,
   Platform,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -27,12 +29,13 @@ type Props = {
   onNextGroup?: () => void;
   prevGroupLabel?: string;
   nextGroupLabel?: string;
-
-  // ✅ novo: base fixa opcional
   baseFontSize?: number;
-
-  // ✅ novo: mantém padrão igual em todos os slides
   uniformFontSize?: boolean;
+
+  // novo
+  pickerLabel?: string;
+  pickerTitle?: string;
+  renderSlideLabel?: (slide: ProjectorSlide, index: number) => string;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -58,9 +61,13 @@ export default function ProjectorScreen({
   nextGroupLabel = 'Próximo',
   baseFontSize,
   uniformFontSize = false,
+  pickerLabel = 'Slides',
+  pickerTitle = 'Selecionar slide',
+  renderSlideLabel,
 }: Props) {
   const [manualOffset, setManualOffset] = useState(0);
   const [slideIndex, setSlideIndex] = useState(initialIndex);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     setSlideIndex(clamp(initialIndex, 0, Math.max(slides.length - 1, 0)));
@@ -77,9 +84,6 @@ export default function ProjectorScreen({
   const nextSlide = () => {
     setSlideIndex((prev) => Math.min(prev + 1, slides.length - 1));
   };
-
-  // ✅ NÃO resetar fonte ao trocar de slide
-  // removido: useEffect(() => setManualOffset(0), [currentSlide?.kind])
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -110,7 +114,11 @@ export default function ProjectorScreen({
 
       if (e.key === 'Escape') {
         e.preventDefault?.();
-        onClose();
+        if (pickerOpen) {
+          setPickerOpen(false);
+        } else {
+          onClose();
+        }
       }
 
       if (e.key === '+' || e.key === '=') {
@@ -124,19 +132,26 @@ export default function ProjectorScreen({
 
     win.addEventListener('keydown', onKeyDown);
     return () => win.removeEventListener('keydown', onKeyDown);
-  }, [onClose, onNextGroup, onPrevGroup]);
+  }, [onClose, onNextGroup, onPrevGroup, pickerOpen]);
 
   const fontSize = useMemo(() => {
-    const base = typeof baseFontSize === 'number'
-      ? baseFontSize
-      : uniformFontSize
-      ? 36
-      : getBaseFontSize(currentSlide?.kind);
+    const base =
+      typeof baseFontSize === 'number'
+        ? baseFontSize
+        : uniformFontSize
+        ? 36
+        : getBaseFontSize(currentSlide?.kind);
 
     return clamp(base + manualOffset, 20, 56);
   }, [baseFontSize, uniformFontSize, currentSlide?.kind, manualOffset]);
 
   const lineHeight = Math.round(fontSize * 1.38);
+
+  function getSlideLabel(slide: ProjectorSlide, index: number) {
+    if (renderSlideLabel) return renderSlideLabel(slide, index);
+    if (slide.title?.trim()) return slide.title;
+    return `Slide ${index + 1}`;
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -161,6 +176,16 @@ export default function ProjectorScreen({
         </View>
 
         <View style={styles.topActions}>
+          {slides.length > 0 ? (
+            <TouchableOpacity
+              onPress={() => setPickerOpen(true)}
+              style={styles.topPickerBtn}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.topPickerText}>{pickerLabel}</Text>
+            </TouchableOpacity>
+          ) : null}
+
           <TouchableOpacity
             onPress={() => setManualOffset((s) => clamp(s - 2, -10, 18))}
             style={styles.topMiniBtn}
@@ -186,27 +211,29 @@ export default function ProjectorScreen({
         />
 
         <View style={styles.slideContent}>
-          {currentSlide ? (
-            <>
-              {!!currentSlide.title && (
-                <Text style={styles.slideTitle}>{currentSlide.title}</Text>
-              )}
+          <View style={styles.slideInner}>
+            {currentSlide ? (
+              <>
+                {!!currentSlide.title && (
+                  <Text style={styles.slideTitle}>{currentSlide.title}</Text>
+                )}
 
-              <Text
-                style={[
-                  styles.slideText,
-                  {
-                    fontSize,
-                    lineHeight,
-                  },
-                ]}
-              >
-                {currentSlide.content}
-              </Text>
-            </>
-          ) : (
-            <Text style={styles.emptyText}>Sem conteúdo para projetar</Text>
-          )}
+                <Text
+                  style={[
+                    styles.slideText,
+                    {
+                      fontSize,
+                      lineHeight,
+                    },
+                  ]}
+                >
+                  {currentSlide.content}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.emptyText}>Sem conteúdo para projetar</Text>
+            )}
+          </View>
         </View>
 
         <TouchableOpacity
@@ -288,6 +315,40 @@ export default function ProjectorScreen({
           </TouchableOpacity>
         </View>
       )}
+
+      <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{pickerTitle}</Text>
+              <TouchableOpacity onPress={() => setPickerOpen(false)}>
+                <Text style={styles.modalClose}>Fechar</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {slides.map((slide, index) => {
+                const active = index === slideIndex;
+
+                return (
+                  <TouchableOpacity
+                    key={slide.id}
+                    style={[styles.modalItem, active && styles.modalItemActive]}
+                    onPress={() => {
+                      setSlideIndex(index);
+                      setPickerOpen(false);
+                    }}
+                  >
+                    <Text style={[styles.modalItemText, active && styles.modalItemTextActive]}>
+                      {getSlideLabel(slide, index)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -314,6 +375,22 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  topPickerBtn: {
+    paddingHorizontal: 10,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+
+  topPickerText: {
+    color: '#ffffffcc',
+    fontSize: 11,
+    fontWeight: '700',
   },
 
   topCenter: {
@@ -363,6 +440,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 20,
+  },
+
+  slideInner: {
+    width: '100%',
+    transform: [{ translateY: -38 }],
   },
 
   slideTitle: {
@@ -461,5 +543,64 @@ const styles = StyleSheet.create({
 
   groupNavTextDisabled: {
     color: '#666',
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+
+  modalContent: {
+    maxHeight: '72%',
+    backgroundColor: '#111',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#222',
+    overflow: 'hidden',
+  },
+
+  modalHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  modalTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+
+  modalClose: {
+    color: '#7db5ff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  modalItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1b1b1b',
+  },
+
+  modalItemActive: {
+    backgroundColor: '#0F62FE22',
+  },
+
+  modalItemText: {
+    color: '#ddd',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  modalItemTextActive: {
+    color: '#fff',
   },
 });
