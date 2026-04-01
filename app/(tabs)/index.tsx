@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -11,6 +12,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -152,14 +154,88 @@ function getDayOfYear(date: Date) {
   return Math.floor(diff / 86400000) + 1;
 }
 
+type MenuItem = {
+  key: string;
+  title: string;
+  subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  iconBg: string;
+  href: string;
+};
+
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  const { width } = useWindowDimensions();
 
   const [greeting, setGreeting] = useState('Graça e Paz');
   const [quickQuery, setQuickQuery] = useState('');
   const [profileName, setProfileName] = useState<string>('');
+
+  const isWeb = Platform.OS === 'web';
+  const isDesktop = isWeb && width >= 1100;
+  const isTablet = isWeb && width >= 760 && width < 1100;
+
+  const gridColumns = useMemo(() => {
+    if (!isWeb) return 2;
+    if (width >= 1400) return 5;
+    if (width >= 1150) return 4;
+    if (width >= 800) return 3;
+    return 2;
+  }, [isWeb, width]);
+
+  const menuItems = useMemo<MenuItem[]>(
+    () => [
+      {
+        key: 'bible',
+        title: 'Bíblia',
+        subtitle: 'Leitura',
+        icon: 'book-outline',
+        iconColor: '#007AFF',
+        iconBg: '#E3F2FD',
+        href: '/read',
+      },
+      {
+        key: 'harpa',
+        title: 'Harpa',
+        subtitle: 'Hinos',
+        icon: 'musical-notes-outline',
+        iconColor: '#0097A7',
+        iconBg: '#E0F7FA',
+        href: '/harpa',
+      },
+      {
+        key: 'studies',
+        title: 'Estudos',
+        subtitle: 'Anotações',
+        icon: 'create-outline',
+        iconColor: '#34C759',
+        iconBg: '#E8F5E9',
+        href: '/studies',
+      },
+      {
+        key: 'plan',
+        title: 'Plano',
+        subtitle: 'Anual',
+        icon: 'calendar-outline',
+        iconColor: '#AF52DE',
+        iconBg: '#F3E5F5',
+        href: '/plan',
+      },
+      {
+        key: 'dictionary',
+        title: 'Dicionário',
+        subtitle: 'Original',
+        icon: 'library-outline',
+        iconColor: '#FF9500',
+        iconBg: '#FFF3E0',
+        href: '/dictionary',
+      },
+    ],
+    []
+  );
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -242,178 +318,170 @@ export default function HomeScreen() {
     router.push({ pathname: '/search', params: { q } });
   }
 
+  const cardWidth = useMemo(() => {
+    if (gridColumns === 5) return '18.6%';
+    if (gridColumns === 4) return '23.5%';
+    if (gridColumns === 3) return '31.8%';
+    return '48.2%';
+  }, [gridColumns]);
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" />
 
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingTop: Math.max(insets.top, 12) },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>
-              {greeting}, {displayName}
-            </Text>
-            <Text style={styles.subGreeting}>Vamos examinar as Escrituras?</Text>
+      <View style={styles.page}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingTop: Math.max(insets.top, 12) },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.greeting}>
+                {greeting}, {displayName}
+              </Text>
+              <Text style={styles.subGreeting}>Vamos examinar as Escrituras?</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.avatar}
+              onPress={() => router.push('/settings')}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Abrir configurações"
+            >
+              <Text style={styles.avatarText}>{avatarLabel}</Text>
+            </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={styles.avatar}
-            onPress={() => router.push('/settings')}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel="Abrir configurações"
-          >
-            <Text style={styles.avatarText}>{avatarLabel}</Text>
-          </TouchableOpacity>
-        </View>
+          <View style={[styles.heroWrap, isDesktop && styles.heroWrapDesktop]}>
+            <View style={[styles.dailyCard, isDesktop && styles.dailyCardDesktop]}>
+              <View style={styles.dailyTopRow}>
+                <View style={styles.iconCircle}>
+                  <Ionicons name="book" size={18} color="#fff" />
+                </View>
 
-        <View style={styles.dailyCard}>
-          <View style={styles.iconCircle}>
-            <Ionicons name="book" size={20} color="#fff" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.dailyTitle}>Versículo do Dia</Text>
+                  <Text style={styles.dailyRef}>{dailyVerse.reference}</Text>
+                </View>
+              </View>
+
+              <Text style={styles.dailyText}>{dailyVerse.text}</Text>
+
+              <TouchableOpacity
+                style={styles.dailyAction}
+                activeOpacity={0.85}
+                onPress={() => router.push('/read')}
+              >
+                <Text style={styles.dailyActionText}>Abrir Bíblia</Text>
+                <Ionicons name="arrow-forward" size={16} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.quickPanel, isDesktop && styles.quickPanelDesktop]}>
+              <Text style={styles.quickPanelTitle}>Pesquisa Rápida</Text>
+
+              <View style={styles.quickSearchWrap}>
+                <Ionicons name="search" size={18} color="#8E8E93" />
+
+                <TextInput
+                  style={styles.quickSearchInput}
+                  placeholder="Buscar palavra na Bíblia…"
+                  value={quickQuery}
+                  onChangeText={setQuickQuery}
+                  returnKeyType="search"
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  onSubmitEditing={handleQuickSearch}
+                />
+
+                {quickQuery.length > 0 ? (
+                  <TouchableOpacity
+                    onPress={() => setQuickQuery('')}
+                    style={{ padding: 6 }}
+                    accessibilityLabel="Limpar busca"
+                  >
+                    <Ionicons name="close-circle" size={18} color="#C7C7CC" />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    onPress={handleQuickSearch}
+                    style={styles.quickGoBtn}
+                    accessibilityLabel="Pesquisar"
+                  >
+                    <Ionicons name="arrow-forward" size={18} color="#fff" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.quickMiniRow}>
+                <TouchableOpacity
+                  style={styles.quickMiniBtn}
+                  onPress={() => router.push('/read')}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="book-outline" size={16} color="#007AFF" />
+                  <Text style={styles.quickMiniText}>Ler Bíblia</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.quickMiniBtn}
+                  onPress={() => router.push('/harpa')}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="musical-notes-outline" size={16} color="#0097A7" />
+                  <Text style={styles.quickMiniText}>Abrir Harpa</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-          <Text style={styles.dailyTitle}>Versículo do Dia</Text>
-          <Text style={styles.dailyText}>{dailyVerse.text}</Text>
-          <Text style={styles.dailyRef}>{dailyVerse.reference}</Text>
-        </View>
 
-        <Text style={styles.sectionTitle}>Pesquisa Rápida</Text>
+          <Text style={styles.sectionTitle}>Menu Principal</Text>
 
-        <View style={styles.quickSearchWrap}>
-          <Ionicons name="search" size={18} color="#8E8E93" />
+          <View style={[styles.grid, isTablet && styles.gridTablet, isDesktop && styles.gridDesktop]}>
+            {menuItems.map((item) => (
+              <TouchableOpacity
+                key={item.key}
+                style={[styles.card, { width: cardWidth }]}
+                onPress={() => router.push(item.href as any)}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.cardIcon, { backgroundColor: item.iconBg }]}>
+                  <Ionicons name={item.icon} size={24} color={item.iconColor} />
+                </View>
+                <Text style={styles.cardTitle}>{item.title}</Text>
+                <Text style={styles.cardSub}>{item.subtitle}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-          <TextInput
-            style={styles.quickSearchInput}
-            placeholder="Buscar palavra na Bíblia…"
-            value={quickQuery}
-            onChangeText={setQuickQuery}
-            returnKeyType="search"
-            autoCorrect={false}
-            autoCapitalize="none"
-            onSubmitEditing={handleQuickSearch}
-          />
-
-          {quickQuery.length > 0 ? (
-            <TouchableOpacity
-              onPress={() => setQuickQuery('')}
-              style={{ padding: 6 }}
-              accessibilityLabel="Limpar busca"
-            >
-              <Ionicons name="close-circle" size={18} color="#C7C7CC" />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              onPress={handleQuickSearch}
-              style={styles.quickGoBtn}
-              accessibilityLabel="Pesquisar"
-            >
-              <Ionicons name="arrow-forward" size={18} color="#fff" />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <Text style={styles.sectionTitle}>Menu Principal</Text>
-
-        <View style={styles.grid}>
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push('/read')}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.cardIcon, { backgroundColor: '#E3F2FD' }]}>
-              <Ionicons name="book-outline" size={24} color="#007AFF" />
-            </View>
-            <Text style={styles.cardTitle}>Bíblia</Text>
-            <Text style={styles.cardSub}>Leitura</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push('/harpa')}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.cardIcon, { backgroundColor: '#E0F7FA' }]}>
-              <Ionicons name="musical-notes-outline" size={24} color="#0097A7" />
-            </View>
-            <Text style={styles.cardTitle}>Harpa</Text>
-            <Text style={styles.cardSub}>Hinos</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push('/studies')}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.cardIcon, { backgroundColor: '#E8F5E9' }]}>
-              <Ionicons name="create-outline" size={24} color="#34C759" />
-            </View>
-            <Text style={styles.cardTitle}>Estudos</Text>
-            <Text style={styles.cardSub}>Anotações</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push('/plan')}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.cardIcon, { backgroundColor: '#F3E5F5' }]}>
-              <Ionicons name="calendar-outline" size={24} color="#AF52DE" />
-            </View>
-            <Text style={styles.cardTitle}>Plano</Text>
-            <Text style={styles.cardSub}>Anual</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push('/dictionary')}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.cardIcon, { backgroundColor: '#FFF3E0' }]}>
-              <Ionicons name="library-outline" size={24} color="#FF9500" />
-            </View>
-            <Text style={styles.cardTitle}>Dicionário</Text>
-            <Text style={styles.cardSub}>Original</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={{ height: 24 }} />
-      </ScrollView>
+          <View style={{ height: 24 }} />
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  quickSearchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    height: 48,
-    marginBottom: 22,
-  },
-  quickSearchInput: {
+  container: {
     flex: 1,
-    fontSize: 16,
-    color: '#111',
-    marginLeft: 10,
-  },
-  quickGoBtn: {
-    backgroundColor: '#111',
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    backgroundColor: '#F7F8FA',
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  container: { flex: 1, backgroundColor: '#FAFAFA' },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 20 },
+
+  page: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 1280,
+  },
+
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
 
   header: {
     flexDirection: 'row',
@@ -421,71 +489,214 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 18,
   },
-  greeting: { fontSize: 22, fontWeight: '800', color: '#000' },
-  subGreeting: { fontSize: 14, color: '#666', marginTop: 2 },
+
+  greeting: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#111827',
+  },
+
+  subGreeting: {
+    fontSize: 14,
+    color: '#667085',
+    marginTop: 4,
+  },
+
   avatar: {
-    width: 45,
-    height: 45,
-    borderRadius: 25,
-    backgroundColor: '#E0E0E0',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#E5E7EB',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarText: { fontWeight: 'bold', color: '#666' },
 
-  dailyCard: {
-    backgroundColor: '#007AFF',
-    padding: 22,
-    borderRadius: 20,
+  avatarText: {
+    fontWeight: '800',
+    color: '#4B5563',
+  },
+
+  heroWrap: {
+    gap: 14,
     marginBottom: 18,
   },
+
+  heroWrapDesktop: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+
+  dailyCard: {
+    backgroundColor: '#0F62FE',
+    padding: 16,
+    borderRadius: 18,
+  },
+
+  dailyCardDesktop: {
+    flex: 1.1,
+    minHeight: 220,
+    justifyContent: 'space-between',
+  },
+
+  dailyTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 12,
+  },
+
   iconCircle: {
     width: 40,
     height: 40,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
   },
+
   dailyTitle: {
-    color: 'rgba(255,255,255,0.9)',
+    color: 'rgba(255,255,255,0.92)',
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.6,
-    marginBottom: 6,
+    marginBottom: 2,
   },
+
   dailyText: {
     color: '#fff',
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '600',
-    fontStyle: 'italic',
-    lineHeight: 25,
+    lineHeight: 22,
   },
+
   dailyRef: {
-    color: 'rgba(255,255,255,0.75)',
+    color: 'rgba(255,255,255,0.78)',
     fontSize: 12,
-    fontWeight: 'bold',
-    marginTop: 12,
+    fontWeight: '800',
     letterSpacing: 0.6,
   },
 
-  sectionTitle: { fontSize: 18, fontWeight: '800', marginBottom: 12, color: '#333' },
+  dailyAction: {
+    marginTop: 14,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
+  },
+
+  dailyActionText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+
+  quickPanel: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E9ECF2',
+  },
+
+  quickPanelDesktop: {
+    flex: 0.9,
+    minHeight: 220,
+  },
+
+  quickPanelTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 12,
+  },
+
+  quickSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    height: 48,
+  },
+
+  quickSearchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#111',
+    marginLeft: 10,
+  },
+
+  quickGoBtn: {
+    backgroundColor: '#111827',
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  quickMiniRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+    flexWrap: 'wrap',
+  },
+
+  quickMiniBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E9ECF2',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+
+  quickMiniText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 12,
+    color: '#333',
+  },
 
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 14,
+    rowGap: 14,
   },
+
+  gridTablet: {
+    justifyContent: 'space-between',
+  },
+
+  gridDesktop: {
+    justifyContent: 'space-between',
+  },
+
   card: {
-    width: '48%',
     backgroundColor: '#fff',
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#f0f0f0',
+    borderColor: '#E9ECF2',
+    minHeight: 130,
   },
+
   cardIcon: {
     width: 50,
     height: 50,
@@ -494,6 +705,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  cardTitle: { fontSize: 16, fontWeight: '800', color: '#333' },
-  cardSub: { fontSize: 12, color: '#999', marginTop: 2 },
+
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#333',
+  },
+
+  cardSub: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
+  },
 });
