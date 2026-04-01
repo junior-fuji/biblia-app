@@ -774,16 +774,19 @@ Inclua análise do texto original com transliteração palavra por palavra dos t
 
       {showProjector && isProjectorMode ? (
         <ProjectorScreen
-          title={`${safeBookName} ${chapterNum}`}
-          subtitle={versionCode}
-          slides={projectorSlides}
-          initialIndex={projectorIndex}
-          onClose={closeProjector}
-          onPrevGroup={canPrev ? goPrev : undefined}
-          onNextGroup={canNext ? goNext : undefined}
-          prevGroupLabel="Capítulo anterior"
-          nextGroupLabel="Próximo capítulo"
-        />
+        title={`${safeBookName} ${chapterNum}`}
+        subtitle={versionCode}
+        slides={projectorSlides}
+        initialIndex={projectorIndex}
+        onClose={closeProjector}
+        onPrevGroup={canPrev ? goPrev : undefined}
+        onNextGroup={canNext ? goNext : undefined}
+        prevGroupLabel="Capítulo anterior"
+        nextGroupLabel="Próximo capítulo"
+        pickerLabel="Versículos"
+        pickerTitle={`${safeBookName} ${chapterNum}`}
+        renderSlideLabel={(_, index) => `${safeBookName} ${chapterNum}:${versesState[index]?.verse ?? index + 1}`}
+      />
       ) : (
         <>
           <View style={styles.readingToolbar}>

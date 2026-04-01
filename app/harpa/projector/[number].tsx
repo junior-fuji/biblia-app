@@ -126,16 +126,21 @@ export default function HarpaProjectorScreen() {
 
  return (
   <ProjectorScreen
-    title={`${hymn.number} — ${hymn.title}`}
-    subtitle="Harpa Cristã"
-    slides={slides}
-    onClose={() => router.back()}
-    onPrevGroup={currentNumber > 1 ? prev : undefined}
-    onNextGroup={currentNumber < 640 ? next : undefined}
-    prevGroupLabel="Hino anterior"
-    nextGroupLabel="Próximo hino"
-    baseFontSize={40}
-    uniformFontSize
-  />
+  title={`${hymn.number} — ${hymn.title}`}
+  subtitle="Harpa Cristã"
+  slides={slides}
+  onClose={() => router.back()}
+  onPrevGroup={currentNumber > 1 ? prev : undefined}
+  onNextGroup={currentNumber < 640 ? next : undefined}
+  prevGroupLabel="Hino anterior"
+  nextGroupLabel="Próximo hino"
+  baseFontSize={40}
+  uniformFontSize
+  pickerLabel="Partes"
+  pickerTitle={`${hymn.number} — ${hymn.title}`}
+  renderSlideLabel={(slide, index) =>
+    slide.kind === 'chorus' ? `Refrão ${index + 1}` : `Estrofe ${index + 1}`
+  }
+/>
  );
 }
