@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
 
   slideInner: {
     width: '100%',
-    transform: [{ translateY: -90 }],
+    transform: [{ translateY: -110}],
   },
 
   slideTitle: {
