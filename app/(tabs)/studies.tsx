@@ -173,11 +173,11 @@ export default function StudiesScreen() {
       const userId = session?.user?.id;
 
       if (sb && userId) {
-        const { data, error } = await sb
-          .from('saved_notes')
-          .select('id, created_at, title, reference, content, user_id, client_id')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false });
+        const { error, count , data } = await sb
+  .from('saved_notes')
+  .delete({ count: 'exact' })
+  .eq('id', studyId)
+  .eq('user_id', userId);
 
         if (error) {
           console.log('FETCH_STUDIES_SUPABASE_ERROR', error);
@@ -475,7 +475,7 @@ export default function StudiesScreen() {
         );
         await saveLocalStudies(updated);
       }
-
+      const studyId = Number(selectedStudy.id);
       const nextSelected: Study = { ...selectedStudy, title: editTheme, content: newContent };
       setSelectedStudy(nextSelected);
 
