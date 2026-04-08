@@ -355,7 +355,7 @@ export default function StudiesScreen() {
 
               if (error) {
                 console.log('DELETE_SUPABASE_ERROR', error);
-                Alert.alert('Erro', error.message);
+                Alert.alert('Erro', `${error.message}\n(code: ${(error as any).code ?? '-'})`);
                 return;
               }
             } else {
