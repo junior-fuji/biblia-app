@@ -17,9 +17,9 @@ if (supabaseUrl && supabaseAnonKey) {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: false,
+      debug: true,
       storage: Platform.OS === 'web' ? undefined : AsyncStorage, // <-- AQUI
       flowType: 'pkce',
-      debug: true,
     },
   });
 }
@@ -27,6 +27,7 @@ if (supabaseUrl && supabaseAnonKey) {
 export function getSupabaseOrNull() {
   return _client;
 }
+
 export function getSupabaseOrThrow() {
   if (!_client) throw new Error('Supabase não configurado.');
   return _client;

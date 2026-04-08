@@ -1,4 +1,9 @@
-ProjectorSlide
+export type ProjectorSlide = {
+  id: string;
+  title: string;
+  content: string;
+  kind: 'verse';
+};
 
 type Verse = {
   id: number;
