@@ -336,7 +336,7 @@ export default function StudiesScreen() {
 
   const handleDelete = async () => {
     if (!selectedStudy) return;
-  
+
     Alert.alert('Excluir', 'Tem certeza que deseja apagar este estudo?', [
       { text: 'Cancelar', style: 'cancel' },
       {
@@ -350,38 +350,38 @@ export default function StudiesScreen() {
                 Alert.alert('Erro', 'Supabase não configurado.');
                 return;
               }
-  
+
               const { data: sessionData, error: sessionErr } = await sb.auth.getSession();
               if (sessionErr) {
                 console.log('DELETE_SESSION_ERROR', sessionErr);
                 Alert.alert('Erro', sessionErr.message);
                 return;
               }
-  
+
               const userId = sessionData.session?.user?.id;
               if (!userId) {
                 Alert.alert('Login necessário', 'Faça login novamente para excluir.');
                 return;
               }
-  
+
               const studyId = String(selectedStudy.id);
-  
+
               const { error, count } = await sb
                 .from('saved_notes')
                 .delete({ count: 'exact' })
                 .eq('id', studyId)
                 .eq('user_id', userId);
-  
+
               if (error) {
                 console.log('DELETE_SUPABASE_ERROR', error);
                 Alert.alert('Erro ao excluir', `${error.message}\n(code: ${(error as any).code ?? '-'})`);
                 return;
               }
-  
+
               console.log('DELETE_SUPABASE_OK', { studyId, userId, count });
-  
+
               if (!count || count < 1) {
-                Alert.alert('Aviso', 'Nenhum registro foi removido. Verifique a policy do Supabase.');
+                Alert.alert('Aviso', 'Nenhum registro foi removido. Verifique a policy DELETE no Supabase.');
                 return;
               }
             } else {
@@ -389,12 +389,11 @@ export default function StudiesScreen() {
               const updated = local.filter((s) => toStudyId(s.id) !== toStudyId(selectedStudy.id));
               await saveLocalStudies(updated);
             }
-  
+
             setStudies((prev) => prev.filter((s) => toStudyId(s.id) !== toStudyId(selectedStudy.id)));
             setModalVisible(false);
             setSelectedStudy(null);
-  
-            // garante refresh visual
+
             fetchStudies();
           } catch (e: any) {
             console.log('DELETE_STUDY_FATAL', e);
@@ -404,6 +403,7 @@ export default function StudiesScreen() {
       },
     ]);
   };
+
   const handleSaveChanges = async () => {
     if (!selectedStudy) return;
 
