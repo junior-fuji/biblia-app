@@ -364,26 +364,27 @@ export default function StudiesScreen() {
                 return;
               }
 
-              const studyId = String(selectedStudy.id);
+              const studyId = selectedStudy.id;
 
-              const { error, count } = await sb
+              const { data: checkRow, error: checkError } = await sb
                 .from('saved_notes')
-                .delete({ count: 'exact' })
+                .select('id, user_id, client_id')
                 .eq('id', studyId)
-                .eq('user_id', userId);
-
+                .maybeSingle();
+              
+              console.log('DELETE_CHECK_ROW', checkRow, checkError);
+              
+              const { error } = await sb
+                .from('saved_notes')
+                .delete()
+                .eq('id', studyId);
+              
               if (error) {
                 console.log('DELETE_SUPABASE_ERROR', error);
                 Alert.alert('Erro ao excluir', `${error.message}\n(code: ${(error as any).code ?? '-'})`);
                 return;
               }
-
-              console.log('DELETE_SUPABASE_OK', { studyId, userId, count });
-
-              if (!count || count < 1) {
-                Alert.alert('Aviso', 'Nenhum registro foi removido. Verifique a policy DELETE no Supabase.');
-                return;
-              }
+            
             } else {
               const local = await getLocalStudies();
               const updated = local.filter((s) => toStudyId(s.id) !== toStudyId(selectedStudy.id));
