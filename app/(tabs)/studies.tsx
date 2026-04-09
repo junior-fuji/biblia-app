@@ -2,7 +2,7 @@ import { getSupabaseOrNull } from '@/lib/supabaseClient';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -171,14 +171,14 @@ export default function StudiesScreen() {
     try {
       const sb = getSupabaseOrNull();
       const userId = session?.user?.id;
-
+  
       if (sb && userId) {
-        const { error, count , data } = await sb
-  .from('saved_notes')
-  .delete({ count: 'exact' })
-  .eq('id', studyId)
-  .eq('user_id', userId);
-
+        const { data, error } = await sb
+          .from('saved_notes')
+          .select('id, created_at, title, reference, content, user_id, client_id')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+  
         if (error) {
           console.log('FETCH_STUDIES_SUPABASE_ERROR', error);
         } else {
@@ -195,13 +195,13 @@ export default function StudiesScreen() {
             client_id: item.client_id ?? null,
             source: 'supabase',
           }));
-
+  
           setStudies(mapped);
           setLoading(false);
           return;
         }
       }
-
+  
       const local = await getLocalStudies();
       const sorted = [...local].sort((a, b) => {
         const ta = new Date(a.created_at).getTime();
@@ -215,17 +215,6 @@ export default function StudiesScreen() {
       setLoading(false);
     }
   }, [session?.user?.id]);
-
-  useEffect(() => {
-    fetchStudies();
-  }, [fetchStudies]);
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchStudies();
-    }, [fetchStudies])
-  );
-
   const openStudy = (study: Study) => {
     setSelectedStudy(study);
     setModalVisible(true);
