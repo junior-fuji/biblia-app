@@ -2,7 +2,7 @@ import { getSupabaseOrNull } from '@/lib/supabaseClient';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -47,6 +47,7 @@ type OldJson = {
 
 type Envelope = {
   version?: number;
+  kind?: 'ai_bible_study';
   type?: 'chapter' | 'verse';
   ref?: {
     book_id?: number;
@@ -55,6 +56,7 @@ type Envelope = {
     label?: string;
   };
   title?: string;
+  reference?: string | null;
   analysis?: {
     theme?: string;
     history?: string;
@@ -63,6 +65,10 @@ type Envelope = {
     application?: string;
   } | null;
   raw?: string | null;
+  meta?: {
+    generated_by?: 'ai';
+    created_at?: string;
+  };
 };
 
 type ParsedKind = 'envelope' | 'oldjson' | 'plain';
@@ -84,11 +90,13 @@ async function getLocalStudies(): Promise<Study[]> {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
+
     return parsed.map((item) => ({
       ...item,
       source: 'local' as const,
     })) as Study[];
-  } catch {
+  } catch (error) {
+    console.log('GET_LOCAL_STUDIES_ERROR', error);
     return [];
   }
 }
@@ -110,19 +118,72 @@ function isEnvelope(obj: any): obj is Envelope {
   return (
     obj &&
     typeof obj === 'object' &&
-    ('ref' in obj || 'analysis' in obj) &&
-    ('version' in obj || 'type' in obj)
+    (
+      obj.kind === 'ai_bible_study' ||
+      (
+        ('ref' in obj || 'analysis' in obj) &&
+        ('version' in obj || 'type' in obj)
+      )
+    )
   );
 }
 
 function isOldJson(obj: any): obj is OldJson {
-  return obj && typeof obj === 'object' && ('theme' in obj || 'exegesis' in obj || 'application' in obj);
+  return (
+    obj &&
+    typeof obj === 'object' &&
+    ('theme' in obj || 'exegesis' in obj || 'application' in obj)
+  );
+}
+
+function buildEnvelopeFromEditor(params: {
+  selectedStudy: Study;
+  parsedEnvelope: Envelope | null;
+  editTheme: string;
+  editHistory: string;
+  editExegesis: string;
+  editTheology: string;
+  editApplication: string;
+}): string {
+  const {
+    selectedStudy,
+    parsedEnvelope,
+    editTheme,
+    editHistory,
+    editExegesis,
+    editTheology,
+    editApplication,
+  } = params;
+
+  const next: Envelope = {
+    version: 1,
+    kind: 'ai_bible_study',
+    ...(parsedEnvelope || {}),
+    title: editTheme || selectedStudy.title || 'Sem Título',
+    reference: selectedStudy.reference ?? parsedEnvelope?.reference ?? null,
+    analysis: {
+      ...(parsedEnvelope?.analysis || {}),
+      theme: editTheme || undefined,
+      history: editHistory || undefined,
+      exegesis: editExegesis || undefined,
+      theology: editTheology || undefined,
+      application: editApplication || undefined,
+    },
+    raw: parsedEnvelope?.raw ?? null,
+    meta: {
+      ...(parsedEnvelope?.meta || {}),
+      generated_by: parsedEnvelope?.meta?.generated_by ?? 'ai',
+      created_at: parsedEnvelope?.meta?.created_at ?? new Date().toISOString(),
+    },
+  };
+
+  return JSON.stringify(next);
 }
 
 export default function StudiesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { session } = useAuth();
+  const { initialized, session } = useAuth();
 
   const [studies, setStudies] = useState<Study[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,6 +211,8 @@ export default function StudiesScreen() {
     label?: string;
   } | null>(null);
 
+  const userId = session?.user?.id ?? null;
+
   useEffect(() => {
     const show = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
@@ -167,54 +230,89 @@ export default function StudiesScreen() {
   }, []);
 
   const fetchStudies = useCallback(async () => {
+    if (!initialized) return;
+
     setLoading(true);
+
     try {
       const sb = getSupabaseOrNull();
-      const userId = session?.user?.id;
-  
+
       if (sb && userId) {
         const { data, error } = await sb
           .from('saved_notes')
           .select('id, created_at, title, reference, content, user_id, client_id')
           .eq('user_id', userId)
           .order('created_at', { ascending: false });
-  
+
         if (error) {
           console.log('FETCH_STUDIES_SUPABASE_ERROR', error);
-        } else {
-          const mapped: Study[] = (data ?? []).map((item: any) => ({
-            id: item.id,
-            title: item.title || 'Sem Título',
-            content: item.content ?? null,
-            reference: item.reference ?? null,
-            observation: null,
-            application: null,
-            prayer: null,
-            created_at: item.created_at,
-            user_id: item.user_id ?? null,
-            client_id: item.client_id ?? null,
-            source: 'supabase',
-          }));
-  
-          setStudies(mapped);
-          setLoading(false);
+          setStudies([]);
           return;
         }
+
+        const mapped: Study[] = (data ?? []).map((item: any) => ({
+          id: item.id,
+          title: item.title || 'Sem Título',
+          content: item.content ?? null,
+          reference: item.reference ?? null,
+          observation: null,
+          application: null,
+          prayer: null,
+          created_at: item.created_at,
+          user_id: item.user_id ?? null,
+          client_id: item.client_id ?? null,
+          source: 'supabase',
+        }));
+
+        setStudies(mapped);
+        return;
       }
-  
+
       const local = await getLocalStudies();
       const sorted = [...local].sort((a, b) => {
         const ta = new Date(a.created_at).getTime();
         const tb = new Date(b.created_at).getTime();
         return tb - ta;
       });
+
       setStudies(sorted);
     } catch (e) {
       console.log('FETCH_STUDIES_FATAL', e);
+      setStudies([]);
     } finally {
       setLoading(false);
     }
-  }, [session?.user?.id]);
+  }, [initialized, userId]);
+
+  useEffect(() => {
+    fetchStudies();
+  }, [fetchStudies]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchStudies();
+    }, [fetchStudies])
+  );
+
+  const resetModalState = () => {
+    setOpenRef(null);
+    setParsedEnvelope(null);
+    setParsedOld(null);
+    setParsedKind('plain');
+    setEditTheme('');
+    setEditHistory('');
+    setEditExegesis('');
+    setEditTheology('');
+    setEditApplication('');
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setSelectedStudy(null);
+    setIsEditing(false);
+    resetModalState();
+  };
+
   const openStudy = (study: Study) => {
     setSelectedStudy(study);
     setModalVisible(true);
@@ -320,7 +418,9 @@ export default function StudiesScreen() {
 
     try {
       await Share.share({ message });
-    } catch {}
+    } catch (e) {
+      console.log('SHARE_STUDY_ERROR', e);
+    }
   };
 
   const handleDelete = async () => {
@@ -340,40 +440,28 @@ export default function StudiesScreen() {
                 return;
               }
 
-              const { data: sessionData, error: sessionErr } = await sb.auth.getSession();
-              if (sessionErr) {
-                console.log('DELETE_SESSION_ERROR', sessionErr);
-                Alert.alert('Erro', sessionErr.message);
-                return;
-              }
-
-              const userId = sessionData.session?.user?.id;
               if (!userId) {
                 Alert.alert('Login necessário', 'Faça login novamente para excluir.');
                 return;
               }
 
-              const studyId = selectedStudy.id;
+              const studyId = Number(selectedStudy.id);
+              if (!Number.isFinite(studyId)) {
+                Alert.alert('Erro', 'ID de estudo inválido.');
+                return;
+              }
 
-              const { data: checkRow, error: checkError } = await sb
-                .from('saved_notes')
-                .select('id, user_id, client_id')
-                .eq('id', studyId)
-                .maybeSingle();
-              
-              console.log('DELETE_CHECK_ROW', checkRow, checkError);
-              
               const { error } = await sb
                 .from('saved_notes')
                 .delete()
-                .eq('id', studyId);
-              
+                .eq('id', studyId)
+                .eq('user_id', userId);
+
               if (error) {
                 console.log('DELETE_SUPABASE_ERROR', error);
                 Alert.alert('Erro ao excluir', `${error.message}\n(code: ${(error as any).code ?? '-'})`);
                 return;
               }
-            
             } else {
               const local = await getLocalStudies();
               const updated = local.filter((s) => toStudyId(s.id) !== toStudyId(selectedStudy.id));
@@ -381,10 +469,7 @@ export default function StudiesScreen() {
             }
 
             setStudies((prev) => prev.filter((s) => toStudyId(s.id) !== toStudyId(selectedStudy.id)));
-            setModalVisible(false);
-            setSelectedStudy(null);
-
-            fetchStudies();
+            closeModal();
           } catch (e: any) {
             console.log('DELETE_STUDY_FATAL', e);
             Alert.alert('Erro', e?.message || 'Falha ao excluir.');
@@ -399,25 +484,22 @@ export default function StudiesScreen() {
 
     try {
       let newContent: string | null = null;
+      const nextTitle = String(editTheme || '').trim() || 'Sem Título';
 
-      if (parsedKind === 'envelope' && parsedEnvelope) {
-        const next: Envelope = {
-          ...parsedEnvelope,
-          title: editTheme,
-          analysis: {
-            ...(parsedEnvelope.analysis || {}),
-            theme: editTheme,
-            history: editHistory,
-            exegesis: editExegesis,
-            theology: editTheology,
-            application: editApplication,
-          },
-        };
-        newContent = JSON.stringify(next);
+      if (parsedKind === 'envelope') {
+        newContent = buildEnvelopeFromEditor({
+          selectedStudy,
+          parsedEnvelope,
+          editTheme: nextTitle,
+          editHistory,
+          editExegesis,
+          editTheology,
+          editApplication,
+        });
       } else if (parsedKind === 'oldjson') {
         const next: OldJson = {
           ...(parsedOld || {}),
-          theme: editTheme,
+          theme: nextTitle,
           history: editHistory,
           exegesis: editExegesis,
           theology: editTheology,
@@ -435,26 +517,60 @@ export default function StudiesScreen() {
           return;
         }
 
-        const { error } = await sb
+        if (!userId) {
+          Alert.alert('Login necessário', 'Faça login novamente para editar.');
+          return;
+        }
+
+        const studyId = Number(selectedStudy.id);
+        if (!Number.isFinite(studyId)) {
+          Alert.alert('Erro', 'ID de estudo inválido.');
+          return;
+        }
+
+        const { data, error } = await sb
           .from('saved_notes')
           .update({
-            title: editTheme,
+            title: nextTitle,
             content: newContent,
+            reference: selectedStudy.reference ?? null,
           })
-          .eq('id', selectedStudy.id);
+          .eq('id', studyId)
+          .eq('user_id', userId)
+          .select('id, created_at, title, reference, content, user_id, client_id')
+          .single();
 
         if (error) {
           console.log('UPDATE_SUPABASE_ERROR', error);
           Alert.alert('Erro', error.message);
           return;
         }
+
+        const nextSelected: Study = {
+          id: data.id,
+          title: data.title || 'Sem Título',
+          content: data.content ?? null,
+          reference: data.reference ?? null,
+          observation: null,
+          application: null,
+          prayer: null,
+          created_at: data.created_at,
+          user_id: data.user_id ?? null,
+          client_id: data.client_id ?? null,
+          source: 'supabase',
+        };
+
+        setSelectedStudy(nextSelected);
+        setStudies((prev) =>
+          prev.map((s) => (toStudyId(s.id) === toStudyId(nextSelected.id) ? nextSelected : s))
+        );
       } else {
         const local = await getLocalStudies();
         const updated = local.map((s) =>
           toStudyId(s.id) === toStudyId(selectedStudy.id)
             ? {
                 ...s,
-                title: editTheme,
+                title: nextTitle,
                 content: newContent,
                 observation: null,
                 application: null,
@@ -462,26 +578,34 @@ export default function StudiesScreen() {
               }
             : s
         );
-        await saveLocalStudies(updated);
-      }
-      const studyId = Number(selectedStudy.id);
-      const nextSelected: Study = { ...selectedStudy, title: editTheme, content: newContent };
-      setSelectedStudy(nextSelected);
 
-      setStudies((prev) =>
-        prev.map((s) =>
-          toStudyId(s.id) === toStudyId(selectedStudy.id)
-            ? {
-                ...s,
-                title: editTheme,
-                content: newContent,
-                observation: null,
-                application: null,
-                prayer: null,
-              }
-            : s
-        )
-      );
+        await saveLocalStudies(updated);
+
+        const nextSelected: Study = {
+          ...selectedStudy,
+          title: nextTitle,
+          content: newContent,
+          observation: null,
+          application: null,
+          prayer: null,
+        };
+
+        setSelectedStudy(nextSelected);
+        setStudies((prev) =>
+          prev.map((s) =>
+            toStudyId(s.id) === toStudyId(selectedStudy.id)
+              ? {
+                  ...s,
+                  title: nextTitle,
+                  content: newContent,
+                  observation: null,
+                  application: null,
+                  prayer: null,
+                }
+              : s
+          )
+        );
+      }
 
       Alert.alert('Sucesso', 'Estudo atualizado!');
       setIsEditing(false);
@@ -493,6 +617,14 @@ export default function StudiesScreen() {
 
   const createLocalBlankStudy = async () => {
     try {
+      if (userId) {
+        Alert.alert(
+          'Indisponível',
+          'Com usuário logado, os estudos devem ser salvos na conta. A criação local foi bloqueada para evitar conflito.'
+        );
+        return;
+      }
+
       const local = await getLocalStudies();
       const nextId = generateLocalStudyId(local);
       const now = new Date().toISOString();
@@ -518,6 +650,12 @@ export default function StudiesScreen() {
     }
   };
 
+  const emptyMessage = useMemo(() => {
+    if (!initialized) return 'Carregando sessão...';
+    if (userId) return 'Nenhuma análise salva na sua conta ainda.';
+    return 'Nenhuma análise local salva ainda.';
+  }, [initialized, userId]);
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" />
@@ -534,7 +672,7 @@ export default function StudiesScreen() {
         </TouchableOpacity>
       </View>
 
-      {loading ? (
+      {loading || !initialized ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#AF52DE" />
         </View>
@@ -546,7 +684,7 @@ export default function StudiesScreen() {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="document-text-outline" size={60} color="#ddd" />
-              <Text style={styles.emptyText}>Nenhuma análise salva ainda.</Text>
+              <Text style={styles.emptyText}>{emptyMessage}</Text>
             </View>
           }
           renderItem={({ item }) => (
@@ -569,6 +707,10 @@ export default function StudiesScreen() {
                     {item.reference}
                   </Text>
                 )}
+
+                <Text style={styles.sourceTag}>
+                  {item.source === 'supabase' ? 'Nuvem' : 'Local'}
+                </Text>
               </View>
 
               <Ionicons name="chevron-forward" size={20} color="#ccc" />
@@ -577,7 +719,7 @@ export default function StudiesScreen() {
         />
       )}
 
-      <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
+      <Modal visible={modalVisible} animationType="slide" onRequestClose={closeModal}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -585,7 +727,7 @@ export default function StudiesScreen() {
         >
           <View style={[styles.modalContainer, { paddingTop: Platform.OS === 'ios' ? 40 : 0 }]}>
             <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <TouchableOpacity onPress={closeModal}>
                 <Text style={styles.closeText}>Fechar</Text>
               </TouchableOpacity>
 
@@ -678,7 +820,7 @@ export default function StudiesScreen() {
                 )}
               </View>
 
-              {editTheology ? (
+              {(editTheology || isEditing) ? (
                 <View style={[styles.section, { borderLeftColor: '#AF52DE' }]}>
                   <Text style={[styles.sectionHeader, { color: '#AF52DE' }]}>TEOLOGIA</Text>
                   {isEditing ? (
@@ -696,7 +838,7 @@ export default function StudiesScreen() {
                 </View>
               ) : null}
 
-              {editApplication ? (
+              {(editApplication || isEditing) ? (
                 <View style={[styles.section, { borderLeftColor: '#34C759' }]}>
                   <Text style={[styles.sectionHeader, { color: '#34C759' }]}>APLICAÇÃO</Text>
                   {isEditing ? (
@@ -741,7 +883,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   emptyContainer: { alignItems: 'center', marginTop: 100, padding: 20 },
-  emptyText: { fontSize: 18, fontWeight: 'bold', color: '#666', marginTop: 10 },
+  emptyText: { fontSize: 18, fontWeight: 'bold', color: '#666', marginTop: 10, textAlign: 'center' },
 
   card: {
     flexDirection: 'row',
@@ -767,6 +909,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#333' },
   cardDate: { fontSize: 12, color: '#888', marginTop: 2 },
   cardRef: { fontSize: 12, color: '#666', marginTop: 4 },
+  sourceTag: { fontSize: 11, color: '#AF52DE', marginTop: 6, fontWeight: '700' },
 
   modalContainer: { flex: 1, backgroundColor: '#fff' },
   modalHeader: {

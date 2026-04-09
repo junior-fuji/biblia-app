@@ -1,136 +1,89 @@
-import { getSupabaseOrNull } from '@/lib/supabaseClient';
-import { processSyncQueue } from '@/lib/syncQueue';
-import { Session } from '@supabase/supabase-js';
+import { clearBrokenSupabaseSession, getSupabaseOrNull } from '@/lib/supabaseClient';
+import type { Session, User } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
-type AuthContextType = {
+type AuthContextValue = {
+  initialized: boolean;
   session: Session | null;
-  loading: boolean;
-  refreshSession: () => Promise<void>;
+  user: User | null;
 };
 
-const AuthContext = createContext<AuthContextType>({
+const AuthContext = createContext<AuthContextValue>({
+  initialized: false,
   session: null,
-  loading: true,
-  refreshSession: async () => {},
+  user: null,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const sb = getSupabaseOrNull();
+
+  const [initialized, setInitialized] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  async function syncAll() {
-    try {
-      const result = await processSyncQueue();
-      console.log('SYNC_QUEUE_DONE', result);
-    } catch (err) {
-      console.log('SYNC_QUEUE_ERROR', err);
-    }
-  }
-
-  async function refreshSession() {
-    const sb = getSupabaseOrNull();
-
-    if (!sb) {
-      setSession(null);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      const { data, error } = await sb.auth.getSession();
-
-      if (error) {
-        console.log('AUTH_REFRESH_SESSION_ERROR', error.message);
-        setSession(null);
-        setLoading(false);
-        return;
-      }
-
-      const currentSession = data.session ?? null;
-      setSession(currentSession);
-      setLoading(false);
-
-      if (currentSession?.user) {
-        await syncAll();
-      }
-    } catch (err) {
-      console.log('AUTH_REFRESH_SESSION_FATAL', err);
-      setSession(null);
-      setLoading(false);
-    }
-  }
 
   useEffect(() => {
     let mounted = true;
 
-    const sb = getSupabaseOrNull();
-
     if (!sb) {
-      setSession(null);
-      setLoading(false);
-
-      return () => {
-        mounted = false;
-      };
+      setInitialized(true);
+      return;
     }
 
-    async function loadInitialSession() {
+    const bootstrap = async () => {
       try {
         const { data, error } = await sb.auth.getSession();
 
-        if (!mounted) return;
-
         if (error) {
-          console.log('AUTH_INITIAL_SESSION_ERROR', error.message);
+          console.log('AUTH_BOOTSTRAP_GET_SESSION_ERROR', error);
+
+          const msg = String(error.message || '');
+          if (
+            msg.includes('Invalid Refresh Token') ||
+            msg.includes('Refresh Token Not Found')
+          ) {
+            await clearBrokenSupabaseSession();
+          }
+
+          if (!mounted) return;
           setSession(null);
-          setLoading(false);
+          setInitialized(true);
           return;
         }
 
-        const currentSession = data.session ?? null;
-        setSession(currentSession);
-        setLoading(false);
-
-        if (currentSession?.user) {
-          await syncAll();
-        }
-      } catch (err) {
         if (!mounted) return;
-        console.log('AUTH_INITIAL_SESSION_FATAL', err);
+        setSession(data.session ?? null);
+        setInitialized(true);
+      } catch (error) {
+        console.log('AUTH_BOOTSTRAP_FATAL', error);
+        if (!mounted) return;
         setSession(null);
-        setLoading(false);
+        setInitialized(true);
       }
-    }
+    };
 
-    loadInitialSession();
+    bootstrap();
 
-    const { data: authListener } = sb.auth.onAuthStateChange(async (_event, nextSession) => {
+    const {
+      data: { subscription },
+    } = sb.auth.onAuthStateChange((event, nextSession) => {
+      console.log('AUTH_STATE_CHANGE', event, Boolean(nextSession?.user?.id));
       if (!mounted) return;
-
       setSession(nextSession ?? null);
-      setLoading(false);
-
-      if (nextSession?.user) {
-        await syncAll();
-      }
+      setInitialized(true);
     });
 
     return () => {
       mounted = false;
-      authListener?.subscription?.unsubscribe();
+      subscription.unsubscribe();
     };
-  }, []);
+  }, [sb]);
 
-  const value = useMemo<AuthContextType>(
+  const value = useMemo<AuthContextValue>(
     () => ({
+      initialized,
       session,
-      loading,
-      refreshSession,
+      user: session?.user ?? null,
     }),
-    [session, loading]
+    [initialized, session]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,4 +1,5 @@
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
+import { useAuth } from '@/src/providers/AuthProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -38,6 +39,31 @@ type AnalysisData = {
 };
 
 type VersionRow = { id: string; code: string; name: string };
+
+type StudyEnvelope = {
+  version: 1;
+  kind: 'ai_bible_study';
+  title: string;
+  reference: string | null;
+  ref?: {
+    book_id?: number;
+    chapter?: number;
+    verse?: number | null;
+    label?: string;
+  };
+  analysis: {
+    theme?: string;
+    history?: string;
+    exegesis?: string;
+    theology?: string;
+    application?: string;
+  } | null;
+  raw: string | null;
+  meta?: {
+    generated_by?: 'ai';
+    created_at?: string;
+  };
+};
 
 const BOOK_MAP: Record<number, { name: string; abbrev: string }> = {
   1: { name: 'Gênesis', abbrev: 'Gn' },
@@ -130,6 +156,45 @@ function extractJsonObject(text: string): string | null {
   return text.slice(first, last + 1);
 }
 
+function buildStudyEnvelope(params: {
+  title: string;
+  reference: string | null;
+  bookId: number;
+  chapterNum: number;
+  verseNum?: number | null;
+  analysisData: AnalysisData | null;
+  rawAi: string | null;
+}): string {
+  const envelope: StudyEnvelope = {
+    version: 1,
+    kind: 'ai_bible_study',
+    title: params.title,
+    reference: params.reference,
+    ref: {
+      book_id: params.bookId,
+      chapter: params.chapterNum,
+      verse: params.verseNum ?? null,
+      label: params.reference ?? undefined,
+    },
+    analysis: params.analysisData
+      ? {
+          theme: params.analysisData.theme,
+          history: params.analysisData.history,
+          exegesis: params.analysisData.exegesis,
+          theology: params.analysisData.theology,
+          application: params.analysisData.application,
+        }
+      : null,
+    raw: params.rawAi ?? null,
+    meta: {
+      generated_by: 'ai',
+      created_at: new Date().toISOString(),
+    },
+  };
+
+  return JSON.stringify(envelope);
+}
+
 /* =========================
    CACHE (em memória)
 ========================= */
@@ -192,6 +257,7 @@ export default function ReadBookScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<Verse>>(null);
+  const { initialized, session } = useAuth();
 
   const { book, chapter, verse, returnTo } = useLocalSearchParams<RouteParams>();
   const bookId = Number(book);
@@ -213,7 +279,6 @@ export default function ReadBookScreen() {
     : { name: 'Livro', abbrev: '' };
   const safeBookName = bookData.name || 'Livro';
 
-  // ✅ deixe isso como string (para aceitar ARA/ARC/ACF/NVI/KJA sem quebrar)
   const [versionCode, setVersionCode] = useState<string>('ARA');
   const [versions, setVersions] = useState<VersionRow[]>([]);
   const [showVersions, setShowVersions] = useState(false);
@@ -234,21 +299,22 @@ export default function ReadBookScreen() {
   const [rawAi, setRawAi] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [saveReference, setSaveReference] = useState<string>('');
+  const [saveVerseNumber, setSaveVerseNumber] = useState<number | null>(null);
 
   useEffect(() => {
     setChapterNum((current) => (current !== initialChapter ? initialChapter : current));
   }, [initialChapter]);
 
-  // carrega versões 1x
   useEffect(() => {
     let alive = true;
+
     (async () => {
       try {
         const list = await fetchVersions();
         if (!alive) return;
+
         setVersions(list);
 
-        // se a versão atual não existir no banco, pega a primeira
         if (list.length > 0 && !list.some((v) => v.code === versionCode)) {
           setVersionCode(list[0].code);
         }
@@ -256,7 +322,6 @@ export default function ReadBookScreen() {
         console.log('FETCH_VERSIONS_ERROR', e);
         if (!alive) return;
 
-        // fallback local (não depende de banco)
         setVersions([
           { id: 'fallback-ara', code: 'ARA', name: 'ARA' },
           { id: 'fallback-arc', code: 'ARC', name: 'ARC' },
@@ -266,11 +331,11 @@ export default function ReadBookScreen() {
         ]);
       }
     })();
+
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [versionCode]);
 
   useEffect(() => {
     let alive = true;
@@ -316,6 +381,7 @@ export default function ReadBookScreen() {
     }
 
     loadTotal();
+
     return () => {
       alive = false;
     };
@@ -378,6 +444,7 @@ export default function ReadBookScreen() {
     }
 
     loadVerses();
+
     return () => {
       alive = false;
     };
@@ -391,9 +458,10 @@ export default function ReadBookScreen() {
     router.replace('/(tabs)/read' as any);
   }, [router, returnToStr]);
 
-  async function callAI(prompt: string, title: string, reference: string) {
+  async function callAI(prompt: string, title: string, reference: string, verseNum?: number | null) {
     setAiTitle(title);
     setSaveReference(reference);
+    setSaveVerseNumber(verseNum ?? null);
     setAnalysisData(null);
     setRawAi('');
     setAiOpen(true);
@@ -460,7 +528,8 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
     callAI(
       `Analise profundamente ${safeBookName} capítulo ${chapterNum}. Foque em contexto histórico, nuances do original (hebraico/grego) e aplicação pastoral.`,
       `Análise — ${safeBookName} ${chapterNum}`,
-      `${safeBookName} ${chapterNum} (${versionCode})`
+      `${safeBookName} ${chapterNum} (${versionCode})`,
+      null
     );
   }, [safeBookName, chapterNum, versionCode]);
 
@@ -469,16 +538,23 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
       callAI(
         `Faça exegese profunda do versículo: "${v.text}" (referência: ${safeBookName} ${chapterNum}:${v.verse}). Explique nuances do original e implicações teológicas.`,
         `Exegese — ${safeBookName} ${chapterNum}:${v.verse}`,
-        `${safeBookName} ${chapterNum}:${v.verse} (${versionCode})`
+        `${safeBookName} ${chapterNum}:${v.verse} (${versionCode})`,
+        v.verse
       );
     },
     [safeBookName, chapterNum, versionCode]
   );
 
   async function handleSaveAI() {
+    if (!initialized) {
+      Alert.alert('Aguarde', 'A sessão ainda está sendo carregada.');
+      return;
+    }
+
     if (!analysisData && !rawAi) return;
 
     setSaving(true);
+
     try {
       const sb = getSupabaseOrNull();
       if (!sb) {
@@ -486,16 +562,8 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
         return;
       }
 
-      // ✅ usar getSession é mais confiável no RN
-      const { data: sessionData, error: sessionErr } = await sb.auth.getSession();
-      if (sessionErr) {
-        console.log('AUTH_GET_SESSION_ERROR', sessionErr);
-        throw sessionErr;
-      }
-
-      const user = sessionData.session?.user;
-
-      if (!user) {
+      const userId = session?.user?.id;
+      if (!userId) {
         Alert.alert('Login necessário', 'Faça login para salvar.', [
           { text: 'Cancelar', style: 'cancel' },
           {
@@ -506,18 +574,27 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
         return;
       }
 
-      const contentToSave = analysisData ? JSON.stringify(analysisData) : rawAi;
-
-      const payload = {
-        user_id: user.id,
-        title: aiTitle || 'Análise',
-        reference: saveReference || '',
-        content: contentToSave,
-      };
+      const title = (aiTitle || 'Análise').trim();
+      const reference = (saveReference || '').trim() || null;
+      const contentToSave = buildStudyEnvelope({
+        title,
+        reference,
+        bookId,
+        chapterNum,
+        verseNum: saveVerseNumber,
+        analysisData: analysisData ?? null,
+        rawAi: rawAi ?? null,
+      });
 
       const { data, error } = await sb
         .from('saved_notes')
-        .insert(payload)
+        .insert({
+          user_id: userId,
+          title,
+          reference,
+          content: contentToSave,
+          client_id: null,
+        })
         .select('id')
         .single();
 
@@ -575,7 +652,6 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
     [analyzeVerse, fontSize]
   );
 
-  // ✅ retorno condicional DEPOIS de todos os hooks
   if (!isValidBook) {
     return (
       <SafeAreaView style={styles.centerSafe} edges={['top', 'bottom']}>
@@ -677,7 +753,6 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
         </View>
       </View>
 
-      {/* Modal de capítulos */}
       <Modal visible={showChapters} animationType="slide" onRequestClose={() => setShowChapters(false)}>
         <SafeAreaView style={[styles.modal, { paddingTop: Math.max(insets.top, 12) }]} edges={['top', 'bottom']}>
           <View style={styles.modalHeader}>
@@ -704,7 +779,6 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
         </SafeAreaView>
       </Modal>
 
-      {/* Modal de versões */}
       <Modal visible={showVersions} animationType="slide" onRequestClose={() => setShowVersions(false)}>
         <SafeAreaView style={[styles.modal, { paddingTop: Math.max(insets.top, 12) }]} edges={['top', 'bottom']}>
           <View style={styles.modalHeader}>
@@ -748,7 +822,6 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
         </SafeAreaView>
       </Modal>
 
-      {/* Modal IA */}
       <Modal visible={aiOpen} animationType="slide" onRequestClose={() => setAiOpen(false)}>
         <SafeAreaView style={styles.aiSafe} edges={['top', 'bottom']}>
           <View style={[styles.aiHeader, { paddingTop: Math.max(insets.top, 12) }]}>

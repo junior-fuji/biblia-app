@@ -18,7 +18,7 @@ type AuthMode = 'signin' | 'signup';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { session, loading, refreshSession } = useAuth();
+  const { session, initialized } = useAuth();
 
   const [mode, setMode] = useState<AuthMode>('signin');
   const [name, setName] = useState('');
@@ -40,10 +40,10 @@ export default function LoginScreen() {
   );
 
   useEffect(() => {
-    if (!loading && session?.user) {
+    if (initialized && session?.user) {
       router.replace('/(tabs)' as any);
     }
-  }, [session, loading, router]);
+  }, [session, initialized, router]);
 
   function validateFields() {
     if (!email.trim() || !password.trim()) {
@@ -72,13 +72,11 @@ export default function LoginScreen() {
 
       const sb = getSupabaseOrThrow();
       const { error } = await sb.auth.signInWithPassword({
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         password,
       });
 
       if (error) throw error;
-
-      await refreshSession();
     } catch (e: any) {
       Alert.alert('Entrar', e?.message || 'Erro ao entrar.');
     } finally {
@@ -94,7 +92,7 @@ export default function LoginScreen() {
 
       const sb = getSupabaseOrThrow();
       const { data, error } = await sb.auth.signUp({
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         password,
       });
 
@@ -115,7 +113,6 @@ export default function LoginScreen() {
       }
 
       if (data.session) {
-        await refreshSession();
         Alert.alert('Cadastro', 'Conta criada e login realizado com sucesso.');
         router.replace('/(tabs)' as any);
         return;
@@ -142,7 +139,7 @@ export default function LoginScreen() {
     await signUp();
   }
 
-  if (loading) {
+  if (!initialized) {
     return (
       <View style={styles.loadingWrap}>
         <ActivityIndicator size="large" color="#007AFF" />
