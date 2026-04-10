@@ -705,26 +705,26 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
                     setProjectorIndex(0);
                     setProjectorOpen(true);
                   }}
-                  style={styles.headerIconBtn}
+                  style={[styles.headerIconBtn, { paddingHorizontal: 6 }]}
                 >
-                  <Ionicons name="tv-outline" size={22} color="#2563EB" />
+                  <Ionicons name="tv-outline" size={20} color="#2563EB" />
                 </TouchableOpacity>
               ) : null}
-
-              <TouchableOpacity onPress={() => setShowVersions(true)} style={styles.headerIconBtn}>
-                <Text style={{ color: '#007AFF', fontWeight: '900' }}>{versionCode}</Text>
+          
+              <TouchableOpacity onPress={() => setShowVersions(true)} style={[styles.headerIconBtn, { paddingHorizontal: 6 }]}>
+                <Text style={{ color: '#007AFF', fontWeight: '900', fontSize: 13 }}>{versionCode}</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity onPress={analyzeChapter} style={styles.headerIconBtn}>
-                <Ionicons name="school-outline" size={22} color="#AF52DE" />
+          
+              <TouchableOpacity onPress={analyzeChapter} style={[styles.headerIconBtn, { paddingHorizontal: 6 }]}>
+                <Ionicons name="school-outline" size={20} color="#AF52DE" />
               </TouchableOpacity>
-
-              <TouchableOpacity onPress={() => setFontSize((p) => clamp(p - 2, 12, 40))} style={styles.headerIconBtn}>
-                <Ionicons name="remove" size={22} color="#007AFF" />
+          
+              <TouchableOpacity onPress={() => setFontSize((p) => clamp(p - 2, 12, 40))} style={[styles.headerIconBtn, { paddingHorizontal: 4 }]}>
+                <Ionicons name="remove" size={20} color="#007AFF" />
               </TouchableOpacity>
-
-              <TouchableOpacity onPress={() => setFontSize((p) => clamp(p + 2, 12, 40))} style={styles.headerIconBtn}>
-                <Ionicons name="add" size={22} color="#007AFF" />
+          
+              <TouchableOpacity onPress={() => setFontSize((p) => clamp(p + 2, 12, 40))} style={[styles.headerIconBtn, { paddingHorizontal: 4 }]}>
+                <Ionicons name="add" size={20} color="#007AFF" />
               </TouchableOpacity>
             </View>
           ),
@@ -924,7 +924,11 @@ const styles = StyleSheet.create({
 
   headerTitleContainer: { flexDirection: 'row', alignItems: 'center' },
   headerTitleText: { fontSize: 17, fontWeight: '900' },
-  headerRightContainer: { flexDirection: 'row', alignItems: 'center' },
+  headerRightContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
   headerIconBtn: { paddingHorizontal: 8, paddingVertical: 6 },
 
   list: { paddingHorizontal: 20, paddingTop: 20 },
