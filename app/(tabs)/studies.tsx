@@ -421,86 +421,101 @@ export default function StudiesScreen() {
       console.log('SHARE_STUDY_ERROR', e);
     }
   };
-
+  async function performDeleteStudy() {
+    if (!selectedStudy) return;
+  
+    try {
+      if (selectedStudy.source === 'supabase') {
+        const sb = getSupabaseOrNull();
+        if (!sb) {
+          Alert.alert('Erro', 'Supabase não configurado.');
+          return;
+        }
+  
+        if (!userId) {
+          Alert.alert('Login necessário', 'Faça login novamente para excluir.');
+          return;
+        }
+  
+        const rawStudyId = selectedStudy.id;
+        const studyId =
+          typeof rawStudyId === 'number'
+            ? rawStudyId
+            : Number(String(rawStudyId).trim());
+  
+        console.log('DELETE_DEBUG', {
+          source: selectedStudy.source,
+          rawStudyId,
+          rawType: typeof rawStudyId,
+          studyId,
+          userId,
+          hasSession: !!session?.user?.id,
+          platform: Platform.OS,
+        });
+  
+        if (!Number.isFinite(studyId)) {
+          Alert.alert('Erro', 'ID de estudo inválido.');
+          return;
+        }
+  
+        const { error } = await sb
+          .from('saved_notes')
+          .delete()
+          .eq('id', studyId)
+          .eq('user_id', userId);
+  
+        console.log('DELETE_RESULT', {
+          studyId,
+          userId,
+          error,
+        });
+  
+        if (error) {
+          console.log('DELETE_SUPABASE_ERROR', error);
+          Alert.alert(
+            'Erro ao excluir',
+            `${error.message}\n(code: ${(error as any).code ?? '-'})`
+          );
+          return;
+        }
+      } else {
+        const local = await getLocalStudies();
+        const updated = local.filter((s) => toStudyId(s.id) !== toStudyId(selectedStudy.id));
+        await saveLocalStudies(updated);
+      }
+  
+      setStudies((prev) =>
+        prev.filter((s) => toStudyId(s.id) !== toStudyId(selectedStudy.id))
+      );
+  
+      closeModal();
+  
+      if (Platform.OS !== 'web') {
+        Alert.alert('Excluído', 'Estudo removido com sucesso.');
+      }
+    } catch (e: any) {
+      console.log('DELETE_STUDY_FATAL', e);
+      Alert.alert('Erro', e?.message || 'Falha ao excluir.');
+    }
+  }
   const handleDelete = async () => {
     if (!selectedStudy) return;
+  
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Tem certeza que deseja apagar este estudo?');
+      if (!confirmed) return;
+  
+      await performDeleteStudy();
+      return;
+    }
   
     Alert.alert('Excluir', 'Tem certeza que deseja apagar este estudo?', [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Apagar',
         style: 'destructive',
-        onPress: async () => {
-          try {
-            if (selectedStudy.source === 'supabase') {
-              const sb = getSupabaseOrNull();
-              if (!sb) {
-                Alert.alert('Erro', 'Supabase não configurado.');
-                return;
-              }
-  
-              if (!userId) {
-                Alert.alert('Login necessário', 'Faça login novamente para excluir.');
-                return;
-              }
-  
-              const rawStudyId = selectedStudy.id;
-              const studyId =
-                typeof rawStudyId === 'number'
-                  ? rawStudyId
-                  : Number(String(rawStudyId).trim());
-  
-              console.log('DELETE_DEBUG', {
-                source: selectedStudy.source,
-                rawStudyId,
-                rawType: typeof rawStudyId,
-                studyId,
-                userId,
-                hasSession: !!session?.user?.id,
-                platform: Platform.OS,
-              });
-  
-              if (!Number.isFinite(studyId)) {
-                Alert.alert('Erro', 'ID de estudo inválido.');
-                return;
-              }
-  
-              const { error } = await sb
-                .from('saved_notes')
-                .delete()
-                .eq('id', studyId)
-                .eq('user_id', userId);
-  
-              console.log('DELETE_RESULT', {
-                studyId,
-                userId,
-                error,
-              });
-  
-              if (error) {
-                console.log('DELETE_SUPABASE_ERROR', error);
-                Alert.alert(
-                  'Erro ao excluir',
-                  `${error.message}\n(code: ${(error as any).code ?? '-'})`
-                );
-                return;
-              }
-            } else {
-              const local = await getLocalStudies();
-              const updated = local.filter((s) => toStudyId(s.id) !== toStudyId(selectedStudy.id));
-              await saveLocalStudies(updated);
-            }
-  
-            setStudies((prev) =>
-              prev.filter((s) => toStudyId(s.id) !== toStudyId(selectedStudy.id))
-            );
-  
-            closeModal();
-            Alert.alert('Excluído', 'Estudo removido com sucesso.');
-          } catch (e: any) {
-            console.log('DELETE_STUDY_FATAL', e);
-            Alert.alert('Erro', e?.message || 'Falha ao excluir.');
-          }
+        onPress: () => {
+          void performDeleteStudy();
         },
       },
     ]);
