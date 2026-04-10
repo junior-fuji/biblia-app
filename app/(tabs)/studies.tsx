@@ -10,16 +10,14 @@ import {
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
+  Modal, Platform, ScrollView,
   Share,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -184,6 +182,7 @@ export default function StudiesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { initialized, session } = useAuth();
+  const user = session?.user?.id ?? null;
 
   const [studies, setStudies] = useState<Study[]>([]);
   const [loading, setLoading] = useState(true);
@@ -425,7 +424,7 @@ export default function StudiesScreen() {
 
   const handleDelete = async () => {
     if (!selectedStudy) return;
-
+  
     Alert.alert('Excluir', 'Tem certeza que deseja apagar este estudo?', [
       { text: 'Cancelar', style: 'cancel' },
       {
@@ -439,27 +438,51 @@ export default function StudiesScreen() {
                 Alert.alert('Erro', 'Supabase não configurado.');
                 return;
               }
-
+  
               if (!userId) {
                 Alert.alert('Login necessário', 'Faça login novamente para excluir.');
                 return;
               }
-
-              const studyId = Number(selectedStudy.id);
+  
+              const rawStudyId = selectedStudy.id;
+              const studyId =
+                typeof rawStudyId === 'number'
+                  ? rawStudyId
+                  : Number(String(rawStudyId).trim());
+  
+              console.log('DELETE_DEBUG', {
+                source: selectedStudy.source,
+                rawStudyId,
+                rawType: typeof rawStudyId,
+                studyId,
+                userId,
+                hasSession: !!session?.user?.id,
+                platform: Platform.OS,
+              });
+  
               if (!Number.isFinite(studyId)) {
                 Alert.alert('Erro', 'ID de estudo inválido.');
                 return;
               }
-
+  
               const { error } = await sb
                 .from('saved_notes')
                 .delete()
                 .eq('id', studyId)
                 .eq('user_id', userId);
-
+  
+              console.log('DELETE_RESULT', {
+                studyId,
+                userId,
+                error,
+              });
+  
               if (error) {
                 console.log('DELETE_SUPABASE_ERROR', error);
-                Alert.alert('Erro ao excluir', `${error.message}\n(code: ${(error as any).code ?? '-'})`);
+                Alert.alert(
+                  'Erro ao excluir',
+                  `${error.message}\n(code: ${(error as any).code ?? '-'})`
+                );
                 return;
               }
             } else {
@@ -467,9 +490,13 @@ export default function StudiesScreen() {
               const updated = local.filter((s) => toStudyId(s.id) !== toStudyId(selectedStudy.id));
               await saveLocalStudies(updated);
             }
-
-            setStudies((prev) => prev.filter((s) => toStudyId(s.id) !== toStudyId(selectedStudy.id)));
+  
+            setStudies((prev) =>
+              prev.filter((s) => toStudyId(s.id) !== toStudyId(selectedStudy.id))
+            );
+  
             closeModal();
+            Alert.alert('Excluído', 'Estudo removido com sucesso.');
           } catch (e: any) {
             console.log('DELETE_STUDY_FATAL', e);
             Alert.alert('Erro', e?.message || 'Falha ao excluir.');
@@ -478,7 +505,6 @@ export default function StudiesScreen() {
       },
     ]);
   };
-
   const handleSaveChanges = async () => {
     if (!selectedStudy) return;
 
