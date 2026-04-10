@@ -1,5 +1,7 @@
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
 import { useAuth } from '@/src/providers/AuthProvider';
+import ProjectorScreen from '@/src/services/projector/ProjectorScreen';
+import { buildBibleSlides } from '@/src/services/projector/bibleProjector';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -300,6 +302,9 @@ export default function ReadBookScreen() {
   const [saving, setSaving] = useState(false);
   const [saveReference, setSaveReference] = useState<string>('');
   const [saveVerseNumber, setSaveVerseNumber] = useState<number | null>(null);
+
+  const [projectorOpen, setProjectorOpen] = useState(false);
+  const [projectorIndex, setProjectorIndex] = useState(0);
 
   useEffect(() => {
     setChapterNum((current) => (current !== initialChapter ? initialChapter : current));
@@ -614,6 +619,11 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
     }
   }
 
+  const projectorSlides = useMemo(() => {
+    if (!isValidBook || versesState.length === 0) return [];
+    return buildBibleSlides(safeBookName, chapterNum, versesState);
+  }, [isValidBook, safeBookName, chapterNum, versesState]);
+
   useEffect(() => {
     if (!initialVerse || versesState.length === 0) return;
 
@@ -689,6 +699,18 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
           ),
           headerRight: () => (
             <View style={styles.headerRightContainer}>
+              {Platform.OS === 'web' ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setProjectorIndex(0);
+                    setProjectorOpen(true);
+                  }}
+                  style={styles.headerIconBtn}
+                >
+                  <Ionicons name="tv-outline" size={22} color="#2563EB" />
+                </TouchableOpacity>
+              ) : null}
+
               <TouchableOpacity onPress={() => setShowVersions(true)} style={styles.headerIconBtn}>
                 <Text style={{ color: '#007AFF', fontWeight: '900' }}>{versionCode}</Text>
               </TouchableOpacity>
@@ -871,6 +893,24 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
             </ScrollView>
           )}
         </SafeAreaView>
+      </Modal>
+
+      <Modal
+        visible={projectorOpen}
+        animationType="fade"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setProjectorOpen(false)}
+      >
+        <ProjectorScreen
+          title={`${safeBookName} ${chapterNum}`}
+          subtitle={versionCode}
+          slides={projectorSlides}
+          initialIndex={projectorIndex}
+          onClose={() => setProjectorOpen(false)}
+          pickerLabel="Versículos"
+          pickerTitle={`${safeBookName} ${chapterNum}`}
+          renderSlideLabel={(slide) => slide.title || 'Versículo'}
+        />
       </Modal>
     </View>
   );
