@@ -352,18 +352,20 @@ export default function HomeScreen() {
             </View>
 
             <TouchableOpacity
-  style={styles.avatar}
-  onPress={() => router.push('/settings')}
-  activeOpacity={0.8}
-  accessibilityRole="button"
-  accessibilityLabel="Abrir configurações"
->
-  {avatarUrl ? (
-    <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-  ) : (
-    <Text style={styles.avatarText}>{avatarLabel}</Text>
-  )}
-</TouchableOpacity>
+              onPress={() => router.push('/settings' as any)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Abrir configurações"
+              style={styles.avatarButton}
+            >
+              <View style={styles.avatar}>
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarText}>{avatarLabel}</Text>
+                )}
+              </View>
+            </TouchableOpacity>
           </View>
 
           <View style={[styles.heroWrap, isDesktop && styles.heroWrapDesktop]}>
@@ -510,6 +512,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#667085',
     marginTop: 4,
+  },
+
+  avatarButton: {
+    borderRadius: 24,
   },
 
   avatar: {
