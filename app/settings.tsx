@@ -2,11 +2,14 @@ import { getSupabaseOrNull } from '@/lib/supabaseClient';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { ProjectorTheme, useSettings } from '@/src/providers/SettingsProvider';
 import { Ionicons } from '@expo/vector-icons';
+import { decode } from 'base64-arraybuffer';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   ScrollView,
   StyleSheet,
@@ -66,6 +69,9 @@ export default function SettingsScreen() {
   const { settings, setBibleVersion, setFontSize, setProjectorTheme } = useSettings();
 
   const [profileName, setProfileName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
   const [versionModal, setVersionModal] = useState(false);
   const [fontModal, setFontModal] = useState(false);
   const [projectorThemeModal, setProjectorThemeModal] = useState(false);
@@ -74,7 +80,11 @@ export default function SettingsScreen() {
   const [editName, setEditName] = useState('');
   const [savingName, setSavingName] = useState(false);
 
-  const versions = useMemo(() => ['NVI', 'ARA', 'ACF', 'ARC', 'KJA'], []);
+  const versions = useMemo(
+    () => ['NVI', 'ARA', 'ACF', 'ARC', 'KJA', 'RVR1960', 'JAPANESE'],
+    []
+  );
+
   const fontSizes = useMemo(
     () => [
       { label: 'Pequena', value: 14 },
@@ -110,12 +120,13 @@ export default function SettingsScreen() {
 
       if (!sb || !userId) {
         setProfileName('');
+        setAvatarUrl('');
         return;
       }
 
       try {
         const result = await Promise.race([
-          sb.from('profiles').select('name').eq('id', userId).maybeSingle(),
+          sb.from('profiles').select('name, avatar_url').eq('id', userId).maybeSingle(),
           timeoutAfter(10000),
         ]);
 
@@ -126,14 +137,17 @@ export default function SettingsScreen() {
         if (error) {
           console.log('LOAD_PROFILE_SETTINGS_ERROR', error);
           setProfileName('');
+          setAvatarUrl('');
           return;
         }
 
         setProfileName(String(data?.name ?? '').trim());
+        setAvatarUrl(String(data?.avatar_url ?? '').trim());
       } catch (e) {
         if (!mounted) return;
         console.log('LOAD_PROFILE_SETTINGS_FATAL', e);
         setProfileName('');
+        setAvatarUrl('');
       }
     }
 
@@ -193,7 +207,6 @@ export default function SettingsScreen() {
       ]);
 
       const { data: updatedData, error: updateError } = updateResult as any;
-
       if (updateError) throw updateError;
 
       if (!updatedData) {
@@ -203,6 +216,7 @@ export default function SettingsScreen() {
             .insert({
               id: session.user.id,
               name: nextName,
+              avatar_url: avatarUrl || null,
             })
             .select('id')
             .maybeSingle(),
@@ -221,6 +235,118 @@ export default function SettingsScreen() {
       Alert.alert('Erro', e?.message || 'Erro ao atualizar nome.');
     } finally {
       setSavingName(false);
+    }
+  }
+
+  async function handlePickAvatar() {
+    if (!session?.user) {
+      router.push('/(auth)/login' as any);
+      return;
+    }
+
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert(
+          'Permissão necessária',
+          'Permita acesso à galeria para escolher uma foto de perfil.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+
+      const asset = result.assets[0];
+      if (!asset.base64) {
+        Alert.alert('Avatar', 'Não foi possível processar a imagem escolhida.');
+        return;
+      }
+
+      const sb = getSupabaseOrNull();
+      if (!sb) {
+        Alert.alert('Avatar', 'Supabase indisponível neste build.');
+        return;
+      }
+
+      setUploadingAvatar(true);
+
+      const ext =
+        asset.mimeType?.includes('png')
+          ? 'png'
+          : asset.mimeType?.includes('webp')
+          ? 'webp'
+          : 'jpg';
+
+      const filePath = `${session.user.id}/avatar-${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await sb.storage
+        .from('avatars')
+        .upload(filePath, decode(asset.base64), {
+          contentType: asset.mimeType || 'image/jpeg',
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.log('AVATAR_UPLOAD_ERROR', uploadError);
+        Alert.alert('Avatar', uploadError.message || 'Erro ao enviar imagem.');
+        return;
+      }
+
+      const { data: publicData } = sb.storage.from('avatars').getPublicUrl(filePath);
+      const publicUrl = publicData?.publicUrl ?? '';
+
+      if (!publicUrl) {
+        Alert.alert('Avatar', 'Não foi possível obter a URL da imagem.');
+        return;
+      }
+
+      const updateResult = await Promise.race([
+        sb
+          .from('profiles')
+          .update({ avatar_url: publicUrl })
+          .eq('id', session.user.id)
+          .select('id')
+          .maybeSingle(),
+        timeoutAfter(12000),
+      ]);
+
+      const { data: updatedData, error: updateError } = updateResult as any;
+      if (updateError) throw updateError;
+
+      if (!updatedData) {
+        const insertResult = await Promise.race([
+          sb
+            .from('profiles')
+            .insert({
+              id: session.user.id,
+              name: profileName || session.user.email?.split('@')[0] || 'Usuário',
+              avatar_url: publicUrl,
+            })
+            .select('id')
+            .maybeSingle(),
+          timeoutAfter(12000),
+        ]);
+
+        const { error: insertError } = insertResult as any;
+        if (insertError) throw insertError;
+      }
+
+      setAvatarUrl(publicUrl);
+      Alert.alert('Avatar', 'Foto de perfil atualizada com sucesso.');
+    } catch (e: any) {
+      console.log('HANDLE_PICK_AVATAR_ERROR', e);
+      Alert.alert('Avatar', e?.message || 'Não foi possível atualizar a foto.');
+    } finally {
+      setUploadingAvatar(false);
     }
   }
 
@@ -243,8 +369,24 @@ export default function SettingsScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.profileSection}>
-          <View style={styles.avatarPlaceholder}>
-            <Ionicons name="person" size={40} color="#fff" />
+          <View style={styles.avatarWrap}>
+            <View style={styles.avatarPlaceholder}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+              ) : (
+                <Ionicons name="person" size={40} color="#fff" />
+              )}
+
+              {uploadingAvatar ? (
+                <View style={styles.avatarOverlay}>
+                  <ActivityIndicator color="#fff" />
+                </View>
+              ) : null}
+            </View>
+
+            <TouchableOpacity style={styles.editAvatarLink} onPress={handlePickAvatar} disabled={uploadingAvatar}>
+              <Text style={styles.editAvatarLinkText}>Editar</Text>
+            </TouchableOpacity>
           </View>
 
           <Text style={styles.profileName}>{displayName}</Text>
@@ -528,6 +670,12 @@ const styles = StyleSheet.create({
   content: { paddingBottom: 40 },
 
   profileSection: { alignItems: 'center', marginVertical: 30 },
+
+  avatarWrap: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+
   avatarPlaceholder: {
     width: 100,
     height: 100,
@@ -535,8 +683,33 @@ const styles = StyleSheet.create({
     backgroundColor: '#C7C7CC',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    overflow: 'hidden',
   },
+
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  avatarOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  editAvatarLink: {
+    marginTop: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+
+  editAvatarLinkText: {
+    color: '#007AFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+
   profileName: { fontSize: 24, fontWeight: '800', color: '#000' },
   profileRole: { fontSize: 13, color: '#8E8E93', marginBottom: 10 },
   editProfileBtn: {
