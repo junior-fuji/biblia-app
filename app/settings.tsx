@@ -67,9 +67,10 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { session, initialized } = useAuth();
   const { settings, setBibleVersion, setFontSize, setProjectorTheme } = useSettings();
-  const [avatarPreviewUri, setAvatarPreviewUri] = useState('');
+
   const [profileName, setProfileName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [avatarPreviewUri, setAvatarPreviewUri] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const [versionModal, setVersionModal] = useState(false);
@@ -121,6 +122,7 @@ export default function SettingsScreen() {
       if (!sb || !userId) {
         setProfileName('');
         setAvatarUrl('');
+        setAvatarPreviewUri('');
         return;
       }
 
@@ -138,16 +140,19 @@ export default function SettingsScreen() {
           console.log('LOAD_PROFILE_SETTINGS_ERROR', error);
           setProfileName('');
           setAvatarUrl('');
+          setAvatarPreviewUri('');
           return;
         }
 
         setProfileName(String(data?.name ?? '').trim());
         setAvatarUrl(String(data?.avatar_url ?? '').trim());
+        setAvatarPreviewUri('');
       } catch (e) {
         if (!mounted) return;
         console.log('LOAD_PROFILE_SETTINGS_FATAL', e);
         setProfileName('');
         setAvatarUrl('');
+        setAvatarPreviewUri('');
       }
     }
 
@@ -196,39 +201,25 @@ export default function SettingsScreen() {
       const sb = getSupabaseOrNull();
       if (!sb) throw new Error('Supabase indisponível');
 
-      const updateResult = await Promise.race([
-        sb
-          .from('profiles')
-          .update({ name: nextName })
-          .eq('id', session.user.id)
-          .select('id')
-          .maybeSingle(),
-        timeoutAfter(12000),
-      ]);
+      const profilePayload = {
+        id: session.user.id,
+        name: nextName,
+        avatar_url: avatarUrl || null,
+      };
 
-      const { data: updatedData, error: updateError } = updateResult as any;
-      if (updateError) throw updateError;
+      const { data: savedProfile, error } = await sb
+        .from('profiles')
+        .upsert(profilePayload, { onConflict: 'id' })
+        .select('id, name, avatar_url')
+        .single();
 
-      if (!updatedData) {
-        const insertResult = await Promise.race([
-          sb
-            .from('profiles')
-            .insert({
-              id: session.user.id,
-              name: nextName,
-              avatar_url: avatarUrl || null,
-            })
-            .select('id')
-            .maybeSingle(),
-          timeoutAfter(12000),
-        ]);
+      if (error) throw error;
 
-        const { error: insertError } = insertResult as any;
-        if (insertError) throw insertError;
-      }
-
-      setProfileName(nextName);
+      setProfileName(String(savedProfile?.name ?? nextName));
+      setAvatarUrl(String(savedProfile?.avatar_url ?? avatarUrl ?? ''));
+      setAvatarPreviewUri('');
       setEditNameModal(false);
+
       Alert.alert('Perfil', 'Nome atualizado com sucesso.');
     } catch (e: any) {
       console.log('SAVE_PROFILE_NAME_ERROR', e);
@@ -243,10 +234,10 @@ export default function SettingsScreen() {
       router.push('/(auth)/login' as any);
       return;
     }
-  
+
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  
+
       if (!permission.granted) {
         Alert.alert(
           'Permissão necessária',
@@ -254,7 +245,7 @@ export default function SettingsScreen() {
         );
         return;
       }
-  
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -262,94 +253,80 @@ export default function SettingsScreen() {
         quality: 0.85,
         base64: true,
       });
-  
+
       if (result.canceled || !result.assets?.length) return;
-  
+
       const asset = result.assets[0];
-  
-      // preview imediato no círculo, antes mesmo do upload
+
       if (asset.uri) {
         setAvatarPreviewUri(asset.uri);
       }
-  
+
       if (!asset.base64) {
         Alert.alert('Avatar', 'Não foi possível processar a imagem escolhida.');
         return;
       }
-  
+
       const sb = getSupabaseOrNull();
       if (!sb) {
         Alert.alert('Avatar', 'Supabase indisponível neste build.');
         return;
       }
-  
+
       setUploadingAvatar(true);
-  
+
       const ext =
         asset.mimeType?.includes('png')
           ? 'png'
           : asset.mimeType?.includes('webp')
           ? 'webp'
           : 'jpg';
-  
+
       const filePath = `${session.user.id}/avatar.${ext}`;
-  
+
       const { error: uploadError } = await sb.storage
         .from('avatars')
         .upload(filePath, decode(asset.base64), {
           contentType: asset.mimeType || 'image/jpeg',
           upsert: true,
         });
-  
+
       if (uploadError) {
         console.log('AVATAR_UPLOAD_ERROR', uploadError);
         Alert.alert('Avatar', uploadError.message || 'Erro ao enviar imagem.');
         return;
       }
-  
+
       const { data: publicData } = sb.storage.from('avatars').getPublicUrl(filePath);
-      const publicUrl = publicData?.publicUrl
-        ? `${publicData.publicUrl}?t=${Date.now()}`
-        : '';
-  
+      const publicUrl = publicData?.publicUrl ? `${publicData.publicUrl}?t=${Date.now()}` : '';
+
       if (!publicUrl) {
         Alert.alert('Avatar', 'Não foi possível obter a URL da imagem.');
         return;
       }
-  
-      const updateResult = await Promise.race([
-        sb
-          .from('profiles')
-          .update({ avatar_url: publicUrl })
-          .eq('id', session.user.id)
-          .select('id')
-          .maybeSingle(),
-        timeoutAfter(12000),
-      ]);
-  
-      const { data: updatedData, error: updateError } = updateResult as any;
-      if (updateError) throw updateError;
-  
-      if (!updatedData) {
-        const insertResult = await Promise.race([
-          sb
-            .from('profiles')
-            .insert({
-              id: session.user.id,
-              name: profileName || session.user.email?.split('@')[0] || 'Usuário',
-              avatar_url: publicUrl,
-            })
-            .select('id')
-            .maybeSingle(),
-          timeoutAfter(12000),
-        ]);
-  
-        const { error: insertError } = insertResult as any;
-        if (insertError) throw insertError;
+
+      const profilePayload = {
+        id: session.user.id,
+        name: profileName || session.user.email?.split('@')[0] || 'Usuário',
+        avatar_url: publicUrl,
+      };
+
+      const { data: savedProfile, error: profileError } = await sb
+        .from('profiles')
+        .upsert(profilePayload, { onConflict: 'id' })
+        .select('id, name, avatar_url')
+        .single();
+
+      if (profileError) {
+        console.log('AVATAR_PROFILE_UPSERT_ERROR', profileError);
+        Alert.alert('Avatar', profileError.message || 'Erro ao salvar perfil.');
+        return;
       }
-  
-      setAvatarUrl(publicUrl);
+
+      setProfileName(String(savedProfile?.name ?? profilePayload.name));
+      setAvatarUrl(String(savedProfile?.avatar_url ?? publicUrl));
       setAvatarPreviewUri('');
+
       Alert.alert('Avatar', 'Foto de perfil atualizada com sucesso.');
     } catch (e: any) {
       console.log('HANDLE_PICK_AVATAR_ERROR', e);
@@ -362,6 +339,7 @@ export default function SettingsScreen() {
   const userEmail = session?.user?.email || 'Não autenticado';
   const displayName = profileName || session?.user?.email?.split('@')[0] || 'Usuário';
   const projectorThemeLabel = settings.projectorTheme === 'light' ? 'Claro' : 'Escuro';
+  const avatarSource = avatarPreviewUri || avatarUrl;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -380,11 +358,11 @@ export default function SettingsScreen() {
         <View style={styles.profileSection}>
           <View style={styles.avatarWrap}>
             <View style={styles.avatarPlaceholder}>
-            {avatarPreviewUri || avatarUrl ? (
-  <Image source={{ uri: avatarPreviewUri || avatarUrl }} style={styles.avatarImage} />
-) : (
-  <Ionicons name="person" size={40} color="#fff" />
-)}
+              {avatarSource ? (
+                <Image source={{ uri: avatarSource }} style={styles.avatarImage} />
+              ) : (
+                <Ionicons name="person" size={40} color="#fff" />
+              )}
 
               {uploadingAvatar ? (
                 <View style={styles.avatarOverlay}>
