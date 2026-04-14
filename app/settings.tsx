@@ -1,7 +1,7 @@
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
 import { useAuth } from '@/src/providers/AuthProvider';
+import { ProjectorTheme, useSettings } from '@/src/providers/SettingsProvider';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -10,7 +10,6 @@ import {
   Modal,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -22,18 +21,9 @@ type OptionRowProps = {
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
   label: string;
-  value?: boolean;
-  onToggle?: (v: boolean) => void;
   isDestructive?: boolean;
   onPress?: () => void;
   rightText?: string;
-};
-
-const SETTINGS_KEYS = {
-  darkMode: 'APP_SETTINGS_DARK_MODE',
-  notifications: 'APP_SETTINGS_NOTIFICATIONS',
-  bibleVersion: 'APP_SETTINGS_BIBLE_VERSION',
-  fontSize: 'APP_SETTINGS_FONT_SIZE',
 };
 
 function timeoutAfter(ms: number) {
@@ -49,31 +39,19 @@ function OptionRow({
   icon,
   color,
   label,
-  value,
-  onToggle,
   isDestructive,
   onPress,
   rightText,
 }: OptionRowProps) {
-  const hasToggle = typeof value === 'boolean' && !!onToggle;
-
   return (
-    <TouchableOpacity
-      style={styles.row}
-      onPress={hasToggle ? undefined : onPress}
-      activeOpacity={hasToggle ? 1 : 0.85}
-    >
+    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.85}>
       <View style={[styles.iconBox, { backgroundColor: color }]}>
         <Ionicons name={icon} size={20} color="#fff" />
       </View>
 
-      <Text style={[styles.rowLabel, isDestructive && { color: '#FF3B30' }]}>
-        {label}
-      </Text>
+      <Text style={[styles.rowLabel, isDestructive && { color: '#FF3B30' }]}>{label}</Text>
 
-      {hasToggle ? (
-        <Switch value={value} onValueChange={onToggle} />
-      ) : rightText ? (
+      {rightText ? (
         <Text style={styles.rightText}>{rightText}</Text>
       ) : !isDestructive ? (
         <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
@@ -84,22 +62,19 @@ function OptionRow({
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { session, loading, refreshSession } = useAuth();
+  const { session, initialized } = useAuth();
+  const { settings, setBibleVersion, setFontSize, setProjectorTheme } = useSettings();
 
   const [profileName, setProfileName] = useState('');
-  const [darkMode, setDarkMode] = useState(false);
-  const [notifications, setNotifications] = useState(true);
-
   const [versionModal, setVersionModal] = useState(false);
   const [fontModal, setFontModal] = useState(false);
+  const [projectorThemeModal, setProjectorThemeModal] = useState(false);
 
   const [editNameModal, setEditNameModal] = useState(false);
   const [editName, setEditName] = useState('');
   const [savingName, setSavingName] = useState(false);
 
   const versions = useMemo(() => ['NVI', 'ARA', 'ACF', 'ARC', 'KJA'], []);
-  const [bibleVersion, setBibleVersion] = useState('NVI');
-
   const fontSizes = useMemo(
     () => [
       { label: 'Pequena', value: 14 },
@@ -109,11 +84,22 @@ export default function SettingsScreen() {
     ],
     []
   );
-  const [fontSize, setFontSize] = useState(16);
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
+  const projectorThemes = useMemo(
+    () => [
+      {
+        label: 'Escuro',
+        value: 'dark' as ProjectorTheme,
+        description: 'Fundo preto com letras brancas',
+      },
+      {
+        label: 'Claro',
+        value: 'light' as ProjectorTheme,
+        description: 'Fundo branco com letras pretas em negrito',
+      },
+    ],
+    []
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -151,50 +137,12 @@ export default function SettingsScreen() {
       }
     }
 
-    loadProfile();
+    void loadProfile();
 
     return () => {
       mounted = false;
     };
   }, [session?.user?.id]);
-
-  useEffect(() => {
-    AsyncStorage.setItem(SETTINGS_KEYS.darkMode, JSON.stringify(darkMode)).catch(() => {});
-  }, [darkMode]);
-
-  useEffect(() => {
-    AsyncStorage.setItem(SETTINGS_KEYS.notifications, JSON.stringify(notifications)).catch(() => {});
-  }, [notifications]);
-
-  useEffect(() => {
-    AsyncStorage.setItem(SETTINGS_KEYS.bibleVersion, bibleVersion).catch(() => {});
-  }, [bibleVersion]);
-
-  useEffect(() => {
-    AsyncStorage.setItem(SETTINGS_KEYS.fontSize, String(fontSize)).catch(() => {});
-  }, [fontSize]);
-
-  async function loadSettings() {
-    try {
-      const [darkModeRaw, notificationsRaw, bibleVersionRaw, fontSizeRaw] = await Promise.all([
-        AsyncStorage.getItem(SETTINGS_KEYS.darkMode),
-        AsyncStorage.getItem(SETTINGS_KEYS.notifications),
-        AsyncStorage.getItem(SETTINGS_KEYS.bibleVersion),
-        AsyncStorage.getItem(SETTINGS_KEYS.fontSize),
-      ]);
-
-      if (darkModeRaw != null) setDarkMode(JSON.parse(darkModeRaw));
-      if (notificationsRaw != null) setNotifications(JSON.parse(notificationsRaw));
-      if (bibleVersionRaw) setBibleVersion(bibleVersionRaw);
-
-      if (fontSizeRaw) {
-        const parsed = Number(fontSizeRaw);
-        if (Number.isFinite(parsed)) setFontSize(parsed);
-      }
-    } catch (e) {
-      console.log('LOAD_SETTINGS_ERROR', e);
-    }
-  }
 
   async function handleLogout() {
     try {
@@ -208,9 +156,8 @@ export default function SettingsScreen() {
       const { error } = await sb.auth.signOut();
       if (error) throw error;
 
-      await refreshSession();
       Alert.alert('Conta', 'Você saiu da conta com sucesso.');
-      router.replace('/login' as any);
+      router.replace('/(auth)/login' as any);
     } catch (e: any) {
       Alert.alert('Conta', e?.message || 'Não foi possível sair da conta.');
     }
@@ -247,9 +194,7 @@ export default function SettingsScreen() {
 
       const { data: updatedData, error: updateError } = updateResult as any;
 
-      if (updateError) {
-        throw updateError;
-      }
+      if (updateError) throw updateError;
 
       if (!updatedData) {
         const insertResult = await Promise.race([
@@ -265,10 +210,7 @@ export default function SettingsScreen() {
         ]);
 
         const { error: insertError } = insertResult as any;
-
-        if (insertError) {
-          throw insertError;
-        }
+        if (insertError) throw insertError;
       }
 
       setProfileName(nextName);
@@ -284,6 +226,7 @@ export default function SettingsScreen() {
 
   const userEmail = session?.user?.email || 'Não autenticado';
   const displayName = profileName || session?.user?.email?.split('@')[0] || 'Usuário';
+  const projectorThemeLabel = settings.projectorTheme === 'light' ? 'Claro' : 'Escuro';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -305,15 +248,13 @@ export default function SettingsScreen() {
           </View>
 
           <Text style={styles.profileName}>{displayName}</Text>
-          <Text style={styles.profileRole}>
-            {loading ? 'Verificando sessão...' : userEmail}
-          </Text>
+          <Text style={styles.profileRole}>{!initialized ? 'Verificando sessão...' : userEmail}</Text>
 
           <TouchableOpacity
             style={styles.editProfileBtn}
             onPress={() => {
               if (!session?.user) {
-                Alert.alert('Conta', 'Faça login para editar seu perfil.');
+                router.push('/(auth)/login' as any);
                 return;
               }
 
@@ -333,16 +274,26 @@ export default function SettingsScreen() {
             icon="moon"
             color="#5856D6"
             label="Modo Escuro"
-            value={darkMode}
-            onToggle={setDarkMode}
+            rightText="Em breve"
+            onPress={() =>
+              Alert.alert(
+                'Em breve',
+                'O tema do app inteiro ainda não foi implementado. Por enquanto, a configuração real disponível é o Tema da Projeção.'
+              )
+            }
           />
           <View style={styles.divider} />
           <OptionRow
             icon="notifications"
             color="#FF3B30"
             label="Notificações"
-            value={notifications}
-            onToggle={setNotifications}
+            rightText="Em breve"
+            onPress={() =>
+              Alert.alert(
+                'Em breve',
+                'As notificações ainda não estão integradas. Vamos deixar esse item apenas informativo por enquanto.'
+              )
+            }
           />
         </View>
 
@@ -352,7 +303,7 @@ export default function SettingsScreen() {
             icon="book"
             color="#007AFF"
             label="Versão da Bíblia"
-            rightText={bibleVersion}
+            rightText={settings.bibleVersion}
             onPress={() => setVersionModal(true)}
           />
           <View style={styles.divider} />
@@ -360,22 +311,25 @@ export default function SettingsScreen() {
             icon="text"
             color="#34C759"
             label="Tamanho da Fonte"
-            rightText={`${fontSize}`}
+            rightText={`${settings.fontSize}`}
             onPress={() => setFontModal(true)}
           />
-          <View style={styles.divider} />
+        </View>
+
+        <Text style={styles.sectionTitle}>PROJEÇÃO</Text>
+        <View style={styles.section}>
           <OptionRow
             icon="tv"
             color="#111827"
-            label="Modo Projetor"
-            onPress={() =>
-              Alert.alert(
-                'Modo Projetor',
-                'O projetor já funciona nas telas suportadas da web. Depois podemos centralizar preferências avançadas aqui.'
-              )
-            }
+            label="Tema da Projeção"
+            rightText={projectorThemeLabel}
+            onPress={() => setProjectorThemeModal(true)}
           />
         </View>
+
+        <Text style={styles.projectorHint}>
+          Use “Claro” para igrejas com ambiente iluminado: fundo branco e letras pretas em negrito.
+        </Text>
 
         <Text style={styles.sectionTitle}>CONTA</Text>
         <View style={styles.section}>
@@ -385,7 +339,7 @@ export default function SettingsScreen() {
                 icon="log-in"
                 color="#007AFF"
                 label="Entrar / Criar conta"
-                onPress={() => router.push('/login' as any)}
+                onPress={() => router.push('/(auth)/login' as any)}
               />
               <View style={styles.divider} />
             </>
@@ -395,7 +349,7 @@ export default function SettingsScreen() {
             icon="help-circle"
             color="#8E8E93"
             label="Ajuda e Suporte"
-            onPress={() => Alert.alert('Contato', 'Suporte via WhatsApp (definir).')}
+            onPress={() => Alert.alert('Contato', 'Defina aqui seu canal de suporte da igreja ou WhatsApp.')}
           />
 
           {session?.user ? (
@@ -415,7 +369,7 @@ export default function SettingsScreen() {
         <Text style={styles.version}>Versão 1.0.0 (Beta)</Text>
       </ScrollView>
 
-      <Modal visible={versionModal} transparent animationType="fade">
+      <Modal visible={versionModal} transparent animationType="fade" onRequestClose={() => setVersionModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Versão da Bíblia</Text>
@@ -429,10 +383,10 @@ export default function SettingsScreen() {
                   setVersionModal(false);
                 }}
               >
-                <Text style={[styles.modalItemText, v === bibleVersion && { color: '#007AFF' }]}>
+                <Text style={[styles.modalItemText, v === settings.bibleVersion && { color: '#007AFF' }]}>
                   {v}
                 </Text>
-                {v === bibleVersion ? (
+                {v === settings.bibleVersion ? (
                   <Ionicons name="checkmark" size={18} color="#007AFF" />
                 ) : null}
               </TouchableOpacity>
@@ -445,7 +399,7 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      <Modal visible={fontModal} transparent animationType="fade">
+      <Modal visible={fontModal} transparent animationType="fade" onRequestClose={() => setFontModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Tamanho da Fonte</Text>
@@ -459,16 +413,60 @@ export default function SettingsScreen() {
                   setFontModal(false);
                 }}
               >
-                <Text style={[styles.modalItemText, f.value === fontSize && { color: '#007AFF' }]}>
+                <Text style={[styles.modalItemText, f.value === settings.fontSize && { color: '#007AFF' }]}>
                   {f.label} ({f.value})
                 </Text>
-                {f.value === fontSize ? (
+                {f.value === settings.fontSize ? (
                   <Ionicons name="checkmark" size={18} color="#007AFF" />
                 ) : null}
               </TouchableOpacity>
             ))}
 
             <TouchableOpacity style={styles.modalClose} onPress={() => setFontModal(false)}>
+              <Text style={styles.modalCloseText}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={projectorThemeModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProjectorThemeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Tema da Projeção</Text>
+
+            {projectorThemes.map((item) => (
+              <TouchableOpacity
+                key={item.value}
+                style={styles.modalItem}
+                onPress={() => {
+                  setProjectorTheme(item.value);
+                  setProjectorThemeModal(false);
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.modalItemText,
+                      item.value === settings.projectorTheme && { color: '#007AFF' },
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                  <Text style={styles.modalItemDescription}>{item.description}</Text>
+                </View>
+
+                {item.value === settings.projectorTheme ? (
+                  <Ionicons name="checkmark" size={18} color="#007AFF" />
+                ) : null}
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity style={styles.modalClose} onPress={() => setProjectorThemeModal(false)}>
               <Text style={styles.modalCloseText}>Fechar</Text>
             </TouchableOpacity>
           </View>
@@ -489,11 +487,7 @@ export default function SettingsScreen() {
               editable={!savingName}
             />
 
-            <TouchableOpacity
-              onPress={handleSaveName}
-              disabled={savingName}
-              style={styles.primaryActionBtn}
-            >
+            <TouchableOpacity onPress={handleSaveName} disabled={savingName} style={styles.primaryActionBtn}>
               {savingName ? (
                 <ActivityIndicator color="#fff" />
               ) : (
@@ -561,6 +555,13 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     marginTop: 20,
   },
+  projectorHint: {
+    marginTop: 10,
+    marginHorizontal: 20,
+    color: '#6B7280',
+    fontSize: 13,
+    lineHeight: 19,
+  },
   section: {
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -604,6 +605,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F2F2F7',
   },
   modalItemText: { fontSize: 16, fontWeight: '700', color: '#111' },
+  modalItemDescription: { marginTop: 4, fontSize: 13, color: '#6B7280' },
   modalClose: {
     marginTop: 12,
     backgroundColor: '#007AFF',

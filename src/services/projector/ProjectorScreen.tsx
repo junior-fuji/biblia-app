@@ -1,5 +1,6 @@
+import { useSettings } from '@/src/providers/SettingsProvider';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -31,8 +32,6 @@ type Props = {
   nextGroupLabel?: string;
   baseFontSize?: number;
   uniformFontSize?: boolean;
-
-  // novo
   pickerLabel?: string;
   pickerTitle?: string;
   renderSlideLabel?: (slide: ProjectorSlide, index: number) => string;
@@ -65,9 +64,13 @@ export default function ProjectorScreen({
   pickerTitle = 'Selecionar slide',
   renderSlideLabel,
 }: Props) {
+  const { settings } = useSettings();
+
   const [manualOffset, setManualOffset] = useState(0);
   const [slideIndex, setSlideIndex] = useState(initialIndex);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  const isLightTheme = settings.projectorTheme === 'light';
 
   useEffect(() => {
     setSlideIndex(clamp(initialIndex, 0, Math.max(slides.length - 1, 0)));
@@ -77,13 +80,13 @@ export default function ProjectorScreen({
   const canPrevSlide = slideIndex > 0;
   const canNextSlide = slideIndex < slides.length - 1;
 
-  const prevSlide = () => {
+  const prevSlide = useCallback(() => {
     setSlideIndex((prev) => Math.max(prev - 1, 0));
-  };
+  }, []);
 
-  const nextSlide = () => {
+  const nextSlide = useCallback(() => {
     setSlideIndex((prev) => Math.min(prev + 1, slides.length - 1));
-  };
+  }, [slides.length]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -132,7 +135,7 @@ export default function ProjectorScreen({
 
     win.addEventListener('keydown', onKeyDown);
     return () => win.removeEventListener('keydown', onKeyDown);
-  }, [onClose, onNextGroup, onPrevGroup, pickerOpen]);
+  }, [nextSlide, onClose, onNextGroup, onPrevGroup, pickerOpen, prevSlide]);
 
   const fontSize = useMemo(() => {
     const base =
@@ -153,23 +156,44 @@ export default function ProjectorScreen({
     return `Slide ${index + 1}`;
   }
 
+  const colors = useMemo(
+    () => ({
+      bg: isLightTheme ? '#FFFFFF' : '#000000',
+      panel: isLightTheme ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.08)',
+      panelBorder: isLightTheme ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)',
+      mainText: isLightTheme ? '#111111' : '#F8F8F8',
+      secondaryText: isLightTheme ? '#374151' : '#d8d8d8',
+      mutedText: isLightTheme ? '#6B7280' : '#ffffff99',
+      subtitleText: isLightTheme ? '#6B7280' : '#7f7f7f',
+      accentText: isLightTheme ? '#1D4ED8' : '#7db5ff',
+      modalBg: isLightTheme ? '#FFFFFF' : '#111111',
+      modalBorder: isLightTheme ? '#E5E7EB' : '#222222',
+      modalOverlay: isLightTheme ? 'rgba(0,0,0,0.20)' : 'rgba(0,0,0,0.55)',
+      modalItemBorder: isLightTheme ? '#F2F4F7' : '#1b1b1b',
+      activeItemBg: isLightTheme ? '#DBEAFE' : '#0F62FE22',
+      buttonText: isLightTheme ? '#111111' : '#ffffffcc',
+      buttonDisabled: '#7c7c7c',
+    }),
+    [isLightTheme]
+  );
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
       <StatusBar hidden />
 
       <View style={styles.topBar}>
         <TouchableOpacity onPress={onClose} style={styles.topMiniBtn}>
-          <Ionicons name="close" size={18} color="#ffffff99" />
+          <Ionicons name="close" size={18} color={colors.mutedText} />
         </TouchableOpacity>
 
         <View style={styles.topCenter}>
           {!!title && (
-            <Text style={styles.topTitle} numberOfLines={1}>
+            <Text style={[styles.topTitle, { color: colors.mutedText }]} numberOfLines={1}>
               {title}
             </Text>
           )}
           {!!subtitle && (
-            <Text style={styles.topSubtitle} numberOfLines={1}>
+            <Text style={[styles.topSubtitle, { color: colors.subtitleText }]} numberOfLines={1}>
               {subtitle}
             </Text>
           )}
@@ -179,10 +203,10 @@ export default function ProjectorScreen({
           {slides.length > 0 ? (
             <TouchableOpacity
               onPress={() => setPickerOpen(true)}
-              style={styles.topPickerBtn}
+              style={[styles.topPickerBtn, { backgroundColor: colors.panel }]}
               activeOpacity={0.85}
             >
-              <Text style={styles.topPickerText}>{pickerLabel}</Text>
+              <Text style={[styles.topPickerText, { color: colors.buttonText }]}>{pickerLabel}</Text>
             </TouchableOpacity>
           ) : null}
 
@@ -190,14 +214,14 @@ export default function ProjectorScreen({
             onPress={() => setManualOffset((s) => clamp(s - 2, -10, 18))}
             style={styles.topMiniBtn}
           >
-            <Text style={styles.control}>A-</Text>
+            <Text style={[styles.control, { color: colors.mutedText }]}>A-</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => setManualOffset((s) => clamp(s + 2, -10, 18))}
             style={styles.topMiniBtn}
           >
-            <Text style={styles.control}>A+</Text>
+            <Text style={[styles.control, { color: colors.mutedText }]}>A+</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -215,7 +239,9 @@ export default function ProjectorScreen({
             {currentSlide ? (
               <>
                 {!!currentSlide.title && (
-                  <Text style={styles.slideTitle}>{currentSlide.title}</Text>
+                  <Text style={[styles.slideTitle, { color: colors.secondaryText }]}>
+                    {currentSlide.title}
+                  </Text>
                 )}
 
                 <Text
@@ -224,6 +250,8 @@ export default function ProjectorScreen({
                     {
                       fontSize,
                       lineHeight,
+                      color: colors.mainText,
+                      fontWeight: isLightTheme ? '700' : '600',
                     },
                   ]}
                 >
@@ -231,7 +259,7 @@ export default function ProjectorScreen({
                 </Text>
               </>
             ) : (
-              <Text style={styles.emptyText}>Sem conteúdo para projetar</Text>
+              <Text style={[styles.emptyText, { color: colors.mainText }]}>Sem conteúdo para projetar</Text>
             )}
           </View>
         </View>
@@ -247,82 +275,92 @@ export default function ProjectorScreen({
       <View style={styles.bottomBar}>
         <TouchableOpacity
           onPress={prevSlide}
-          style={[styles.navBtn, !canPrevSlide && styles.navBtnDisabled]}
+          style={[
+            styles.navBtn,
+            { backgroundColor: colors.panel, borderColor: colors.panelBorder },
+            !canPrevSlide && styles.navBtnDisabled,
+          ]}
           disabled={!canPrevSlide}
         >
           <Ionicons
             name="chevron-back"
             size={18}
-            color={!canPrevSlide ? '#7c7c7c' : '#ffffffcc'}
+            color={!canPrevSlide ? colors.buttonDisabled : colors.buttonText}
           />
-          <Text style={[styles.navText, !canPrevSlide && styles.navTextDisabled]}>
+          <Text style={[styles.navText, { color: !canPrevSlide ? colors.buttonDisabled : colors.buttonText }]}>
             Slide anterior
           </Text>
         </TouchableOpacity>
 
         <View style={styles.counterBlock}>
-          <Text style={styles.counter}>
+          <Text style={[styles.counter, { color: colors.mutedText }]}>
             Slide {slides.length ? slideIndex + 1 : 0} de {slides.length}
           </Text>
         </View>
 
         <TouchableOpacity
           onPress={nextSlide}
-          style={[styles.navBtn, !canNextSlide && styles.navBtnDisabled]}
+          style={[
+            styles.navBtn,
+            { backgroundColor: colors.panel, borderColor: colors.panelBorder },
+            !canNextSlide && styles.navBtnDisabled,
+          ]}
           disabled={!canNextSlide}
         >
-          <Text style={[styles.navText, !canNextSlide && styles.navTextDisabled]}>
+          <Text style={[styles.navText, { color: !canNextSlide ? colors.buttonDisabled : colors.buttonText }]}>
             Próximo slide
           </Text>
           <Ionicons
             name="chevron-forward"
             size={18}
-            color={!canNextSlide ? '#7c7c7c' : '#ffffffcc'}
+            color={!canNextSlide ? colors.buttonDisabled : colors.buttonText}
           />
         </TouchableOpacity>
       </View>
 
       {(onPrevGroup || onNextGroup) && (
         <View style={styles.groupNavBar}>
-          <TouchableOpacity
-            onPress={onPrevGroup}
-            style={styles.groupNavBtn}
-            disabled={!onPrevGroup}
-          >
+          <TouchableOpacity onPress={onPrevGroup} style={styles.groupNavBtn} disabled={!onPrevGroup}>
             <Ionicons
               name="play-skip-back"
               size={18}
-              color={onPrevGroup ? '#ffffffaa' : '#666'}
+              color={onPrevGroup ? colors.buttonText : colors.buttonDisabled}
             />
-            <Text style={[styles.groupNavText, !onPrevGroup && styles.groupNavTextDisabled]}>
+            <Text
+              style={[
+                styles.groupNavText,
+                { color: onPrevGroup ? colors.buttonText : colors.buttonDisabled },
+              ]}
+            >
               {prevGroupLabel}
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={onNextGroup}
-            style={styles.groupNavBtn}
-            disabled={!onNextGroup}
-          >
-            <Text style={[styles.groupNavText, !onNextGroup && styles.groupNavTextDisabled]}>
+          <TouchableOpacity onPress={onNextGroup} style={styles.groupNavBtn} disabled={!onNextGroup}>
+            <Text
+              style={[
+                styles.groupNavText,
+                { color: onNextGroup ? colors.buttonText : colors.buttonDisabled },
+              ]}
+            >
               {nextGroupLabel}
             </Text>
             <Ionicons
               name="play-skip-forward"
               size={18}
-              color={onNextGroup ? '#ffffffaa' : '#666'}
+              color={onNextGroup ? colors.buttonText : colors.buttonDisabled}
             />
           </TouchableOpacity>
         </View>
       )}
 
       <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{pickerTitle}</Text>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.modalOverlay }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.modalBg, borderColor: colors.modalBorder }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.modalBorder }]}>
+              <Text style={[styles.modalTitle, { color: colors.mainText }]}>{pickerTitle}</Text>
               <TouchableOpacity onPress={() => setPickerOpen(false)}>
-                <Text style={styles.modalClose}>Fechar</Text>
+                <Text style={[styles.modalClose, { color: colors.accentText }]}>Fechar</Text>
               </TouchableOpacity>
             </View>
 
@@ -333,13 +371,23 @@ export default function ProjectorScreen({
                 return (
                   <TouchableOpacity
                     key={slide.id}
-                    style={[styles.modalItem, active && styles.modalItemActive]}
+                    style={[
+                      styles.modalItem,
+                      { borderBottomColor: colors.modalItemBorder },
+                      active && { backgroundColor: colors.activeItemBg },
+                    ]}
                     onPress={() => {
                       setSlideIndex(index);
                       setPickerOpen(false);
                     }}
                   >
-                    <Text style={[styles.modalItemText, active && styles.modalItemTextActive]}>
+                    <Text
+                      style={[
+                        styles.modalItemText,
+                        { color: colors.secondaryText },
+                        active && { color: colors.mainText },
+                      ]}
+                    >
                       {getSlideLabel(slide, index)}
                     </Text>
                   </TouchableOpacity>
@@ -356,7 +404,6 @@ export default function ProjectorScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
   },
 
   topBar: {
@@ -366,7 +413,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    opacity: 0.72,
+    opacity: 0.9,
   },
 
   topMiniBtn: {
@@ -381,14 +428,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     height: 30,
     borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 6,
   },
 
   topPickerText: {
-    color: '#ffffffcc',
     fontSize: 11,
     fontWeight: '700',
   },
@@ -400,7 +445,6 @@ const styles = StyleSheet.create({
   },
 
   topTitle: {
-    color: '#ffffff99',
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
@@ -408,7 +452,6 @@ const styles = StyleSheet.create({
 
   topSubtitle: {
     marginTop: 1,
-    color: '#7f7f7f',
     fontSize: 10,
     fontWeight: '500',
     textAlign: 'center',
@@ -420,7 +463,6 @@ const styles = StyleSheet.create({
   },
 
   control: {
-    color: '#ffffff99',
     fontSize: 11,
     fontWeight: '700',
   },
@@ -444,11 +486,10 @@ const styles = StyleSheet.create({
 
   slideInner: {
     width: '100%',
-    transform: [{ translateY: -110}],
+    transform: [{ translateY: -110 }],
   },
 
   slideTitle: {
-    color: '#d8d8d8',
     fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
@@ -457,14 +498,11 @@ const styles = StyleSheet.create({
 
   slideText: {
     width: '100%',
-    color: '#F8F8F8',
     textAlign: 'center',
-    fontWeight: '600',
     letterSpacing: 0.2,
   },
 
   emptyText: {
-    color: '#fff',
     fontSize: 18,
     textAlign: 'center',
   },
@@ -476,7 +514,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    opacity: 0.78,
+    opacity: 0.95,
   },
 
   navBtn: {
@@ -487,9 +525,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
   },
 
   navBtnDisabled: {
@@ -498,13 +534,8 @@ const styles = StyleSheet.create({
 
   navText: {
     marginLeft: 6,
-    color: '#ffffffcc',
     fontSize: 12,
     fontWeight: '700',
-  },
-
-  navTextDisabled: {
-    color: '#7c7c7c',
   },
 
   counterBlock: {
@@ -514,7 +545,6 @@ const styles = StyleSheet.create({
   },
 
   counter: {
-    color: '#ffffff99',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -525,7 +555,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    opacity: 0.72,
+    opacity: 0.95,
   },
 
   groupNavBtn: {
@@ -536,28 +566,20 @@ const styles = StyleSheet.create({
 
   groupNavText: {
     marginHorizontal: 6,
-    color: '#ffffffaa',
     fontSize: 13,
     fontWeight: '600',
   },
 
-  groupNavTextDisabled: {
-    color: '#666',
-  },
-
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'center',
     padding: 20,
   },
 
   modalContent: {
     maxHeight: '72%',
-    backgroundColor: '#111',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#222',
     overflow: 'hidden',
   },
 
@@ -565,20 +587,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#222',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
 
   modalTitle: {
-    color: '#fff',
     fontSize: 16,
     fontWeight: '800',
   },
 
   modalClose: {
-    color: '#7db5ff',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -587,20 +606,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#1b1b1b',
-  },
-
-  modalItemActive: {
-    backgroundColor: '#0F62FE22',
   },
 
   modalItemText: {
-    color: '#ddd',
     fontSize: 14,
     fontWeight: '600',
-  },
-
-  modalItemTextActive: {
-    color: '#fff',
   },
 });
