@@ -352,7 +352,7 @@ export default function HomeScreen() {
             </View>
 
             <TouchableOpacity
-              onPress={() => router.push('/settings' as any)}
+              onPress={() => router.push('/(tabs)/index' as any)}
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityLabel="Abrir configurações"
