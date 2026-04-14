@@ -67,7 +67,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { session, initialized } = useAuth();
   const { settings, setBibleVersion, setFontSize, setProjectorTheme } = useSettings();
-
+  const [avatarPreviewUri, setAvatarPreviewUri] = useState('');
   const [profileName, setProfileName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -243,10 +243,10 @@ export default function SettingsScreen() {
       router.push('/(auth)/login' as any);
       return;
     }
-
+  
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
+  
       if (!permission.granted) {
         Alert.alert(
           'Permissão necessária',
@@ -254,7 +254,7 @@ export default function SettingsScreen() {
         );
         return;
       }
-
+  
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -262,53 +262,61 @@ export default function SettingsScreen() {
         quality: 0.85,
         base64: true,
       });
-
+  
       if (result.canceled || !result.assets?.length) return;
-
+  
       const asset = result.assets[0];
+  
+      // preview imediato no círculo, antes mesmo do upload
+      if (asset.uri) {
+        setAvatarPreviewUri(asset.uri);
+      }
+  
       if (!asset.base64) {
         Alert.alert('Avatar', 'Não foi possível processar a imagem escolhida.');
         return;
       }
-
+  
       const sb = getSupabaseOrNull();
       if (!sb) {
         Alert.alert('Avatar', 'Supabase indisponível neste build.');
         return;
       }
-
+  
       setUploadingAvatar(true);
-
+  
       const ext =
         asset.mimeType?.includes('png')
           ? 'png'
           : asset.mimeType?.includes('webp')
           ? 'webp'
           : 'jpg';
-
-      const filePath = `${session.user.id}/avatar-${Date.now()}.${ext}`;
-
+  
+      const filePath = `${session.user.id}/avatar.${ext}`;
+  
       const { error: uploadError } = await sb.storage
         .from('avatars')
         .upload(filePath, decode(asset.base64), {
           contentType: asset.mimeType || 'image/jpeg',
           upsert: true,
         });
-
+  
       if (uploadError) {
         console.log('AVATAR_UPLOAD_ERROR', uploadError);
         Alert.alert('Avatar', uploadError.message || 'Erro ao enviar imagem.');
         return;
       }
-
+  
       const { data: publicData } = sb.storage.from('avatars').getPublicUrl(filePath);
-      const publicUrl = publicData?.publicUrl ?? '';
-
+      const publicUrl = publicData?.publicUrl
+        ? `${publicData.publicUrl}?t=${Date.now()}`
+        : '';
+  
       if (!publicUrl) {
         Alert.alert('Avatar', 'Não foi possível obter a URL da imagem.');
         return;
       }
-
+  
       const updateResult = await Promise.race([
         sb
           .from('profiles')
@@ -318,10 +326,10 @@ export default function SettingsScreen() {
           .maybeSingle(),
         timeoutAfter(12000),
       ]);
-
+  
       const { data: updatedData, error: updateError } = updateResult as any;
       if (updateError) throw updateError;
-
+  
       if (!updatedData) {
         const insertResult = await Promise.race([
           sb
@@ -335,12 +343,13 @@ export default function SettingsScreen() {
             .maybeSingle(),
           timeoutAfter(12000),
         ]);
-
+  
         const { error: insertError } = insertResult as any;
         if (insertError) throw insertError;
       }
-
+  
       setAvatarUrl(publicUrl);
+      setAvatarPreviewUri('');
       Alert.alert('Avatar', 'Foto de perfil atualizada com sucesso.');
     } catch (e: any) {
       console.log('HANDLE_PICK_AVATAR_ERROR', e);
@@ -371,11 +380,11 @@ export default function SettingsScreen() {
         <View style={styles.profileSection}>
           <View style={styles.avatarWrap}>
             <View style={styles.avatarPlaceholder}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-              ) : (
-                <Ionicons name="person" size={40} color="#fff" />
-              )}
+            {avatarPreviewUri || avatarUrl ? (
+  <Image source={{ uri: avatarPreviewUri || avatarUrl }} style={styles.avatarImage} />
+) : (
+  <Ionicons name="person" size={40} color="#fff" />
+)}
 
               {uploadingAvatar ? (
                 <View style={styles.avatarOverlay}>
