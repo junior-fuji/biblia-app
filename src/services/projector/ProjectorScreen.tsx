@@ -125,11 +125,11 @@ export default function ProjectorScreen({
       }
 
       if (e.key === '+' || e.key === '=') {
-        setManualOffset((s) => clamp(s + 2, -10, 18));
+        setManualOffset((s) => clamp(s + 2, -22, 20));
       }
 
       if (e.key === '-' || e.key === '_') {
-        setManualOffset((s) => clamp(s - 2, -10, 18));
+        setManualOffset((s) => clamp(s - 2, -22, 20));
       }
     };
 
@@ -145,7 +145,7 @@ export default function ProjectorScreen({
         ? 36
         : getBaseFontSize(currentSlide?.kind);
 
-    return clamp(base + manualOffset, 20, 56);
+    return clamp(base + manualOffset, 16, 56);
   }, [baseFontSize, uniformFontSize, currentSlide?.kind, manualOffset]);
 
   const lineHeight = Math.round(fontSize * 1.38);
@@ -176,6 +176,10 @@ export default function ProjectorScreen({
     }),
     [isLightTheme]
   );
+
+  const shouldShowInlineSlideTitle =
+    !!currentSlide?.title &&
+    currentSlide.kind !== 'verse';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
@@ -211,14 +215,14 @@ export default function ProjectorScreen({
           ) : null}
 
           <TouchableOpacity
-            onPress={() => setManualOffset((s) => clamp(s - 2, -10, 18))}
+            onPress={() => setManualOffset((s) => clamp(s - 2, -22, 20))}
             style={styles.topMiniBtn}
           >
             <Text style={[styles.control, { color: colors.mutedText }]}>A-</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setManualOffset((s) => clamp(s + 2, -10, 18))}
+            onPress={() => setManualOffset((s) => clamp(s + 2, -22, 20))}
             style={styles.topMiniBtn}
           >
             <Text style={[styles.control, { color: colors.mutedText }]}>A+</Text>
@@ -238,11 +242,11 @@ export default function ProjectorScreen({
           <View style={styles.slideInner}>
             {currentSlide ? (
               <>
-                {!!currentSlide.title && (
+                {shouldShowInlineSlideTitle ? (
                   <Text style={[styles.slideTitle, { color: colors.secondaryText }]}>
                     {currentSlide.title}
                   </Text>
-                )}
+                ) : null}
 
                 <Text
                   style={[
@@ -486,7 +490,7 @@ const styles = StyleSheet.create({
 
   slideInner: {
     width: '100%',
-    transform: [{ translateY: -110 }],
+    transform: [{ translateY: -150 }],
   },
 
   slideTitle: {
