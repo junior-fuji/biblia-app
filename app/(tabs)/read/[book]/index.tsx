@@ -1,7 +1,5 @@
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
-import { useAuth } from '@/src/providers/AuthProvider';
-import ProjectorScreen from '@/src/services/projector/ProjectorScreen';
-import { buildBibleSlides } from '@/src/services/projector/bibleProjector';
+import { useSettings } from '@/src/providers/SettingsProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -35,37 +33,13 @@ type RouteParams = {
 type AnalysisData = {
   theme?: string;
   history?: string;
+  culture?: string;
   exegesis?: string;
   theology?: string;
   application?: string;
 };
 
 type VersionRow = { id: string; code: string; name: string };
-
-type StudyEnvelope = {
-  version: 1;
-  kind: 'ai_bible_study';
-  title: string;
-  reference: string | null;
-  ref?: {
-    book_id?: number;
-    chapter?: number;
-    verse?: number | null;
-    label?: string;
-  };
-  analysis: {
-    theme?: string;
-    history?: string;
-    exegesis?: string;
-    theology?: string;
-    application?: string;
-  } | null;
-  raw: string | null;
-  meta?: {
-    generated_by?: 'ai';
-    created_at?: string;
-  };
-};
 
 const BOOK_MAP: Record<number, { name: string; abbrev: string }> = {
   1: { name: 'Gênesis', abbrev: 'Gn' },
@@ -158,43 +132,29 @@ function extractJsonObject(text: string): string | null {
   return text.slice(first, last + 1);
 }
 
-function buildStudyEnvelope(params: {
-  title: string;
-  reference: string | null;
-  bookId: number;
-  chapterNum: number;
-  verseNum?: number | null;
-  analysisData: AnalysisData | null;
-  rawAi: string | null;
-}): string {
-  const envelope: StudyEnvelope = {
-    version: 1,
-    kind: 'ai_bible_study',
-    title: params.title,
-    reference: params.reference,
-    ref: {
-      book_id: params.bookId,
-      chapter: params.chapterNum,
-      verse: params.verseNum ?? null,
-      label: params.reference ?? undefined,
-    },
-    analysis: params.analysisData
-      ? {
-          theme: params.analysisData.theme,
-          history: params.analysisData.history,
-          exegesis: params.analysisData.exegesis,
-          theology: params.analysisData.theology,
-          application: params.analysisData.application,
-        }
-      : null,
-    raw: params.rawAi ?? null,
-    meta: {
-      generated_by: 'ai',
-      created_at: new Date().toISOString(),
-    },
-  };
+function getAnalysisLanguage(versionCode: string) {
+  const code = String(versionCode || '').toUpperCase();
 
-  return JSON.stringify(envelope);
+  if (
+    code.includes('RVR') ||
+    code.includes('RV') ||
+    code.includes('REINA') ||
+    code.includes('ESPA') ||
+    code.includes('SPAN')
+  ) {
+    return 'es';
+  }
+
+  if (
+    code.includes('JP') ||
+    code.includes('JAP') ||
+    code.includes('JAPA') ||
+    code.includes('JA')
+  ) {
+    return 'ja';
+  }
+
+  return 'pt';
 }
 
 /* =========================
@@ -229,6 +189,41 @@ async function resolveVersionId(code: string): Promise<string> {
   return id;
 }
 
+function buildAnalysisEnvelope(params: {
+  bookId: number;
+  chapter: number;
+  verse?: number | null;
+  label: string;
+  title: string;
+  analysisData: AnalysisData | null;
+  rawAi: string;
+}) {
+  const { bookId, chapter, verse, label, title, analysisData, rawAi } = params;
+
+  return {
+    version: 2,
+    type: verse ? 'verse' : 'chapter',
+    ref: {
+      book_id: bookId,
+      chapter,
+      verse: verse ?? null,
+      label,
+    },
+    title,
+    analysis: analysisData
+      ? {
+          theme: analysisData.theme || '',
+          history: analysisData.history || '',
+          culture: analysisData.culture || '',
+          exegesis: analysisData.exegesis || '',
+          theology: analysisData.theology || '',
+          application: analysisData.application || '',
+        }
+      : null,
+    raw: rawAi || null,
+  };
+}
+
 function InfoCard({
   title,
   text,
@@ -259,7 +254,7 @@ export default function ReadBookScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<Verse>>(null);
-  const { initialized, session } = useAuth();
+  const { settings, setBibleVersion } = useSettings();
 
   const { book, chapter, verse, returnTo } = useLocalSearchParams<RouteParams>();
   const bookId = Number(book);
@@ -281,7 +276,7 @@ export default function ReadBookScreen() {
     : { name: 'Livro', abbrev: '' };
   const safeBookName = bookData.name || 'Livro';
 
-  const [versionCode, setVersionCode] = useState<string>('ARA');
+  const [versionCode, setVersionCodeState] = useState<string>(settings.bibleVersion || 'ARA');
   const [versions, setVersions] = useState<VersionRow[]>([]);
   const [showVersions, setShowVersions] = useState(false);
 
@@ -298,13 +293,16 @@ export default function ReadBookScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiTitle, setAiTitle] = useState('');
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
-  const [rawAi, setRawAi] = useState<string>('');
+  const [rawAi, setRawAi] = useState('');
   const [saving, setSaving] = useState(false);
-  const [saveReference, setSaveReference] = useState<string>('');
-  const [saveVerseNumber, setSaveVerseNumber] = useState<number | null>(null);
+  const [saveReference, setSaveReference] = useState('');
+  const [saveVerse, setSaveVerse] = useState<number | null>(null);
 
-  const [projectorOpen, setProjectorOpen] = useState(false);
-  const [projectorIndex, setProjectorIndex] = useState(0);
+  useEffect(() => {
+    if (settings.bibleVersion && settings.bibleVersion !== versionCode) {
+      setVersionCodeState(settings.bibleVersion);
+    }
+  }, [settings.bibleVersion, versionCode]);
 
   useEffect(() => {
     setChapterNum((current) => (current !== initialChapter ? initialChapter : current));
@@ -317,11 +315,15 @@ export default function ReadBookScreen() {
       try {
         const list = await fetchVersions();
         if (!alive) return;
-
         setVersions(list);
 
         if (list.length > 0 && !list.some((v) => v.code === versionCode)) {
-          setVersionCode(list[0].code);
+          const fallback = settings.bibleVersion && list.some((v) => v.code === settings.bibleVersion)
+            ? settings.bibleVersion
+            : list[0].code;
+
+          setVersionCodeState(fallback);
+          setBibleVersion(fallback);
         }
       } catch (e) {
         console.log('FETCH_VERSIONS_ERROR', e);
@@ -333,6 +335,8 @@ export default function ReadBookScreen() {
           { id: 'fallback-acf', code: 'ACF', name: 'ACF' },
           { id: 'fallback-nvi', code: 'NVI', name: 'NVI' },
           { id: 'fallback-kja', code: 'KJA', name: 'KJA' },
+          { id: 'fallback-rvr1960', code: 'RVR1960', name: 'RVR1960' },
+          { id: 'fallback-japanese', code: 'JAPANESE', name: 'JAPANESE' },
         ]);
       }
     })();
@@ -340,7 +344,7 @@ export default function ReadBookScreen() {
     return () => {
       alive = false;
     };
-  }, [versionCode]);
+  }, [setBibleVersion, settings.bibleVersion, versionCode]);
 
   useEffect(() => {
     let alive = true;
@@ -385,8 +389,7 @@ export default function ReadBookScreen() {
       }
     }
 
-    loadTotal();
-
+    void loadTotal();
     return () => {
       alive = false;
     };
@@ -448,8 +451,7 @@ export default function ReadBookScreen() {
       }
     }
 
-    loadVerses();
-
+    void loadVerses();
     return () => {
       alive = false;
     };
@@ -463,22 +465,59 @@ export default function ReadBookScreen() {
     router.replace('/(tabs)/read' as any);
   }, [router, returnToStr]);
 
-  async function callAI(prompt: string, title: string, reference: string, verseNum?: number | null) {
+  async function callAI(prompt: string, title: string, reference: string, verseNumber?: number | null) {
     setAiTitle(title);
     setSaveReference(reference);
-    setSaveVerseNumber(verseNum ?? null);
+    setSaveVerse(verseNumber ?? null);
     setAnalysisData(null);
     setRawAi('');
     setAiOpen(true);
     setAiLoading(true);
 
-    const SYSTEM = `
+    const analysisLanguage = getAnalysisLanguage(versionCode);
+
+    const SYSTEM =
+      analysisLanguage === 'es'
+        ? `
+Eres un especialista en Teología Bíblica y lenguas originales (hebreo/arameo/griego).
+Responde EXCLUSIVAMENTE con JSON válido y TODO el contenido debe estar en español.
+Sin markdown y sin texto fuera del JSON.
+Estructura obligatoria:
+{
+  "theme": "Tema central con profundidad",
+  "history": "Contexto histórico",
+  "culture": "Contexto cultural de la época",
+  "exegesis": "Exégesis y matices del original (hebreo/griego), con términos cuando corresponda",
+  "theology": "Conexiones bíblicas e implicaciones teológicas",
+  "application": "Aplicación pastoral práctica"
+}
+Si no sabes algún campo, rellénalo con una breve explicación.
+`.trim()
+        : analysisLanguage === 'ja'
+        ? `
+あなたは聖書神学および原語（ヘブライ語・アラム語・ギリシャ語）の専門家です。
+必ず有効なJSONのみで回答し、内容はすべて日本語で書いてください。
+MarkdownやJSON以外の文章は禁止です。
+必須の構造:
+{
+  "theme": "中心テーマ",
+  "history": "歴史的背景",
+  "culture": "当時の文化的背景",
+  "exegesis": "原語のニュアンスを含む釈義",
+  "theology": "聖書全体とのつながりと神学的意味",
+  "application": "実践的・牧会的適用"
+}
+不明な項目は短い説明で補ってください。
+`.trim()
+        : `
 Você é um especialista em Teologia Bíblica e línguas originais (hebraico/aramaico/grego).
-Responda EXCLUSIVAMENTE com JSON válido (sem markdown, sem texto fora do JSON).
+Responda EXCLUSIVAMENTE com JSON válido e TODO o conteúdo deve estar em português.
+Sem markdown e sem texto fora do JSON.
 Estrutura obrigatória:
 {
   "theme": "Tema central com profundidade",
-  "history": "Contexto histórico (autor, data, geografia, cenário)",
+  "history": "Contexto histórico",
+  "culture": "Contexto cultural da época",
   "exegesis": "Exegese e nuances do original (hebraico/grego), com termos quando pertinente",
   "theology": "Conexões bíblicas e implicações teológicas",
   "application": "Aplicação pastoral prática"
@@ -512,6 +551,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
           setAnalysisData({
             theme: parsed.theme,
             history: parsed.history,
+            culture: parsed.culture,
             exegesis: parsed.exegisis ?? parsed.exegesis,
             theology: parsed.theology,
             application: parsed.application,
@@ -530,8 +570,8 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
   }
 
   const analyzeChapter = useCallback(() => {
-    callAI(
-      `Analise profundamente ${safeBookName} capítulo ${chapterNum}. Foque em contexto histórico, nuances do original (hebraico/grego) e aplicação pastoral.`,
+    void callAI(
+      `Analise profundamente ${safeBookName} capítulo ${chapterNum}. Inclua tema central, contexto histórico, contexto cultural da época, nuances do original (hebraico/grego), teologia bíblica e aplicação pastoral.`,
       `Análise — ${safeBookName} ${chapterNum}`,
       `${safeBookName} ${chapterNum} (${versionCode})`,
       null
@@ -540,8 +580,8 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
 
   const analyzeVerse = useCallback(
     (v: Verse) => {
-      callAI(
-        `Faça exegese profunda do versículo: "${v.text}" (referência: ${safeBookName} ${chapterNum}:${v.verse}). Explique nuances do original e implicações teológicas.`,
+      void callAI(
+        `Faça exegese profunda do versículo: "${v.text}" (referência: ${safeBookName} ${chapterNum}:${v.verse}). Inclua tema central, contexto histórico, contexto cultural da época, nuances do original e implicações teológicas.`,
         `Exegese — ${safeBookName} ${chapterNum}:${v.verse}`,
         `${safeBookName} ${chapterNum}:${v.verse} (${versionCode})`,
         v.verse
@@ -551,15 +591,9 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
   );
 
   async function handleSaveAI() {
-    if (!initialized) {
-      Alert.alert('Aguarde', 'A sessão ainda está sendo carregada.');
-      return;
-    }
-
     if (!analysisData && !rawAi) return;
 
     setSaving(true);
-
     try {
       const sb = getSupabaseOrNull();
       if (!sb) {
@@ -567,8 +601,15 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
         return;
       }
 
-      const userId = session?.user?.id;
-      if (!userId) {
+      const { data: sessionData, error: sessionErr } = await sb.auth.getSession();
+      if (sessionErr) {
+        console.log('AUTH_GET_SESSION_ERROR', sessionErr);
+        throw sessionErr;
+      }
+
+      const user = sessionData.session?.user;
+
+      if (!user) {
         Alert.alert('Login necessário', 'Faça login para salvar.', [
           { text: 'Cancelar', style: 'cancel' },
           {
@@ -579,27 +620,26 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
         return;
       }
 
-      const title = (aiTitle || 'Análise').trim();
-      const reference = (saveReference || '').trim() || null;
-      const contentToSave = buildStudyEnvelope({
-        title,
-        reference,
+      const envelope = buildAnalysisEnvelope({
         bookId,
-        chapterNum,
-        verseNum: saveVerseNumber,
-        analysisData: analysisData ?? null,
-        rawAi: rawAi ?? null,
+        chapter: chapterNum,
+        verse: saveVerse,
+        label: saveReference || '',
+        title: aiTitle || 'Análise',
+        analysisData,
+        rawAi,
       });
+
+      const payload = {
+        user_id: user.id,
+        title: aiTitle || 'Análise',
+        reference: saveReference || '',
+        content: JSON.stringify(envelope),
+      };
 
       const { data, error } = await sb
         .from('saved_notes')
-        .insert({
-          user_id: userId,
-          title,
-          reference,
-          content: contentToSave,
-          client_id: null,
-        })
+        .insert(payload)
         .select('id')
         .single();
 
@@ -618,11 +658,6 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
       setSaving(false);
     }
   }
-
-  const projectorSlides = useMemo(() => {
-    if (!isValidBook || versesState.length === 0) return [];
-    return buildBibleSlides(safeBookName, chapterNum, versesState);
-  }, [isValidBook, safeBookName, chapterNum, versesState]);
 
   useEffect(() => {
     if (!initialVerse || versesState.length === 0) return;
@@ -699,32 +734,20 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
           ),
           headerRight: () => (
             <View style={styles.headerRightContainer}>
-              {Platform.OS === 'web' ? (
-                <TouchableOpacity
-                  onPress={() => {
-                    setProjectorIndex(0);
-                    setProjectorOpen(true);
-                  }}
-                  style={[styles.headerIconBtn, { paddingHorizontal: 6 }]}
-                >
-                  <Ionicons name="tv-outline" size={20} color="#2563EB" />
-                </TouchableOpacity>
-              ) : null}
-          
-              <TouchableOpacity onPress={() => setShowVersions(true)} style={[styles.headerIconBtn, { paddingHorizontal: 6 }]}>
-                <Text style={{ color: '#007AFF', fontWeight: '900', fontSize: 13 }}>{versionCode}</Text>
+              <TouchableOpacity onPress={() => setShowVersions(true)} style={styles.headerIconBtn}>
+                <Text style={{ color: '#007AFF', fontWeight: '900' }}>{versionCode}</Text>
               </TouchableOpacity>
-          
-              <TouchableOpacity onPress={analyzeChapter} style={[styles.headerIconBtn, { paddingHorizontal: 6 }]}>
-                <Ionicons name="school-outline" size={20} color="#AF52DE" />
+
+              <TouchableOpacity onPress={analyzeChapter} style={styles.headerIconBtn}>
+                <Ionicons name="school-outline" size={22} color="#AF52DE" />
               </TouchableOpacity>
-          
-              <TouchableOpacity onPress={() => setFontSize((p) => clamp(p - 2, 12, 40))} style={[styles.headerIconBtn, { paddingHorizontal: 4 }]}>
-                <Ionicons name="remove" size={20} color="#007AFF" />
+
+              <TouchableOpacity onPress={() => setFontSize((p) => clamp(p - 2, 12, 40))} style={styles.headerIconBtn}>
+                <Ionicons name="remove" size={22} color="#007AFF" />
               </TouchableOpacity>
-          
-              <TouchableOpacity onPress={() => setFontSize((p) => clamp(p + 2, 12, 40))} style={[styles.headerIconBtn, { paddingHorizontal: 4 }]}>
-                <Ionicons name="add" size={20} color="#007AFF" />
+
+              <TouchableOpacity onPress={() => setFontSize((p) => clamp(p + 2, 12, 40))} style={styles.headerIconBtn}>
+                <Ionicons name="add" size={22} color="#007AFF" />
               </TouchableOpacity>
             </View>
           ),
@@ -819,6 +842,8 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
                   { id: 'fallback-acf', code: 'ACF', name: 'ACF' },
                   { id: 'fallback-nvi', code: 'NVI', name: 'NVI' },
                   { id: 'fallback-kja', code: 'KJA', name: 'KJA' },
+                  { id: 'fallback-rvr1960', code: 'RVR1960', name: 'RVR1960' },
+                  { id: 'fallback-japanese', code: 'JAPANESE', name: 'JAPANESE' },
                 ]
             ).map((v) => {
               const active = v.code === versionCode;
@@ -830,7 +855,8 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
                     active ? { backgroundColor: '#007AFF' } : null,
                   ]}
                   onPress={() => {
-                    setVersionCode(v.code);
+                    setVersionCodeState(v.code);
+                    setBibleVersion(v.code);
                     setShowVersions(false);
                   }}
                 >
@@ -880,6 +906,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
                 <>
                   <InfoCard title="TEMA CENTRAL" icon="bookmark" color="#1C1C1E" text={analysisData.theme} />
                   <InfoCard title="CONTEXTO HISTÓRICO" icon="time" color="#FF9500" text={analysisData.history} />
+                  <InfoCard title="CONTEXTO CULTURAL" icon="people" color="#8E44AD" text={analysisData.culture} />
                   <InfoCard title="EXEGESE & LINGUÍSTICA" icon="search" color="#007AFF" text={analysisData.exegesis} />
                   <InfoCard title="TEOLOGIA" icon="book" color="#AF52DE" text={analysisData.theology} />
                   <InfoCard title="APLICAÇÃO PRÁTICA" icon="leaf" color="#34C759" text={analysisData.application} />
@@ -894,24 +921,6 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
           )}
         </SafeAreaView>
       </Modal>
-
-      <Modal
-        visible={projectorOpen}
-        animationType="fade"
-        presentationStyle="fullScreen"
-        onRequestClose={() => setProjectorOpen(false)}
-      >
-        <ProjectorScreen
-          title={`${safeBookName} ${chapterNum}`}
-          subtitle={versionCode}
-          slides={projectorSlides}
-          initialIndex={projectorIndex}
-          onClose={() => setProjectorOpen(false)}
-          pickerLabel="Versículos"
-          pickerTitle={`${safeBookName} ${chapterNum}`}
-          renderSlideLabel={(slide) => slide.title || 'Versículo'}
-        />
-      </Modal>
     </View>
   );
 }
@@ -924,11 +933,7 @@ const styles = StyleSheet.create({
 
   headerTitleContainer: { flexDirection: 'row', alignItems: 'center' },
   headerTitleText: { fontSize: 17, fontWeight: '900' },
-  headerRightContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
+  headerRightContainer: { flexDirection: 'row', alignItems: 'center' },
   headerIconBtn: { paddingHorizontal: 8, paddingVertical: 6 },
 
   list: { paddingHorizontal: 20, paddingTop: 20 },

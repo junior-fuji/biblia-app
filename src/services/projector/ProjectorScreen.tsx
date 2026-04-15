@@ -37,6 +37,10 @@ type Props = {
   renderSlideLabel?: (slide: ProjectorSlide, index: number) => string;
 };
 
+const MIN_FONT_SIZE = 12;
+const MAX_FONT_SIZE = 72;
+const STEP = 2;
+
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
@@ -88,35 +92,44 @@ export default function ProjectorScreen({
     setSlideIndex((prev) => Math.min(prev + 1, slides.length - 1));
   }, [slides.length]);
 
+  const baseComputedFontSize = useMemo(() => {
+    if (typeof baseFontSize === 'number') return baseFontSize;
+    if (uniformFontSize) return 36;
+    return getBaseFontSize(currentSlide?.kind);
+  }, [baseFontSize, uniformFontSize, currentSlide?.kind]);
+
+  const fontSize = clamp(baseComputedFontSize + manualOffset, MIN_FONT_SIZE, MAX_FONT_SIZE);
+  const lineHeight = Math.round(fontSize * 1.38);
+
   useEffect(() => {
     if (Platform.OS !== 'web') return;
 
     const win = globalThis?.window;
     if (!win) return;
 
-    const onKeyDown = (e: any) => {
+    const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
-        e.preventDefault?.();
+        e.preventDefault();
         nextSlide();
       }
 
       if (e.key === 'ArrowLeft') {
-        e.preventDefault?.();
+        e.preventDefault();
         prevSlide();
       }
 
       if (e.key === 'PageDown' && onNextGroup) {
-        e.preventDefault?.();
+        e.preventDefault();
         onNextGroup();
       }
 
       if (e.key === 'PageUp' && onPrevGroup) {
-        e.preventDefault?.();
+        e.preventDefault();
         onPrevGroup();
       }
 
       if (e.key === 'Escape') {
-        e.preventDefault?.();
+        e.preventDefault();
         if (pickerOpen) {
           setPickerOpen(false);
         } else {
@@ -125,30 +138,37 @@ export default function ProjectorScreen({
       }
 
       if (e.key === '+' || e.key === '=') {
-        setManualOffset((s) => clamp(s + 2, -40, 28));
+        setManualOffset((prev) => {
+          const next = prev + STEP;
+          const nextFont = clamp(baseComputedFontSize + next, MIN_FONT_SIZE, MAX_FONT_SIZE);
+          const currentFont = clamp(baseComputedFontSize + prev, MIN_FONT_SIZE, MAX_FONT_SIZE);
+
+          if (nextFont === currentFont && currentFont === MAX_FONT_SIZE) {
+            return prev;
+          }
+
+          return next;
+        });
       }
 
       if (e.key === '-' || e.key === '_') {
-        setManualOffset((s) => clamp(s - 2, -40, 28));
+        setManualOffset((prev) => {
+          const next = prev - STEP;
+          const nextFont = clamp(baseComputedFontSize + next, MIN_FONT_SIZE, MAX_FONT_SIZE);
+          const currentFont = clamp(baseComputedFontSize + prev, MIN_FONT_SIZE, MAX_FONT_SIZE);
+
+          if (nextFont === currentFont && currentFont === MIN_FONT_SIZE) {
+            return prev;
+          }
+
+          return next;
+        });
       }
     };
 
     win.addEventListener('keydown', onKeyDown);
     return () => win.removeEventListener('keydown', onKeyDown);
-  }, [nextSlide, onClose, onNextGroup, onPrevGroup, pickerOpen, prevSlide]);
-
-  const fontSize = useMemo(() => {
-    const base =
-      typeof baseFontSize === 'number'
-        ? baseFontSize
-        : uniformFontSize
-        ? 36
-        : getBaseFontSize(currentSlide?.kind);
-
-    return clamp(base + manualOffset, 12, 68);
-  }, [baseFontSize, uniformFontSize, currentSlide?.kind, manualOffset]);
-
-  const lineHeight = Math.round(fontSize * 1.38);
+  }, [baseComputedFontSize, nextSlide, onClose, onNextGroup, onPrevGroup, pickerOpen, prevSlide]);
 
   function getSlideLabel(slide: ProjectorSlide, index: number) {
     if (renderSlideLabel) return renderSlideLabel(slide, index);
@@ -180,7 +200,6 @@ export default function ProjectorScreen({
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
       <StatusBar hidden />
 
-      {/* topo sem marca d’água */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={onClose} style={styles.topMiniBtn}>
           <Ionicons name="close" size={18} color={colors.mutedText} />
@@ -200,14 +219,38 @@ export default function ProjectorScreen({
           ) : null}
 
           <TouchableOpacity
-            onPress={() => setManualOffset((s) => clamp(s - 2, -40, 28))}
+            onPress={() =>
+              setManualOffset((prev) => {
+                const next = prev - STEP;
+                const nextFont = clamp(baseComputedFontSize + next, MIN_FONT_SIZE, MAX_FONT_SIZE);
+                const currentFont = clamp(baseComputedFontSize + prev, MIN_FONT_SIZE, MAX_FONT_SIZE);
+
+                if (nextFont === currentFont && currentFont === MIN_FONT_SIZE) {
+                  return prev;
+                }
+
+                return next;
+              })
+            }
             style={styles.topMiniBtn}
           >
             <Text style={[styles.control, { color: colors.mutedText }]}>A-</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setManualOffset((s) => clamp(s + 2, -40, 28))}
+            onPress={() =>
+              setManualOffset((prev) => {
+                const next = prev + STEP;
+                const nextFont = clamp(baseComputedFontSize + next, MIN_FONT_SIZE, MAX_FONT_SIZE);
+                const currentFont = clamp(baseComputedFontSize + prev, MIN_FONT_SIZE, MAX_FONT_SIZE);
+
+                if (nextFont === currentFont && currentFont === MAX_FONT_SIZE) {
+                  return prev;
+                }
+
+                return next;
+              })
+            }
             style={styles.topMiniBtn}
           >
             <Text style={[styles.control, { color: colors.mutedText }]}>A+</Text>
@@ -248,9 +291,7 @@ export default function ProjectorScreen({
                 </Text>
               </>
             ) : (
-              <Text style={[styles.emptyText, { color: colors.mainText }]}>
-                Sem conteúdo para projetar
-              </Text>
+              <Text style={[styles.emptyText, { color: colors.mainText }]}>Sem conteúdo para projetar</Text>
             )}
           </View>
         </View>
