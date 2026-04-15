@@ -20,6 +20,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+type VersionRow = {
+  id: string;
+  code: string;
+  name: string;
+};
+
 type OptionRowProps = {
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
@@ -70,7 +76,11 @@ export default function SettingsScreen() {
 
   const [profileName, setProfileName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [avatarPreviewUri, setAvatarPreviewUri] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const [versions, setVersions] = useState<VersionRow[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
 
   const [versionModal, setVersionModal] = useState(false);
   const [fontModal, setFontModal] = useState(false);
@@ -79,11 +89,6 @@ export default function SettingsScreen() {
   const [editNameModal, setEditNameModal] = useState(false);
   const [editName, setEditName] = useState('');
   const [savingName, setSavingName] = useState(false);
-
-  const versions = useMemo(
-    () => ['NVI', 'ARA', 'ACF', 'ARC', 'KJA', 'RVR1960', 'JAPANESE'],
-    []
-  );
 
   const fontSizes = useMemo(
     () => [
@@ -114,6 +119,50 @@ export default function SettingsScreen() {
   useEffect(() => {
     let mounted = true;
 
+    async function loadVersions() {
+      const sb = getSupabaseOrNull();
+      if (!sb) return;
+
+      try {
+        setVersionsLoading(true);
+
+        const { data, error } = await sb
+          .from('bible_versions')
+          .select('id, code, name')
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true });
+
+        if (!mounted) return;
+
+        if (error) {
+          console.log('SETTINGS_LOAD_VERSIONS_ERROR', error);
+          return;
+        }
+
+        const rows = (data ?? []) as VersionRow[];
+        setVersions(rows);
+
+        if (rows.length > 0 && !rows.some((v) => v.code === settings.bibleVersion)) {
+          setBibleVersion(rows[0].code);
+        }
+      } catch (e) {
+        if (!mounted) return;
+        console.log('SETTINGS_LOAD_VERSIONS_FATAL', e);
+      } finally {
+        if (mounted) setVersionsLoading(false);
+      }
+    }
+
+    void loadVersions();
+
+    return () => {
+      mounted = false;
+    };
+  }, [setBibleVersion, settings.bibleVersion]);
+
+  useEffect(() => {
+    let mounted = true;
+
     async function loadProfile() {
       const sb = getSupabaseOrNull();
       const userId = session?.user?.id;
@@ -121,6 +170,7 @@ export default function SettingsScreen() {
       if (!sb || !userId) {
         setProfileName('');
         setAvatarUrl('');
+        setAvatarPreviewUri('');
         return;
       }
 
@@ -138,16 +188,19 @@ export default function SettingsScreen() {
           console.log('LOAD_PROFILE_SETTINGS_ERROR', error);
           setProfileName('');
           setAvatarUrl('');
+          setAvatarPreviewUri('');
           return;
         }
 
         setProfileName(String(data?.name ?? '').trim());
         setAvatarUrl(String(data?.avatar_url ?? '').trim());
+        setAvatarPreviewUri('');
       } catch (e) {
         if (!mounted) return;
         console.log('LOAD_PROFILE_SETTINGS_FATAL', e);
         setProfileName('');
         setAvatarUrl('');
+        setAvatarPreviewUri('');
       }
     }
 
@@ -196,39 +249,25 @@ export default function SettingsScreen() {
       const sb = getSupabaseOrNull();
       if (!sb) throw new Error('Supabase indisponível');
 
-      const updateResult = await Promise.race([
-        sb
-          .from('profiles')
-          .update({ name: nextName })
-          .eq('id', session.user.id)
-          .select('id')
-          .maybeSingle(),
-        timeoutAfter(12000),
-      ]);
+      const profilePayload = {
+        id: session.user.id,
+        name: nextName,
+        avatar_url: avatarUrl || null,
+      };
 
-      const { data: updatedData, error: updateError } = updateResult as any;
-      if (updateError) throw updateError;
+      const { data: savedProfile, error } = await sb
+        .from('profiles')
+        .upsert(profilePayload, { onConflict: 'id' })
+        .select('id, name, avatar_url')
+        .single();
 
-      if (!updatedData) {
-        const insertResult = await Promise.race([
-          sb
-            .from('profiles')
-            .insert({
-              id: session.user.id,
-              name: nextName,
-              avatar_url: avatarUrl || null,
-            })
-            .select('id')
-            .maybeSingle(),
-          timeoutAfter(12000),
-        ]);
+      if (error) throw error;
 
-        const { error: insertError } = insertResult as any;
-        if (insertError) throw insertError;
-      }
-
-      setProfileName(nextName);
+      setProfileName(String(savedProfile?.name ?? nextName));
+      setAvatarUrl(String(savedProfile?.avatar_url ?? avatarUrl ?? ''));
+      setAvatarPreviewUri('');
       setEditNameModal(false);
+
       Alert.alert('Perfil', 'Nome atualizado com sucesso.');
     } catch (e: any) {
       console.log('SAVE_PROFILE_NAME_ERROR', e);
@@ -248,10 +287,7 @@ export default function SettingsScreen() {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permission.granted) {
-        Alert.alert(
-          'Permissão necessária',
-          'Permita acesso à galeria para escolher uma foto de perfil.'
-        );
+        Alert.alert('Permissão necessária', 'Permita acesso à galeria para escolher uma foto de perfil.');
         return;
       }
 
@@ -266,6 +302,11 @@ export default function SettingsScreen() {
       if (result.canceled || !result.assets?.length) return;
 
       const asset = result.assets[0];
+
+      if (asset.uri) {
+        setAvatarPreviewUri(asset.uri);
+      }
+
       if (!asset.base64) {
         Alert.alert('Avatar', 'Não foi possível processar a imagem escolhida.');
         return;
@@ -286,7 +327,7 @@ export default function SettingsScreen() {
           ? 'webp'
           : 'jpg';
 
-      const filePath = `${session.user.id}/avatar-${Date.now()}.${ext}`;
+      const filePath = `${session.user.id}/avatar.${ext}`;
 
       const { error: uploadError } = await sb.storage
         .from('avatars')
@@ -302,45 +343,35 @@ export default function SettingsScreen() {
       }
 
       const { data: publicData } = sb.storage.from('avatars').getPublicUrl(filePath);
-      const publicUrl = publicData?.publicUrl ?? '';
+      const publicUrl = publicData?.publicUrl ? `${publicData.publicUrl}?t=${Date.now()}` : '';
 
       if (!publicUrl) {
         Alert.alert('Avatar', 'Não foi possível obter a URL da imagem.');
         return;
       }
 
-      const updateResult = await Promise.race([
-        sb
-          .from('profiles')
-          .update({ avatar_url: publicUrl })
-          .eq('id', session.user.id)
-          .select('id')
-          .maybeSingle(),
-        timeoutAfter(12000),
-      ]);
+      const profilePayload = {
+        id: session.user.id,
+        name: profileName || session.user.email?.split('@')[0] || 'Usuário',
+        avatar_url: publicUrl,
+      };
 
-      const { data: updatedData, error: updateError } = updateResult as any;
-      if (updateError) throw updateError;
+      const { data: savedProfile, error: profileError } = await sb
+        .from('profiles')
+        .upsert(profilePayload, { onConflict: 'id' })
+        .select('id, name, avatar_url')
+        .single();
 
-      if (!updatedData) {
-        const insertResult = await Promise.race([
-          sb
-            .from('profiles')
-            .insert({
-              id: session.user.id,
-              name: profileName || session.user.email?.split('@')[0] || 'Usuário',
-              avatar_url: publicUrl,
-            })
-            .select('id')
-            .maybeSingle(),
-          timeoutAfter(12000),
-        ]);
-
-        const { error: insertError } = insertResult as any;
-        if (insertError) throw insertError;
+      if (profileError) {
+        console.log('AVATAR_PROFILE_UPSERT_ERROR', profileError);
+        Alert.alert('Avatar', profileError.message || 'Erro ao salvar perfil.');
+        return;
       }
 
-      setAvatarUrl(publicUrl);
+      setProfileName(String(savedProfile?.name ?? profilePayload.name));
+      setAvatarUrl(String(savedProfile?.avatar_url ?? publicUrl));
+      setAvatarPreviewUri('');
+
       Alert.alert('Avatar', 'Foto de perfil atualizada com sucesso.');
     } catch (e: any) {
       console.log('HANDLE_PICK_AVATAR_ERROR', e);
@@ -353,6 +384,7 @@ export default function SettingsScreen() {
   const userEmail = session?.user?.email || 'Não autenticado';
   const displayName = profileName || session?.user?.email?.split('@')[0] || 'Usuário';
   const projectorThemeLabel = settings.projectorTheme === 'light' ? 'Claro' : 'Escuro';
+  const avatarSource = avatarPreviewUri || avatarUrl;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -371,8 +403,8 @@ export default function SettingsScreen() {
         <View style={styles.profileSection}>
           <View style={styles.avatarWrap}>
             <View style={styles.avatarPlaceholder}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+              {avatarSource ? (
+                <Image source={{ uri: avatarSource }} style={styles.avatarImage} />
               ) : (
                 <Ionicons name="person" size={40} color="#fff" />
               )}
@@ -516,23 +548,27 @@ export default function SettingsScreen() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Versão da Bíblia</Text>
 
-            {versions.map((v) => (
-              <TouchableOpacity
-                key={v}
-                style={styles.modalItem}
-                onPress={() => {
-                  setBibleVersion(v);
-                  setVersionModal(false);
-                }}
-              >
-                <Text style={[styles.modalItemText, v === settings.bibleVersion && { color: '#007AFF' }]}>
-                  {v}
-                </Text>
-                {v === settings.bibleVersion ? (
-                  <Ionicons name="checkmark" size={18} color="#007AFF" />
-                ) : null}
-              </TouchableOpacity>
-            ))}
+            {versionsLoading ? (
+              <ActivityIndicator color="#007AFF" />
+            ) : (
+              versions.map((v) => (
+                <TouchableOpacity
+                  key={v.id}
+                  style={styles.modalItem}
+                  onPress={() => {
+                    setBibleVersion(v.code);
+                    setVersionModal(false);
+                  }}
+                >
+                  <Text style={[styles.modalItemText, v.code === settings.bibleVersion && { color: '#007AFF' }]}>
+                    {v.code} — {v.name}
+                  </Text>
+                  {v.code === settings.bibleVersion ? (
+                    <Ionicons name="checkmark" size={18} color="#007AFF" />
+                  ) : null}
+                </TouchableOpacity>
+              ))
+            )}
 
             <TouchableOpacity style={styles.modalClose} onPress={() => setVersionModal(false)}>
               <Text style={styles.modalCloseText}>Fechar</Text>

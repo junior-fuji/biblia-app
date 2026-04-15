@@ -133,7 +133,7 @@ function extractJsonObject(text: string): string | null {
 }
 
 function getAnalysisLanguage(versionCode: string) {
-  const code = String(versionCode || '').toUpperCase();
+  const code = String(versionCode || '').trim().toUpperCase();
 
   if (
     code.includes('RVR') ||
@@ -149,12 +149,43 @@ function getAnalysisLanguage(versionCode: string) {
     code.includes('JP') ||
     code.includes('JAP') ||
     code.includes('JAPA') ||
-    code.includes('JA')
+    code.includes('JPN') ||
+    code.includes('JAPANESE') ||
+    code.includes('JAPAN') ||
+    code.includes('口語') ||
+    code.includes('新改') ||
+    code.includes('新共同') ||
+    code.includes('共同訳') ||
+    code.includes('聖書')
   ) {
     return 'ja';
   }
 
   return 'pt';
+}
+
+function buildChapterPrompt(language: 'pt' | 'es' | 'ja', bookName: string, chapterNum: number) {
+  if (language === 'es') {
+    return `Analiza profundamente ${bookName} capítulo ${chapterNum}. Incluye tema central, contexto histórico, contexto cultural de la época, matices del original (hebreo/griego), teología bíblica y aplicación pastoral.`;
+  }
+
+  if (language === 'ja') {
+    return `${bookName} ${chapterNum}章を深く分析してください。中心テーマ、歴史的背景、当時の文化的背景、原語（ヘブライ語・ギリシャ語）のニュアンス、聖書神学、そして実践的適用を含めてください。`;
+  }
+
+  return `Analise profundamente ${bookName} capítulo ${chapterNum}. Inclua tema central, contexto histórico, contexto cultural da época, nuances do original (hebraico/grego), teologia bíblica e aplicação pastoral.`;
+}
+
+function buildVersePrompt(language: 'pt' | 'es' | 'ja', verseText: string, bookName: string, chapterNum: number, verseNum: number) {
+  if (language === 'es') {
+    return `Haz una exégesis profunda del versículo: "${verseText}" (referencia: ${bookName} ${chapterNum}:${verseNum}). Incluye tema central, contexto histórico, contexto cultural de la época, matices del original e implicaciones teológicas.`;
+  }
+
+  if (language === 'ja') {
+    return `次の聖句を深く釈義してください: 「${verseText}」(参照: ${bookName} ${chapterNum}:${verseNum})。中心テーマ、歴史的背景、当時の文化的背景、原語のニュアンス、神学的含意を含めてください。`;
+  }
+
+  return `Faça exegese profunda do versículo: "${verseText}" (referência: ${bookName} ${chapterNum}:${verseNum}). Inclua tema central, contexto histórico, contexto cultural da época, nuances do original e implicações teológicas.`;
 }
 
 /* =========================
@@ -276,7 +307,6 @@ export default function ReadBookScreen() {
     : { name: 'Livro', abbrev: '' };
   const safeBookName = bookData.name || 'Livro';
 
-  const [versionCode, setVersionCodeState] = useState<string>(settings.bibleVersion || 'ARA');
   const [versions, setVersions] = useState<VersionRow[]>([]);
   const [showVersions, setShowVersions] = useState(false);
 
@@ -298,11 +328,7 @@ export default function ReadBookScreen() {
   const [saveReference, setSaveReference] = useState('');
   const [saveVerse, setSaveVerse] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (settings.bibleVersion && settings.bibleVersion !== versionCode) {
-      setVersionCodeState(settings.bibleVersion);
-    }
-  }, [settings.bibleVersion, versionCode]);
+  const versionCode = settings.bibleVersion || 'ARA';
 
   useEffect(() => {
     setChapterNum((current) => (current !== initialChapter ? initialChapter : current));
@@ -318,12 +344,7 @@ export default function ReadBookScreen() {
         setVersions(list);
 
         if (list.length > 0 && !list.some((v) => v.code === versionCode)) {
-          const fallback = settings.bibleVersion && list.some((v) => v.code === settings.bibleVersion)
-            ? settings.bibleVersion
-            : list[0].code;
-
-          setVersionCodeState(fallback);
-          setBibleVersion(fallback);
+          setBibleVersion(list[0].code);
         }
       } catch (e) {
         console.log('FETCH_VERSIONS_ERROR', e);
@@ -344,7 +365,7 @@ export default function ReadBookScreen() {
     return () => {
       alive = false;
     };
-  }, [setBibleVersion, settings.bibleVersion, versionCode]);
+  }, [setBibleVersion, versionCode]);
 
   useEffect(() => {
     let alive = true;
@@ -474,7 +495,7 @@ export default function ReadBookScreen() {
     setAiOpen(true);
     setAiLoading(true);
 
-    const analysisLanguage = getAnalysisLanguage(versionCode);
+    const analysisLanguage = getAnalysisLanguage(versionCode) as 'pt' | 'es' | 'ja';
 
     const SYSTEM =
       analysisLanguage === 'es'
@@ -570,8 +591,10 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
   }
 
   const analyzeChapter = useCallback(() => {
+    const language = getAnalysisLanguage(versionCode) as 'pt' | 'es' | 'ja';
+
     void callAI(
-      `Analise profundamente ${safeBookName} capítulo ${chapterNum}. Inclua tema central, contexto histórico, contexto cultural da época, nuances do original (hebraico/grego), teologia bíblica e aplicação pastoral.`,
+      buildChapterPrompt(language, safeBookName, chapterNum),
       `Análise — ${safeBookName} ${chapterNum}`,
       `${safeBookName} ${chapterNum} (${versionCode})`,
       null
@@ -580,8 +603,10 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
 
   const analyzeVerse = useCallback(
     (v: Verse) => {
+      const language = getAnalysisLanguage(versionCode) as 'pt' | 'es' | 'ja';
+
       void callAI(
-        `Faça exegese profunda do versículo: "${v.text}" (referência: ${safeBookName} ${chapterNum}:${v.verse}). Inclua tema central, contexto histórico, contexto cultural da época, nuances do original e implicações teológicas.`,
+        buildVersePrompt(language, v.text, safeBookName, chapterNum, v.verse),
         `Exegese — ${safeBookName} ${chapterNum}:${v.verse}`,
         `${safeBookName} ${chapterNum}:${v.verse} (${versionCode})`,
         v.verse
@@ -855,7 +880,6 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
                     active ? { backgroundColor: '#007AFF' } : null,
                   ]}
                   onPress={() => {
-                    setVersionCodeState(v.code);
                     setBibleVersion(v.code);
                     setShowVersions(false);
                   }}
