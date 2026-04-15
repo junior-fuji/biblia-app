@@ -125,11 +125,11 @@ export default function ProjectorScreen({
       }
 
       if (e.key === '+' || e.key === '=') {
-        setManualOffset((s) => clamp(s + 2, -22, 20));
+        setManualOffset((s) => clamp(s + 2, -30, 24));
       }
 
       if (e.key === '-' || e.key === '_') {
-        setManualOffset((s) => clamp(s - 2, -22, 20));
+        setManualOffset((s) => clamp(s - 2, -30, 24));
       }
     };
 
@@ -145,7 +145,7 @@ export default function ProjectorScreen({
         ? 36
         : getBaseFontSize(currentSlide?.kind);
 
-    return clamp(base + manualOffset, 16, 56);
+    return clamp(base + manualOffset, 14, 64);
   }, [baseFontSize, uniformFontSize, currentSlide?.kind, manualOffset]);
 
   const lineHeight = Math.round(fontSize * 1.38);
@@ -164,7 +164,6 @@ export default function ProjectorScreen({
       mainText: isLightTheme ? '#111111' : '#F8F8F8',
       secondaryText: isLightTheme ? '#374151' : '#d8d8d8',
       mutedText: isLightTheme ? '#6B7280' : '#ffffff99',
-      subtitleText: isLightTheme ? '#6B7280' : '#7f7f7f',
       accentText: isLightTheme ? '#1D4ED8' : '#7db5ff',
       modalBg: isLightTheme ? '#FFFFFF' : '#111111',
       modalBorder: isLightTheme ? '#E5E7EB' : '#222222',
@@ -177,31 +176,17 @@ export default function ProjectorScreen({
     [isLightTheme]
   );
 
-  const shouldShowInlineSlideTitle =
-    !!currentSlide?.title &&
-    currentSlide.kind !== 'verse';
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
       <StatusBar hidden />
 
+      {/* topo sem marca d’água, só controles */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={onClose} style={styles.topMiniBtn}>
           <Ionicons name="close" size={18} color={colors.mutedText} />
         </TouchableOpacity>
 
-        <View style={styles.topCenter}>
-          {!!title && (
-            <Text style={[styles.topTitle, { color: colors.mutedText }]} numberOfLines={1}>
-              {title}
-            </Text>
-          )}
-          {!!subtitle && (
-            <Text style={[styles.topSubtitle, { color: colors.subtitleText }]} numberOfLines={1}>
-              {subtitle}
-            </Text>
-          )}
-        </View>
+        <View style={styles.topCenter} />
 
         <View style={styles.topActions}>
           {slides.length > 0 ? (
@@ -215,14 +200,14 @@ export default function ProjectorScreen({
           ) : null}
 
           <TouchableOpacity
-            onPress={() => setManualOffset((s) => clamp(s - 2, -22, 20))}
+            onPress={() => setManualOffset((s) => clamp(s - 2, -30, 24))}
             style={styles.topMiniBtn}
           >
             <Text style={[styles.control, { color: colors.mutedText }]}>A-</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setManualOffset((s) => clamp(s + 2, -22, 20))}
+            onPress={() => setManualOffset((s) => clamp(s + 2, -30, 24))}
             style={styles.topMiniBtn}
           >
             <Text style={[styles.control, { color: colors.mutedText }]}>A+</Text>
@@ -242,7 +227,7 @@ export default function ProjectorScreen({
           <View style={styles.slideInner}>
             {currentSlide ? (
               <>
-                {shouldShowInlineSlideTitle ? (
+                {!!currentSlide.title && currentSlide.kind !== 'verse' ? (
                   <Text style={[styles.slideTitle, { color: colors.secondaryText }]}>
                     {currentSlide.title}
                   </Text>
@@ -444,21 +429,6 @@ const styles = StyleSheet.create({
 
   topCenter: {
     flex: 1,
-    marginHorizontal: 8,
-    alignItems: 'center',
-  },
-
-  topTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-
-  topSubtitle: {
-    marginTop: 1,
-    fontSize: 10,
-    fontWeight: '500',
-    textAlign: 'center',
   },
 
   topActions: {
@@ -490,7 +460,7 @@ const styles = StyleSheet.create({
 
   slideInner: {
     width: '100%',
-    transform: [{ translateY: -150 }],
+    transform: [{ translateY: -110 }],
   },
 
   slideTitle: {
