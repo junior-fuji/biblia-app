@@ -146,6 +146,7 @@ function getAnalysisLanguage(versionCode: string) {
   }
 
   if (
+    code.includes('KOUGO') ||
     code.includes('JP') ||
     code.includes('JAP') ||
     code.includes('JAPA') ||
@@ -170,19 +171,25 @@ function buildChapterPrompt(language: 'pt' | 'es' | 'ja', bookName: string, chap
   }
 
   if (language === 'ja') {
-    return `${bookName} ${chapterNum}章を深く分析してください。中心テーマ、歴史的背景、当時の文化的背景、原語（ヘブライ語・ギリシャ語）のニュアンス、聖書神学、そして実践的適用を含めてください。`;
+    return `${bookName} ${chapterNum}章を深く分析してください。中心テーマ、歴史的背景、当時の文化的背景、原語（ヘブライ語・ギリシャ語）のニュアンス、聖書神学、そして実践的適用を含めてください。回答は必ず自然な日本語で、すべての項目を日本語で記述してください。`;
   }
 
   return `Analise profundamente ${bookName} capítulo ${chapterNum}. Inclua tema central, contexto histórico, contexto cultural da época, nuances do original (hebraico/grego), teologia bíblica e aplicação pastoral.`;
 }
 
-function buildVersePrompt(language: 'pt' | 'es' | 'ja', verseText: string, bookName: string, chapterNum: number, verseNum: number) {
+function buildVersePrompt(
+  language: 'pt' | 'es' | 'ja',
+  verseText: string,
+  bookName: string,
+  chapterNum: number,
+  verseNum: number
+) {
   if (language === 'es') {
     return `Haz una exégesis profunda del versículo: "${verseText}" (referencia: ${bookName} ${chapterNum}:${verseNum}). Incluye tema central, contexto histórico, contexto cultural de la época, matices del original e implicaciones teológicas.`;
   }
 
   if (language === 'ja') {
-    return `次の聖句を深く釈義してください: 「${verseText}」(参照: ${bookName} ${chapterNum}:${verseNum})。中心テーマ、歴史的背景、当時の文化的背景、原語のニュアンス、神学的含意を含めてください。`;
+    return `次の聖句を深く釈義してください: 「${verseText}」(参照: ${bookName} ${chapterNum}:${verseNum})。中心テーマ、歴史的背景、当時の文化的背景、原語のニュアンス、神学的含意、実践的適用を含めてください。回答は必ず自然な日本語のみで記述してください。`;
   }
 
   return `Faça exegese profunda do versículo: "${verseText}" (referência: ${bookName} ${chapterNum}:${verseNum}). Inclua tema central, contexto histórico, contexto cultural da época, nuances do original e implicações teológicas.`;
@@ -356,8 +363,8 @@ export default function ReadBookScreen() {
           { id: 'fallback-acf', code: 'ACF', name: 'ACF' },
           { id: 'fallback-nvi', code: 'NVI', name: 'NVI' },
           { id: 'fallback-kja', code: 'KJA', name: 'KJA' },
-          { id: 'fallback-rvr1960', code: 'RVR1960', name: 'RVR1960' },
-          { id: 'fallback-japanese', code: 'JAPANESE', name: 'JAPANESE' },
+          { id: 'fallback-rv1909', code: 'RV1909', name: 'RV1909' },
+          { id: 'fallback-kougo', code: 'KOUGO', name: 'KOUGO' },
         ]);
       }
     })();
@@ -517,7 +524,7 @@ Si no sabes algún campo, rellénalo con una breve explicación.
         : analysisLanguage === 'ja'
         ? `
 あなたは聖書神学および原語（ヘブライ語・アラム語・ギリシャ語）の専門家です。
-必ず有効なJSONのみで回答し、内容はすべて日本語で書いてください。
+必ず有効なJSONのみで回答し、内容はすべて自然な日本語で書いてください。
 MarkdownやJSON以外の文章は禁止です。
 必須の構造:
 {
@@ -528,6 +535,7 @@ MarkdownやJSON以外の文章は禁止です。
   "theology": "聖書全体とのつながりと神学的意味",
   "application": "実践的・牧会的適用"
 }
+日本語以外の言語を混ぜないでください。
 不明な項目は短い説明で補ってください。
 `.trim()
         : `
@@ -867,8 +875,8 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
                   { id: 'fallback-acf', code: 'ACF', name: 'ACF' },
                   { id: 'fallback-nvi', code: 'NVI', name: 'NVI' },
                   { id: 'fallback-kja', code: 'KJA', name: 'KJA' },
-                  { id: 'fallback-rvr1960', code: 'RVR1960', name: 'RVR1960' },
-                  { id: 'fallback-japanese', code: 'JAPANESE', name: 'JAPANESE' },
+                  { id: 'fallback-rv1909', code: 'RV1909', name: 'RV1909' },
+                  { id: 'fallback-kougo', code: 'KOUGO', name: 'KOUGO' },
                 ]
             ).map((v) => {
               const active = v.code === versionCode;

@@ -43,10 +43,20 @@ type OldJson = {
   application?: string;
 };
 
+type StudySourceTag =
+  | 'ai_chapter'
+  | 'ai_verse'
+  | 'dictionary'
+  | 'diary'
+  | 'manual'
+  | 'unknown';
+
 type Envelope = {
   version?: number;
   kind?: 'ai_bible_study';
-  type?: 'chapter' | 'verse';
+  type?: 'chapter' | 'verse' | 'sketch' | 'dictionary' | 'personal_study';
+  source?: 'dictionary' | 'diary' | 'manual';
+  format?: 'editable_study';
   ref?: {
     book_id?: number;
     chapter?: number;
@@ -62,6 +72,13 @@ type Envelope = {
     theology?: string;
     application?: string;
   } | null;
+  sections?: {
+    theme?: string;
+    exegesis?: string;
+    context?: string;
+    theology?: string;
+    application?: string;
+  } | null;
   raw?: string | null;
   meta?: {
     generated_by?: 'ai';
@@ -70,7 +87,58 @@ type Envelope = {
 };
 
 type ParsedKind = 'envelope' | 'oldjson' | 'plain';
+function getStudyTag(study: Study): {
+  key: StudySourceTag;
+  label: string;
+  fg: string;
+  bg: string;
+} {
+  const raw = String(study.content || '').trim();
+  const obj = raw.startsWith('{') ? safeParseJson(raw) : null;
 
+  if (obj && typeof obj === 'object') {
+    if (obj.kind === 'ai_bible_study') {
+      if (obj.type === 'chapter') {
+        return { key: 'ai_chapter', label: 'IA • Capítulo', fg: '#AF52DE', bg: '#F3E5F5' };
+      }
+      if (obj.type === 'verse') {
+        return { key: 'ai_verse', label: 'IA • Versículo', fg: '#007AFF', bg: '#E3F2FD' };
+      }
+    }
+
+    if (obj.source === 'dictionary' || obj.type === 'dictionary') {
+      return { key: 'dictionary', label: 'Dicionário', fg: '#FF9500', bg: '#FFF3E0' };
+    }
+
+    if (obj.source === 'diary' || obj.type === 'personal_study') {
+      return { key: 'diary', label: 'Diário', fg: '#34C759', bg: '#E8F5E9' };
+    }
+
+    if (obj.source === 'manual' || obj.type === 'sketch' || obj.format === 'editable_study') {
+      return { key: 'manual', label: 'Esboço', fg: '#FF6B00', bg: '#FFF1E6' };
+    }
+  }
+
+  return { key: 'unknown', label: 'Estudo', fg: '#666', bg: '#F2F2F7' };
+}
+
+function buildManualSketchEnvelope(title?: string) {
+  return JSON.stringify({
+    version: 1,
+    type: 'sketch',
+    source: 'manual',
+    format: 'editable_study',
+    title: title || 'Novo Estudo',
+    sections: {
+      theme: '',
+      exegesis: '',
+      context: '',
+      theology: '',
+      application: '',
+    },
+    created_at: new Date().toISOString(),
+  });
+}
 const LOCAL_KEY = 'LOCAL_SAVED_NOTES_V1';
 
 function toStudyId(studyId: string | number) {
@@ -313,6 +381,15 @@ export default function StudiesScreen() {
   };
 
   const openStudy = (study: Study) => {
+    const tag = getStudyTag(study);
+  
+    if (tag.key === 'manual') {
+      router.push(`/sketch/${study.id}` as any);
+      <View style={[styles.tagPill, { backgroundColor: tag.bg }]}>
+      <Text style={[styles.tagText, { color: tag.fg }]}>{tag.label}</Text>
+    </View>
+      return;
+    }
     setSelectedStudy(study);
     setModalVisible(true);
     setIsEditing(false);
@@ -370,7 +447,73 @@ export default function StudiesScreen() {
       setParsedKind('plain');
       exegesis = study.content || '';
     }
-
+    type StudySourceTag =
+    | 'ai_chapter'
+    | 'ai_verse'
+    | 'dictionary'
+    | 'diary'
+    | 'manual'
+    | 'unknown';
+  
+  function getStudyTag(study: Study): {
+    key: StudySourceTag;
+    label: string;
+    fg: string;
+    bg: string;
+  } {
+    const raw = String(study.content || '').trim();
+  
+    if (!raw.startsWith('{')) {
+      return { key: 'unknown', label: 'Estudo', fg: '#666', bg: '#F2F2F7' };
+    }
+  
+    let obj: any = null;
+    try {
+      obj = JSON.parse(raw);
+    } catch {
+      return { key: 'unknown', label: 'Estudo', fg: '#666', bg: '#F2F2F7' };
+    }
+  
+    if (obj?.kind === 'ai_bible_study' && obj?.type === 'chapter') {
+      return { key: 'ai_chapter', label: 'IA • Capítulo', fg: '#AF52DE', bg: '#F3E5F5' };
+    }
+  
+    if (obj?.kind === 'ai_bible_study' && obj?.type === 'verse') {
+      return { key: 'ai_verse', label: 'IA • Versículo', fg: '#007AFF', bg: '#E3F2FD' };
+    }
+  
+    if (obj?.source === 'dictionary' || obj?.type === 'dictionary') {
+      return { key: 'dictionary', label: 'Dicionário', fg: '#FF9500', bg: '#FFF3E0' };
+    }
+  
+    if (obj?.source === 'diary' || obj?.type === 'personal_study') {
+      return { key: 'diary', label: 'Diário', fg: '#34C759', bg: '#E8F5E9' };
+    }
+  
+    if (obj?.source === 'manual' || obj?.type === 'sketch' || obj?.format === 'editable_study') {
+      return { key: 'manual', label: 'Esboço', fg: '#FF6B00', bg: '#FFF1E6' };
+    }
+  
+    return { key: 'unknown', label: 'Estudo', fg: '#666', bg: '#F2F2F7' };
+  }
+  
+  function buildManualSketchEnvelope(title?: string) {
+    return JSON.stringify({
+      version: 1,
+      type: 'sketch',
+      source: 'manual',
+      format: 'editable_study',
+      title: title || 'Novo Estudo',
+      sections: {
+        theme: '',
+        exegesis: '',
+        context: '',
+        theology: '',
+        application: '',
+      },
+      created_at: new Date().toISOString(),
+    });
+  }
     if (study.observation) {
       exegesis = exegesis ? `${exegesis}\n\n[Obs]: ${study.observation}` : study.observation;
     }
@@ -499,27 +642,27 @@ export default function StudiesScreen() {
     }
   }
   const handleDelete = async () => {
-    if (!selectedStudy) return;
-  
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm('Tem certeza que deseja apagar este estudo?');
-      if (!confirmed) return;
-  
-      await performDeleteStudy();
-      return;
-    }
-  
-    Alert.alert('Excluir', 'Tem certeza que deseja apagar este estudo?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Apagar',
-        style: 'destructive',
-        onPress: () => {
-          void performDeleteStudy();
-        },
+  if (!selectedStudy) return;
+
+  if (Platform.OS === 'web') {
+    const confirmed = window.confirm('Tem certeza que deseja apagar este estudo?');
+    if (!confirmed) return;
+
+    await performDeleteStudy();
+    return;
+  }
+
+  Alert.alert('Excluir', 'Tem certeza que deseja apagar este estudo?', [
+    { text: 'Cancelar', style: 'cancel' },
+    {
+      text: 'Apagar',
+      style: 'destructive',
+      onPress: () => {
+        void performDeleteStudy();
       },
-    ]);
-  };
+    },
+  ]);
+};
   const handleSaveChanges = async () => {
     if (!selectedStudy) return;
 
@@ -658,39 +801,57 @@ export default function StudiesScreen() {
 
   const createLocalBlankStudy = async () => {
     try {
+      const now = new Date().toISOString();
+  
       if (userId) {
-        Alert.alert(
-          'Indisponível',
-          'Com usuário logado, os estudos devem ser salvos na conta. A criação local foi bloqueada para evitar conflito.'
-        );
+        const sb = getSupabaseOrNull();
+        if (!sb) {
+          Alert.alert('Erro', 'Supabase não configurado.');
+          return;
+        }
+  
+        const { data, error } = await sb
+          .from('saved_notes')
+          .insert({
+            user_id: userId,
+            title: 'Novo Estudo',
+            reference: 'Estudo / Esboço',
+            content: buildManualSketchEnvelope('Novo Estudo'),
+          })
+          .select('id')
+          .single();
+  
+        if (error) throw error;
+  
+        await fetchStudies();
+        router.push(`/sketch/${data.id}` as any);
         return;
       }
-
+  
       const local = await getLocalStudies();
       const nextId = generateLocalStudyId(local);
-      const now = new Date().toISOString();
-
+  
       const blank: Study = {
         id: nextId,
         title: 'Novo Estudo',
-        content: '',
-        reference: null,
+        content: buildManualSketchEnvelope('Novo Estudo'),
+        reference: 'Estudo / Esboço',
         observation: null,
         application: null,
         prayer: null,
         created_at: now,
         source: 'local',
       };
-
+  
       const updated = [blank, ...local];
       await saveLocalStudies(updated);
       setStudies((prev) => [blank, ...prev]);
+      router.push(`/sketch/${nextId}` as any);
     } catch (e) {
-      console.log('CREATE_LOCAL_STUDY_FATAL', e);
+      console.log('CREATE_STUDY_FATAL', e);
       Alert.alert('Erro', 'Não foi possível criar o estudo.');
     }
   };
-
   const emptyMessage = useMemo(() => {
     if (!initialized) return 'Carregando sessão...';
     if (userId) return 'Nenhuma análise salva na sua conta ainda.';
@@ -909,6 +1070,20 @@ export default function StudiesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F2F7' },
 
+  tagPill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginTop: 6,
+    marginBottom: 6,
+  },
+
+  tagText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -918,13 +1093,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: '#eee',
   },
+
   backBtn: { padding: 5 },
   headerTitle: { fontSize: 18, fontWeight: '700' },
 
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   emptyContainer: { alignItems: 'center', marginTop: 100, padding: 20 },
-  emptyText: { fontSize: 18, fontWeight: 'bold', color: '#666', marginTop: 10, textAlign: 'center' },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#666',
+    marginTop: 10,
+    textAlign: 'center',
+  },
 
   card: {
     flexDirection: 'row',
@@ -938,6 +1120,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 1,
   },
+
   cardIcon: {
     width: 40,
     height: 40,
@@ -947,9 +1130,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 15,
   },
+
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#333' },
   cardDate: { fontSize: 12, color: '#888', marginTop: 2 },
-  cardRef: { fontSize: 12, color: '#666', marginTop: 4 },
+  cardRef: { fontSize: 12, color: '#666', marginTop: 2 },
   sourceTag: { fontSize: 11, color: '#AF52DE', marginTop: 6, fontWeight: '700' },
 
   modalContainer: { flex: 1, backgroundColor: '#fff' },
@@ -961,6 +1145,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: '#eee',
   },
+
   closeText: { fontSize: 17, color: '#007AFF' },
   saveText: { fontSize: 17, fontWeight: 'bold', color: '#007AFF' },
   modalActions: { flexDirection: 'row', gap: 20 },
@@ -978,6 +1163,7 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 2,
   },
+
   sectionHeader: {
     fontSize: 11,
     fontWeight: '900',
@@ -985,6 +1171,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     letterSpacing: 1,
   },
+
   viewBody: {
     fontSize: 16,
     lineHeight: 26,
