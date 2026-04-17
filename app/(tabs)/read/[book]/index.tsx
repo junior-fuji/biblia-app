@@ -289,6 +289,8 @@ function InfoCard({
 }
 
 export default function ReadBookScreen() {
+  const [projectorOpen, setProjectorOpen] = useState(false);
+  const [projectorIndex, setProjectorIndex] = useState(0);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<Verse>>(null);
@@ -800,22 +802,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
           ),
         }}
       />
-<TouchableOpacity
-  onPress={() =>
-    router.push({
-      pathname: '/read/projector',
-      params: {
-        book: String(bookId),
-        chapter: String(chapterNum),
-        version: versionCode,
-      },
-    } as any)
-  }
-  style={styles.projectorBtnInline}
->
-  <Ionicons name="tv-outline" size={16} color="#fff" />
-  <Text style={styles.projectorBtnInlineText}>Projetor</Text>
-</TouchableOpacity>
+/read/projector',
       <View style={{ flex: 1 }}>
         {loading ? (
           <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
@@ -989,22 +976,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
 /* =========================
    STYLES
 ========================= */
-const styles = StyleSheet.create({projectorBtnInline: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  backgroundColor: '#111827',
-  paddingHorizontal: 10,
-  paddingVertical: 7,
-  borderRadius: 10,
-  marginHorizontal: 4,
-},
-
-projectorBtnInlineText: {
-  color: '#fff',
-  fontWeight: '800',
-  fontSize: 12,
-  marginLeft: 6,
-},
+const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
 
   headerTitleContainer: { flexDirection: 'row', alignItems: 'center' },
@@ -1022,12 +994,14 @@ projectorBtnInlineText: {
     borderTopColor: '#eee',
     paddingTop: 10,
   },
+
   bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
   },
+
   navBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1036,12 +1010,14 @@ projectorBtnInlineText: {
     paddingVertical: 8,
     borderRadius: 20,
   },
+
   navBtnDisabled: { backgroundColor: '#f1f1f1' },
   navText: { color: '#fff', fontWeight: '900', fontSize: 13 },
   navTextDisabled: { color: '#bbb' },
   counterText: { color: '#666', fontSize: 13, fontWeight: '800' },
 
   modal: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 16 },
+
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1050,10 +1026,17 @@ projectorBtnInlineText: {
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
+
   modalTitle: { fontSize: 16, fontWeight: '900' },
   modalClose: { color: '#007AFF', fontSize: 16, fontWeight: '900' },
 
-  chapterGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingTop: 14, paddingBottom: 30 },
+  chapterGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingTop: 14,
+    paddingBottom: 30,
+  },
+
   chapterBtn: {
     width: 54,
     height: 54,
@@ -1063,11 +1046,13 @@ projectorBtnInlineText: {
     justifyContent: 'center',
     margin: 8,
   },
+
   chapterActive: { backgroundColor: '#007AFF' },
   chapterText: { fontSize: 16, fontWeight: '900', color: '#111' },
   chapterActiveText: { color: '#fff' },
 
   aiSafe: { flex: 1, backgroundColor: '#F2F2F7' },
+
   aiHeader: {
     backgroundColor: '#fff',
     borderBottomWidth: 1,
@@ -1078,8 +1063,10 @@ projectorBtnInlineText: {
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+
   aiHeaderBtn: { paddingVertical: 6, paddingRight: 10 },
   aiHeaderText: { color: '#007AFF', fontSize: 16, fontWeight: '900' },
+
   aiHeaderTitle: {
     flex: 1,
     textAlign: 'center',
@@ -1088,6 +1075,7 @@ projectorBtnInlineText: {
     color: '#111',
     paddingHorizontal: 10,
   },
+
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1097,12 +1085,26 @@ projectorBtnInlineText: {
     borderRadius: 14,
     gap: 6,
   },
+
   saveBtnText: { color: '#fff', fontWeight: '900', fontSize: 13 },
 
   aiLoading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   aiBody: { padding: 16, paddingBottom: 30 },
-  aiSubject: { textAlign: 'center', fontSize: 18, fontWeight: '900', marginBottom: 14, color: '#111' },
-  aiHint: { marginTop: 10, fontSize: 12, color: '#8E8E93', textAlign: 'center' },
+
+  aiSubject: {
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 14,
+    color: '#111',
+  },
+
+  aiHint: {
+    marginTop: 10,
+    fontSize: 12,
+    color: '#8E8E93',
+    textAlign: 'center',
+  },
 
   infoCard: {
     flexDirection: 'row',
@@ -1118,13 +1120,21 @@ projectorBtnInlineText: {
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
+
   infoBar: { width: 5 },
   infoContent: { flex: 1, padding: 14, paddingVertical: 16 },
   infoHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   infoTitle: { fontSize: 12, fontWeight: '900', letterSpacing: 0.6 },
   infoText: { fontSize: 15, lineHeight: 22, color: '#333', textAlign: 'justify' },
 
-  rawBox: { backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#eee' },
+  rawBox: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+
   rawText: { fontSize: 15, lineHeight: 22, color: '#222' },
 
   centerSafe: {
@@ -1134,8 +1144,27 @@ projectorBtnInlineText: {
     padding: 20,
     backgroundColor: '#fff',
   },
-  centerTitle: { fontSize: 18, fontWeight: '900', marginBottom: 10, color: '#111' },
-  centerText: { color: '#666', textAlign: 'center', marginBottom: 20, lineHeight: 20 },
-  centerBtn: { backgroundColor: '#007AFF', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },
+
+  centerTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 10,
+    color: '#111',
+  },
+
+  centerText: {
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+
+  centerBtn: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+
   centerBtnText: { color: '#fff', fontWeight: '900' },
 });
