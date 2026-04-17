@@ -770,15 +770,29 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
               <TouchableOpacity onPress={() => setShowVersions(true)} style={styles.headerIconBtn}>
                 <Text style={{ color: '#007AFF', fontWeight: '900' }}>{versionCode}</Text>
               </TouchableOpacity>
-
+          
               <TouchableOpacity onPress={analyzeChapter} style={styles.headerIconBtn}>
                 <Ionicons name="school-outline" size={22} color="#AF52DE" />
               </TouchableOpacity>
-
+          
+              <TouchableOpacity
+                onPress={() => {
+                  const [projectorOpen, setProjectorOpen] = useState(false);
+                  const [projectorIndex, setProjectorIndex] = useState(0);
+                  setProjectorIndex(0);
+                  setProjectorOpen(true);
+                }}
+                style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+              >
+                <Text style={{ color: '#2563EB', fontWeight: '900', fontSize: 16 }}>
+                  Projetor
+                </Text>
+              </TouchableOpacity>
+          
               <TouchableOpacity onPress={() => setFontSize((p) => clamp(p - 2, 12, 40))} style={styles.headerIconBtn}>
                 <Ionicons name="remove" size={22} color="#007AFF" />
               </TouchableOpacity>
-
+          
               <TouchableOpacity onPress={() => setFontSize((p) => clamp(p + 2, 12, 40))} style={styles.headerIconBtn}>
                 <Ionicons name="add" size={22} color="#007AFF" />
               </TouchableOpacity>
