@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
-  SectionList,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -93,28 +93,51 @@ export default function ReadIndexScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
 
-  const sections = useMemo(() => {
+  const oldBooks = useMemo(() => {
     const q = query.trim().toLowerCase();
+    if (!q) return OLD_TESTAMENT;
+    return OLD_TESTAMENT.filter(
+      (book) =>
+        book.name.toLowerCase().includes(q) ||
+        book.abbrev.toLowerCase().includes(q) ||
+        String(book.id).includes(q)
+    );
+  }, [query]);
 
-    const filterBooks = (books: BookItem[]) =>
-      !q
-        ? books
-        : books.filter(
-            (book) =>
-              book.name.toLowerCase().includes(q) ||
-              book.abbrev.toLowerCase().includes(q) ||
-              String(book.id).includes(q)
-          );
-
-    return [
-      { title: 'ANTIGO TESTAMENTO', data: filterBooks(OLD_TESTAMENT) },
-      { title: 'NOVO TESTAMENTO', data: filterBooks(NEW_TESTAMENT) },
-    ].filter((section) => section.data.length > 0);
+  const newBooks = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return NEW_TESTAMENT;
+    return NEW_TESTAMENT.filter(
+      (book) =>
+        book.name.toLowerCase().includes(q) ||
+        book.abbrev.toLowerCase().includes(q) ||
+        String(book.id).includes(q)
+    );
   }, [query]);
 
   const openBook = (book: BookItem) => {
     router.push(`/(tabs)/read/${book.id}` as any);
   };
+
+  function renderBook(book: BookItem) {
+    return (
+      <TouchableOpacity
+        key={book.id}
+        style={styles.bookCard}
+        activeOpacity={0.85}
+        onPress={() => openBook(book)}
+      >
+        <View style={styles.bookBadge}>
+          <Text style={styles.bookBadgeText}>{book.abbrev}</Text>
+        </View>
+
+        <View style={styles.bookInfo}>
+          <Text style={styles.bookName}>{book.name}</Text>
+          <Text style={styles.bookMeta}>Livro {book.id}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -145,40 +168,30 @@ export default function ReadIndexScreen() {
         />
       </View>
 
-      <SectionList
-        sections={sections}
-        keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.listContent}
-        stickySectionHeadersEnabled={false}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        renderSectionHeader={({ section }) => (
-          <Text style={styles.sectionTitle}>{section.title}</Text>
-        )}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.bookCard}
-            activeOpacity={0.85}
-            onPress={() => openBook(item)}
-          >
-            <View style={styles.bookBadge}>
-              <Text style={styles.bookBadgeText}>{item.abbrev}</Text>
-            </View>
-
-            <View style={styles.bookInfo}>
-              <Text style={styles.bookName}>{item.name}</Text>
-              <Text style={styles.bookMeta}>Livro {item.id}</Text>
-            </View>
-
-            <Ionicons name="chevron-forward" size={18} color="#B0B0B0" />
-          </TouchableOpacity>
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="search" size={28} color="#B0B0B0" />
-            <Text style={styles.emptyText}>Nenhum livro encontrado</Text>
+      >
+        <View style={styles.columns}>
+          <View style={styles.column}>
+            <Text style={styles.sectionTitle}>ANTIGO TESTAMENTO</Text>
+            {oldBooks.length > 0 ? (
+              oldBooks.map(renderBook)
+            ) : (
+              <Text style={styles.emptyText}>Nenhum livro encontrado</Text>
+            )}
           </View>
-        }
-      />
+
+          <View style={styles.column}>
+            <Text style={styles.sectionTitle}>NOVO TESTAMENTO</Text>
+            {newBooks.length > 0 ? (
+              newBooks.map(renderBook)
+            ) : (
+              <Text style={styles.emptyText}>Nenhum livro encontrado</Text>
+            )}
+          </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -246,16 +259,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 
-  listContent: {
+  scrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 24,
+  },
+
+  columns: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+
+  column: {
+    flex: 1,
   },
 
   sectionTitle: {
     fontSize: 12,
     fontWeight: '900',
     color: '#6B7280',
-    marginTop: 14,
+    marginTop: 8,
     marginBottom: 10,
     letterSpacing: 0.8,
   },
@@ -263,7 +286,7 @@ const styles = StyleSheet.create({
   bookCard: {
     backgroundColor: '#fff',
     borderRadius: 14,
-    padding: 14,
+    padding: 12,
     marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
@@ -272,18 +295,18 @@ const styles = StyleSheet.create({
   },
 
   bookBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 11,
     backgroundColor: '#007AFF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
 
   bookBadgeText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '900',
   },
 
@@ -292,27 +315,20 @@ const styles = StyleSheet.create({
   },
 
   bookName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
     color: '#111',
   },
 
   bookMeta: {
     marginTop: 2,
-    fontSize: 12,
+    fontSize: 11,
     color: '#6B7280',
-  },
-
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
   },
 
   emptyText: {
-    marginTop: 10,
-    fontSize: 15,
+    fontSize: 14,
     color: '#6B7280',
-    fontWeight: '600',
+    marginTop: 10,
   },
 });
