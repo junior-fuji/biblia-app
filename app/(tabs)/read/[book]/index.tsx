@@ -304,6 +304,7 @@ export default function ReadBookScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<Verse>>(null);
+  const isWeb = Platform.OS === 'web';
 
   const { book, chapter, verse, returnTo } = useLocalSearchParams<RouteParams>();
   const bookId = Number(book);
@@ -842,43 +843,51 @@ Write with real depth, scholarly tone, and pastoral clarity.
           ),
           headerTitle: () => (
             <TouchableOpacity onPress={() => setShowChapters(true)} style={styles.headerTitleContainer}>
-              <Text style={styles.headerTitleText}>
+              <Text style={styles.headerTitleText} numberOfLines={1}>
                 {safeBookName} {chapterNum} <Text style={{ color: '#8e8e93' }}>▼</Text>
               </Text>
             </TouchableOpacity>
           ),
-          headerRight: () => (
-            <View style={styles.headerRightContainer}>
-              <TouchableOpacity onPress={() => setShowVersions(true)} style={styles.headerIconBtn}>
-                <Text style={{ color: '#007AFF', fontWeight: '900' }}>{versionCode}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={analyzeChapter} style={styles.headerIconBtn}>
-                <Ionicons name="school-outline" size={22} color="#AF52DE" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => {
-                  Alert.alert('Projetor', 'Envie o trecho do componente/tela real da projeção da Bíblia para eu religar corretamente.');
-                }}
-                style={{ paddingHorizontal: 12, paddingVertical: 6 }}
-              >
-                <Text style={{ color: '#2563EB', fontWeight: '900', fontSize: 16 }}>
-                  Projetor
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={() => setFontSize((p) => clamp(p - 2, 12, 40))} style={styles.headerIconBtn}>
-                <Ionicons name="remove" size={22} color="#007AFF" />
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={() => setFontSize((p) => clamp(p + 2, 12, 40))} style={styles.headerIconBtn}>
-                <Ionicons name="add" size={22} color="#007AFF" />
-              </TouchableOpacity>
-            </View>
-          ),
+          headerRight: () => null,
         }}
       />
+
+      <View style={styles.topActionBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.topActionBarContent}
+        >
+          <TouchableOpacity onPress={() => setShowVersions(true)} style={styles.actionChip}>
+            <Text style={styles.actionChipVersion}>{versionCode}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={analyzeChapter} style={styles.actionChip}>
+            <Ionicons name="school-outline" size={18} color="#AF52DE" />
+            <Text style={styles.actionChipText}>IA</Text>
+          </TouchableOpacity>
+
+          {isWeb ? (
+            <TouchableOpacity
+              onPress={() => {
+                Alert.alert('Projetor', 'Envie o componente real da projeção da Bíblia para eu religar corretamente.');
+              }}
+              style={styles.actionChip}
+            >
+              <Ionicons name="tv-outline" size={18} color="#111827" />
+              <Text style={styles.actionChipText}>Projetor</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          <TouchableOpacity onPress={() => setFontSize((p) => clamp(p - 2, 12, 40))} style={styles.actionChip}>
+            <Text style={styles.actionChipText}>A-</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => setFontSize((p) => clamp(p + 2, 12, 40))} style={styles.actionChip}>
+            <Text style={styles.actionChipText}>A+</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
 
       <View style={{ flex: 1 }}>
         {loading ? (
@@ -1055,10 +1064,47 @@ Write with real depth, scholarly tone, and pastoral clarity.
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
 
-  headerTitleContainer: { flexDirection: 'row', alignItems: 'center' },
+  headerTitleContainer: {
+    maxWidth: 220,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   headerTitleText: { fontSize: 17, fontWeight: '900' },
-  headerRightContainer: { flexDirection: 'row', alignItems: 'center' },
-  headerIconBtn: { paddingHorizontal: 8, paddingVertical: 6 },
+
+  topActionBar: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    backgroundColor: '#fff',
+  },
+
+  topActionBarContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  actionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+
+  actionChipText: {
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '800',
+    marginLeft: 6,
+  },
+
+  actionChipVersion: {
+    color: '#2563EB',
+    fontSize: 13,
+    fontWeight: '900',
+  },
 
   list: { paddingHorizontal: 20, paddingTop: 20 },
   verse: { marginBottom: 14, color: '#222', textAlign: 'justify' },
