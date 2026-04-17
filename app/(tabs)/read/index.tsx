@@ -1,14 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type BookItem = {
@@ -17,7 +10,7 @@ type BookItem = {
   abbrev: string;
 };
 
-const OLD_TESTAMENT: BookItem[] = [
+const BOOK_MAP: BookItem[] = [
   { id: 1, name: 'Gênesis', abbrev: 'Gn' },
   { id: 2, name: 'Êxodo', abbrev: 'Êx' },
   { id: 3, name: 'Levítico', abbrev: 'Lv' },
@@ -57,9 +50,6 @@ const OLD_TESTAMENT: BookItem[] = [
   { id: 37, name: 'Ageu', abbrev: 'Ag' },
   { id: 38, name: 'Zacarias', abbrev: 'Zc' },
   { id: 39, name: 'Malaquias', abbrev: 'Ml' },
-];
-
-const NEW_TESTAMENT: BookItem[] = [
   { id: 40, name: 'Mateus', abbrev: 'Mt' },
   { id: 41, name: 'Marcos', abbrev: 'Mc' },
   { id: 42, name: 'Lucas', abbrev: 'Lc' },
@@ -93,49 +83,63 @@ export default function ReadIndexScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
 
-  const oldBooks = useMemo(() => {
+  const oldTestament = useMemo(() => {
+    const list = BOOK_MAP.filter((b) => b.id <= 39);
     const q = query.trim().toLowerCase();
-    if (!q) return OLD_TESTAMENT;
-    return OLD_TESTAMENT.filter(
-      (book) =>
-        book.name.toLowerCase().includes(q) ||
-        book.abbrev.toLowerCase().includes(q) ||
-        String(book.id).includes(q)
+    if (!q) return list;
+    return list.filter(
+      (b) =>
+        b.name.toLowerCase().includes(q) ||
+        b.abbrev.toLowerCase().includes(q) ||
+        String(b.id).includes(q)
     );
   }, [query]);
 
-  const newBooks = useMemo(() => {
+  const newTestament = useMemo(() => {
+    const list = BOOK_MAP.filter((b) => b.id >= 40);
     const q = query.trim().toLowerCase();
-    if (!q) return NEW_TESTAMENT;
-    return NEW_TESTAMENT.filter(
-      (book) =>
-        book.name.toLowerCase().includes(q) ||
-        book.abbrev.toLowerCase().includes(q) ||
-        String(book.id).includes(q)
+    if (!q) return list;
+    return list.filter(
+      (b) =>
+        b.name.toLowerCase().includes(q) ||
+        b.abbrev.toLowerCase().includes(q) ||
+        String(b.id).includes(q)
     );
   }, [query]);
 
-  const openBook = (book: BookItem) => {
-    router.push(`/(tabs)/read/${book.id}` as any);
-  };
+  function openBook(bookId: number) {
+    router.push(`/(tabs)/read/${bookId}?chapter=1&returnTo=/(tabs)/read` as any);
+  }
 
-  function renderBook(book: BookItem) {
+  function renderBook({ item }: { item: BookItem }) {
     return (
       <TouchableOpacity
-        key={book.id}
         style={styles.bookCard}
+        onPress={() => openBook(item.id)}
         activeOpacity={0.85}
-        onPress={() => openBook(book)}
       >
-        <View style={styles.bookBadge}>
-          <Text style={styles.bookBadgeText}>{book.abbrev}</Text>
-        </View>
-
-        <View style={styles.bookInfo}>
-          <Text style={styles.bookName}>{book.name}</Text>
-          <Text style={styles.bookMeta}>Livro {book.id}</Text>
-        </View>
+        <Text style={styles.bookAbbrev}>{item.abbrev}</Text>
+        <Text style={styles.bookName} numberOfLines={1}>
+          {item.name}
+        </Text>
       </TouchableOpacity>
+    );
+  }
+
+  function renderSection(title: string, data: BookItem[]) {
+    return (
+      <View style={styles.sectionBlock}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <FlatList
+          data={data}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderBook}
+          numColumns={2}
+          scrollEnabled={false}
+          columnWrapperStyle={styles.columnRow}
+          ListEmptyComponent={<Text style={styles.emptyText}>Nenhum livro encontrado</Text>}
+        />
+      </View>
     );
   }
 
@@ -152,7 +156,7 @@ export default function ReadIndexScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerTitleWrap}>
-          <Ionicons name="book" size={24} color="#007AFF" />
+          <Ionicons name="book" size={26} color="#007AFF" />
           <Text style={styles.title}>Bíblia Sagrada</Text>
         </View>
       </View>
@@ -168,44 +172,31 @@ export default function ReadIndexScreen() {
         />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
+      <FlatList
+        data={[{ key: 'content' }]}
+        keyExtractor={(item) => item.key}
+        renderItem={() => (
+          <View style={styles.content}>
+            {renderSection('ANTIGO TESTAMENTO', oldTestament)}
+            {renderSection('NOVO TESTAMENTO', newTestament)}
+          </View>
+        )}
         showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.columns}>
-          <View style={styles.column}>
-            <Text style={styles.sectionTitle}>ANTIGO TESTAMENTO</Text>
-            {oldBooks.length > 0 ? (
-              oldBooks.map(renderBook)
-            ) : (
-              <Text style={styles.emptyText}>Nenhum livro encontrado</Text>
-            )}
-          </View>
-
-          <View style={styles.column}>
-            <Text style={styles.sectionTitle}>NOVO TESTAMENTO</Text>
-            {newBooks.length > 0 ? (
-              newBooks.map(renderBook)
-            ) : (
-              <Text style={styles.emptyText}>Nenhum livro encontrado</Text>
-            )}
-          </View>
-        </View>
-      </ScrollView>
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F2F2F7' },
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
 
   header: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    paddingBottom: 16,
   },
 
   homeBackBtn: {
@@ -232,7 +223,7 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
     color: '#111',
     marginLeft: 10,
@@ -240,16 +231,13 @@ const styles = StyleSheet.create({
 
   searchWrap: {
     marginHorizontal: 16,
-    marginTop: 14,
-    marginBottom: 10,
+    marginBottom: 8,
     paddingHorizontal: 12,
     height: 46,
     borderRadius: 14,
-    backgroundColor: '#fff',
+    backgroundColor: '#F3F4F6',
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
   },
 
   searchInput: {
@@ -259,76 +247,55 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 
-  scrollContent: {
+  content: {
     paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingBottom: 40,
   },
 
-  columns: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-
-  column: {
-    flex: 1,
+  sectionBlock: {
+    marginTop: 8,
   },
 
   sectionTitle: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#6B7280',
-    marginTop: 8,
-    marginBottom: 10,
-    letterSpacing: 0.8,
+    marginTop: 20,
+    marginBottom: 12,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#8E8E93',
+    letterSpacing: 1,
+  },
+
+  columnRow: {
+    justifyContent: 'space-between',
   },
 
   bookCard: {
-    backgroundColor: '#fff',
+    width: '48.5%',
+    backgroundColor: '#F9FAFB',
     borderRadius: 14,
-    padding: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#ECECEC',
   },
 
-  bookBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 11,
-    backgroundColor: '#007AFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-
-  bookBadgeText: {
-    color: '#fff',
+  bookAbbrev: {
     fontSize: 12,
     fontWeight: '900',
-  },
-
-  bookInfo: {
-    flex: 1,
+    color: '#007AFF',
+    marginBottom: 6,
   },
 
   bookName: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#111',
   },
 
-  bookMeta: {
-    marginTop: 2,
-    fontSize: 11,
-    color: '#6B7280',
-  },
-
   emptyText: {
+    color: '#8E8E93',
     fontSize: 14,
-    color: '#6B7280',
-    marginTop: 10,
+    marginTop: 6,
   },
 });
