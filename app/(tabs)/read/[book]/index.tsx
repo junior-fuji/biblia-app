@@ -1,5 +1,4 @@
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
-import { useSettings } from '@/src/providers/SettingsProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,9 +16,6 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-/* =========================
-   TIPOS
-========================= */
 type Verse = { id: number; verse: number; text: string };
 
 type RouteParams = {
@@ -162,42 +158,57 @@ function getAnalysisLanguage(versionCode: string) {
     return 'ja';
   }
 
+  if (
+    code.includes('KJV') ||
+    code.includes('WEB') ||
+    code.includes('NIV') ||
+    code.includes('NLT') ||
+    code.includes('ESV')
+  ) {
+    return 'en';
+  }
+
   return 'pt';
 }
 
-function buildChapterPrompt(language: 'pt' | 'es' | 'ja', bookName: string, chapterNum: number) {
+function buildChapterPrompt(language: 'pt' | 'es' | 'ja' | 'en', bookName: string, chapterNum: number) {
   if (language === 'es') {
-    return `Analiza profundamente ${bookName} capítulo ${chapterNum}. Incluye tema central, contexto histórico, contexto cultural de la época, matices del original (hebreo/griego), teología bíblica y aplicación pastoral.`;
+    return `Escribe un comentario bíblico extenso, erudito y profundamente detallado sobre ${bookName} capítulo ${chapterNum}. Analiza el capítulo como una unidad completa, explicando su tema central, contexto histórico, contexto cultural, estructura literaria, exégesis, teología bíblica y aplicación pastoral.`;
   }
 
   if (language === 'ja') {
-    return `${bookName} ${chapterNum}章を深く分析してください。中心テーマ、歴史的背景、当時の文化的背景、原語（ヘブライ語・ギリシャ語）のニュアンス、聖書神学、そして実践的適用を含めてください。回答は必ず自然な日本語で、すべての項目を日本語で記述してください。`;
+    return `${bookName} ${chapterNum}章について、広く深い学術的な聖書注解を書いてください。この章を一つの完全な文学的単位として扱い、中心主題、歴史的背景、文化的背景、文学構造、釈義、聖書神学、そして牧会的適用を詳しく説明してください。`;
   }
 
-  return `Analise profundamente ${bookName} capítulo ${chapterNum}. Inclua tema central, contexto histórico, contexto cultural da época, nuances do original (hebraico/grego), teologia bíblica e aplicação pastoral.`;
+  if (language === 'en') {
+    return `Write a broad, scholarly, deeply detailed biblical commentary on ${bookName} chapter ${chapterNum}. Analyze the chapter as a complete literary unit, explaining its central theme, historical background, cultural background, literary structure, exegesis, biblical theology, and pastoral application.`;
+  }
+
+  return `Escreva um comentário bíblico extenso, erudito e profundamente detalhado sobre ${bookName} capítulo ${chapterNum}. Analise o capítulo como uma unidade completa, explicando seu tema central, contexto histórico, contexto cultural, estrutura literária, exegese, teologia bíblica e aplicação pastoral.`;
 }
 
 function buildVersePrompt(
-  language: 'pt' | 'es' | 'ja',
+  language: 'pt' | 'es' | 'ja' | 'en',
   verseText: string,
   bookName: string,
   chapterNum: number,
   verseNum: number
 ) {
   if (language === 'es') {
-    return `Haz una exégesis profunda del versículo: "${verseText}" (referencia: ${bookName} ${chapterNum}:${verseNum}). Incluye tema central, contexto histórico, contexto cultural de la época, matices del original e implicaciones teológicas.`;
+    return `Haz una exégesis profundamente detallada del versículo "${verseText}" (${bookName} ${chapterNum}:${verseNum}). Analiza su idea central, contexto histórico, contexto cultural, matices del original, estructura gramatical, implicaciones teológicas y aplicación pastoral fiel al texto.`;
   }
 
   if (language === 'ja') {
-    return `次の聖句を深く釈義してください: 「${verseText}」(参照: ${bookName} ${chapterNum}:${verseNum})。中心テーマ、歴史的背景、当時の文化的背景、原語のニュアンス、神学的含意、実践的適用を含めてください。回答は必ず自然な日本語のみで記述してください。`;
+    return `次の聖句「${verseText}」(${bookName} ${chapterNum}:${verseNum})について、非常に詳細で学術的な釈義を行ってください。中心テーマ、歴史的背景、文化的背景、原語のニュアンス、文法構造、神学的意義、本文に忠実な実践的適用を含めてください。`;
   }
 
-  return `Faça exegese profunda do versículo: "${verseText}" (referência: ${bookName} ${chapterNum}:${verseNum}). Inclua tema central, contexto histórico, contexto cultural da época, nuances do original e implicações teológicas.`;
+  if (language === 'en') {
+    return `Provide a deeply detailed exegetical analysis of the verse "${verseText}" (${bookName} ${chapterNum}:${verseNum}). Analyze its central idea, historical background, cultural background, original-language nuances, grammatical structure, theological implications, and faithful pastoral application.`;
+  }
+
+  return `Faça uma exegese profundamente detalhada do versículo "${verseText}" (${bookName} ${chapterNum}:${verseNum}). Analise sua ideia central, contexto histórico, contexto cultural, nuances do original, estrutura gramatical, implicações teológicas e aplicação pastoral fiel ao texto.`;
 }
 
-/* =========================
-   CACHE (em memória)
-========================= */
 let versionsCache: VersionRow[] | null = null;
 let versionIdByCode: Map<string, string> | null = null;
 
@@ -240,6 +251,7 @@ function buildAnalysisEnvelope(params: {
 
   return {
     version: 2,
+    kind: 'ai_bible_study',
     type: verse ? 'verse' : 'chapter',
     ref: {
       book_id: bookId,
@@ -289,12 +301,9 @@ function InfoCard({
 }
 
 export default function ReadBookScreen() {
-  const [projectorOpen, setProjectorOpen] = useState(false);
-  const [projectorIndex, setProjectorIndex] = useState(0);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<Verse>>(null);
-  const { settings, setBibleVersion } = useSettings();
 
   const { book, chapter, verse, returnTo } = useLocalSearchParams<RouteParams>();
   const bookId = Number(book);
@@ -316,6 +325,7 @@ export default function ReadBookScreen() {
     : { name: 'Livro', abbrev: '' };
   const safeBookName = bookData.name || 'Livro';
 
+  const [versionCode, setVersionCode] = useState<string>('ARA');
   const [versions, setVersions] = useState<VersionRow[]>([]);
   const [showVersions, setShowVersions] = useState(false);
 
@@ -332,12 +342,10 @@ export default function ReadBookScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiTitle, setAiTitle] = useState('');
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
-  const [rawAi, setRawAi] = useState('');
+  const [rawAi, setRawAi] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [saveReference, setSaveReference] = useState('');
   const [saveVerse, setSaveVerse] = useState<number | null>(null);
-
-  const versionCode = settings.bibleVersion || 'ARA';
 
   useEffect(() => {
     setChapterNum((current) => (current !== initialChapter ? initialChapter : current));
@@ -353,7 +361,7 @@ export default function ReadBookScreen() {
         setVersions(list);
 
         if (list.length > 0 && !list.some((v) => v.code === versionCode)) {
-          setBibleVersion(list[0].code);
+          setVersionCode(list[0].code);
         }
       } catch (e) {
         console.log('FETCH_VERSIONS_ERROR', e);
@@ -367,6 +375,8 @@ export default function ReadBookScreen() {
           { id: 'fallback-kja', code: 'KJA', name: 'KJA' },
           { id: 'fallback-rv1909', code: 'RV1909', name: 'RV1909' },
           { id: 'fallback-kougo', code: 'KOUGO', name: 'KOUGO' },
+          { id: 'fallback-kjv', code: 'KJV', name: 'KJV' },
+          { id: 'fallback-web', code: 'WEB', name: 'WEB' },
         ]);
       }
     })();
@@ -374,7 +384,7 @@ export default function ReadBookScreen() {
     return () => {
       alive = false;
     };
-  }, [setBibleVersion, versionCode]);
+  }, [versionCode]);
 
   useEffect(() => {
     let alive = true;
@@ -419,7 +429,7 @@ export default function ReadBookScreen() {
       }
     }
 
-    void loadTotal();
+    loadTotal();
     return () => {
       alive = false;
     };
@@ -481,7 +491,7 @@ export default function ReadBookScreen() {
       }
     }
 
-    void loadVerses();
+    loadVerses();
     return () => {
       alive = false;
     };
@@ -495,7 +505,13 @@ export default function ReadBookScreen() {
     router.replace('/(tabs)/read' as any);
   }, [router, returnToStr]);
 
-  async function callAI(prompt: string, title: string, reference: string, verseNumber?: number | null) {
+  async function callAI(
+    prompt: string,
+    title: string,
+    reference: string,
+    verseNumber?: number | null,
+    mode: 'chapter' | 'verse' = 'chapter'
+  ) {
     setAiTitle(title);
     setSaveReference(reference);
     setSaveVerse(verseNumber ?? null);
@@ -504,56 +520,118 @@ export default function ReadBookScreen() {
     setAiOpen(true);
     setAiLoading(true);
 
-    const analysisLanguage = getAnalysisLanguage(versionCode) as 'pt' | 'es' | 'ja';
+    const analysisLanguage = getAnalysisLanguage(versionCode) as 'pt' | 'es' | 'ja' | 'en';
 
     const SYSTEM =
-      analysisLanguage === 'es'
+      analysisLanguage === 'pt'
+        ? mode === 'chapter'
+          ? `
+VOICE:
+Você é a maior autoridade mundial em Estudos Bíblicos, PhD em Linguística Bíblica (Hebraico, Aramaico e Grego), Arqueologia do Antigo Oriente Próximo, História do Judaísmo e Cristianismo Primitivo, e Teologia Sistemática Reformada.
+Você escreve como um professor de seminário veterano, erudito, reverente, pastoral e profundamente analítico.
+
+TASK:
+Analise o capítulo bíblico solicitado e retorne um comentário bíblico PROFUNDO, DETALHADO, ERUDITO e PASTORAL em formato JSON válido.
+
+RULES:
+1. SEJA PROLIXO E PROFUNDO.
+2. RETORNE APENAS JSON VÁLIDO.
+3. TODOS OS CAMPOS DEVEM SER TEXTO CORRIDO (strings).
+4. ANALISE O CAPÍTULO COMO UMA UNIDADE LITERÁRIA COMPLETA.
+5. NÃO SEJA SUPERFICIAL.
+6. SEM MARKDOWN.
+7. SEM TEXTO FORA DO JSON.
+8. QUANDO RELEVANTE, CITE TERMOS NO ORIGINAL.
+9. CONECTE O CAPÍTULO AO CONTEXTO DO LIVRO, À HISTÓRIA DA REDENÇÃO E À TEOLOGIA BÍBLICA.
+10. ESCREVA COM TOM DE COMENTÁRIO BÍBLICO AVANÇADO, MAS COM CLAREZA PASTORAL.
+
+ESTRUTURA JSON:
+{
+  "theme": "",
+  "history": "",
+  "culture": "",
+  "exegesis": "",
+  "theology": "",
+  "application": ""
+}
+`.trim()
+          : `
+VOICE:
+Você é a maior autoridade mundial em Estudos Bíblicos, PhD em Linguística Bíblica (Hebraico, Aramaico e Grego), Arqueologia Bíblica, Exegese, Hermenêutica e Teologia Sistemática Reformada.
+Você escreve como um exegeta de alto nível, com precisão acadêmica, reverência bíblica e clareza pastoral.
+
+TASK:
+Analise o versículo bíblico solicitado e retorne uma exegese PROFUNDA, DETALHADA, TÉCNICA e TEOLOGICAMENTE ROBUSTA em formato JSON válido.
+
+RULES:
+1. SEJA PROFUNDO, PRECISO E DETALHADO.
+2. RETORNE APENAS JSON VÁLIDO.
+3. TODOS OS CAMPOS DEVEM SER TEXTO CORRIDO (strings).
+4. FOQUE NO VERSÍCULO, MAS SEM IGNORAR O CONTEXTO IMEDIATO E O CONTEXTO DO LIVRO.
+5. SEM MARKDOWN.
+6. SEM TEXTO FORA DO JSON.
+7. QUANDO RELEVANTE, CITE TERMOS NO ORIGINAL.
+8. EXPLIQUE O SENTIDO DO TEXTO COM RIGOR HERMENÊUTICO.
+9. EVITE DEVOCIONALISMO SUPERFICIAL.
+10. CONECTE O VERSÍCULO COM A TEOLOGIA BÍBLICA E SISTEMÁTICA.
+
+ESTRUTURA JSON:
+{
+  "theme": "",
+  "history": "",
+  "culture": "",
+  "exegesis": "",
+  "theology": "",
+  "application": ""
+}
+`.trim()
+        : analysisLanguage === 'es'
         ? `
-Eres un especialista en Teología Bíblica y lenguas originales (hebreo/arameo/griego).
+Eres un especialista en Teología Bíblica, lenguas originales, historia bíblica y exégesis.
 Responde EXCLUSIVAMENTE con JSON válido y TODO el contenido debe estar en español.
 Sin markdown y sin texto fuera del JSON.
-Estructura obligatoria:
+La estructura JSON debe contener exactamente:
 {
-  "theme": "Tema central con profundidad",
-  "history": "Contexto histórico",
-  "culture": "Contexto cultural de la época",
-  "exegesis": "Exégesis y matices del original (hebreo/griego), con términos cuando corresponda",
-  "theology": "Conexiones bíblicas e implicaciones teológicas",
-  "application": "Aplicación pastoral práctica"
+  "theme": "",
+  "history": "",
+  "culture": "",
+  "exegesis": "",
+  "theology": "",
+  "application": ""
 }
-Si no sabes algún campo, rellénalo con una breve explicación.
+Escribe con profundidad real, tono erudito y claridad pastoral.
 `.trim()
         : analysisLanguage === 'ja'
         ? `
-あなたは聖書神学および原語（ヘブライ語・アラム語・ギリシャ語）の専門家です。
+あなたは聖書神学、原語学、聖書史、釈義学の専門家です。
 必ず有効なJSONのみで回答し、内容はすべて自然な日本語で書いてください。
 MarkdownやJSON以外の文章は禁止です。
-必須の構造:
+JSONの構造は必ず次の6項目です:
 {
-  "theme": "中心テーマ",
-  "history": "歴史的背景",
-  "culture": "当時の文化的背景",
-  "exegesis": "原語のニュアンスを含む釈義",
-  "theology": "聖書全体とのつながりと神学的意味",
-  "application": "実践的・牧会的適用"
+  "theme": "",
+  "history": "",
+  "culture": "",
+  "exegesis": "",
+  "theology": "",
+  "application": ""
 }
-日本語以外の言語を混ぜないでください。
-不明な項目は短い説明で補ってください。
+深い学術性と牧会的明瞭さを両立してください。
+日本語以外を混ぜないでください。
 `.trim()
         : `
-Você é um especialista em Teologia Bíblica e línguas originais (hebraico/aramaico/grego).
-Responda EXCLUSIVAMENTE com JSON válido e TODO o conteúdo deve estar em português.
-Sem markdown e sem texto fora do JSON.
-Estrutura obrigatória:
+You are a specialist in Biblical Theology, original languages, biblical history, and exegesis.
+Respond EXCLUSIVELY with valid JSON and ALL content must be in English.
+No markdown and no text outside the JSON.
+The JSON structure must contain exactly:
 {
-  "theme": "Tema central com profundidade",
-  "history": "Contexto histórico",
-  "culture": "Contexto cultural da época",
-  "exegesis": "Exegese e nuances do original (hebraico/grego), com termos quando pertinente",
-  "theology": "Conexões bíblicas e implicações teológicas",
-  "application": "Aplicação pastoral prática"
+  "theme": "",
+  "history": "",
+  "culture": "",
+  "exegesis": "",
+  "theology": "",
+  "application": ""
 }
-Se não souber algum campo, preencha com string curta explicando a limitação.
+Write with real depth, scholarly tone, and pastoral clarity.
 `.trim();
 
     try {
@@ -601,25 +679,27 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
   }
 
   const analyzeChapter = useCallback(() => {
-    const language = getAnalysisLanguage(versionCode) as 'pt' | 'es' | 'ja';
+    const language = getAnalysisLanguage(versionCode) as 'pt' | 'es' | 'ja' | 'en';
 
     void callAI(
       buildChapterPrompt(language, safeBookName, chapterNum),
       `Análise — ${safeBookName} ${chapterNum}`,
       `${safeBookName} ${chapterNum} (${versionCode})`,
-      null
+      null,
+      'chapter'
     );
   }, [safeBookName, chapterNum, versionCode]);
 
   const analyzeVerse = useCallback(
     (v: Verse) => {
-      const language = getAnalysisLanguage(versionCode) as 'pt' | 'es' | 'ja';
+      const language = getAnalysisLanguage(versionCode) as 'pt' | 'es' | 'ja' | 'en';
 
       void callAI(
         buildVersePrompt(language, v.text, safeBookName, chapterNum, v.verse),
         `Exegese — ${safeBookName} ${chapterNum}:${v.verse}`,
         `${safeBookName} ${chapterNum}:${v.verse} (${versionCode})`,
-        v.verse
+        v.verse,
+        'verse'
       );
     },
     [safeBookName, chapterNum, versionCode]
@@ -772,17 +852,14 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
               <TouchableOpacity onPress={() => setShowVersions(true)} style={styles.headerIconBtn}>
                 <Text style={{ color: '#007AFF', fontWeight: '900' }}>{versionCode}</Text>
               </TouchableOpacity>
-          
+
               <TouchableOpacity onPress={analyzeChapter} style={styles.headerIconBtn}>
                 <Ionicons name="school-outline" size={22} color="#AF52DE" />
               </TouchableOpacity>
-          
+
               <TouchableOpacity
                 onPress={() => {
-                  const [projectorOpen, setProjectorOpen] = useState(false);
-                  const [projectorIndex, setProjectorIndex] = useState(0);
-                  setProjectorIndex(0);
-                  setProjectorOpen(true);
+                  Alert.alert('Projetor', 'Envie o trecho do componente/tela real da projeção da Bíblia para eu religar corretamente.');
                 }}
                 style={{ paddingHorizontal: 12, paddingVertical: 6 }}
               >
@@ -790,11 +867,11 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
                   Projetor
                 </Text>
               </TouchableOpacity>
-          
+
               <TouchableOpacity onPress={() => setFontSize((p) => clamp(p - 2, 12, 40))} style={styles.headerIconBtn}>
                 <Ionicons name="remove" size={22} color="#007AFF" />
               </TouchableOpacity>
-          
+
               <TouchableOpacity onPress={() => setFontSize((p) => clamp(p + 2, 12, 40))} style={styles.headerIconBtn}>
                 <Ionicons name="add" size={22} color="#007AFF" />
               </TouchableOpacity>
@@ -802,7 +879,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
           ),
         }}
       />
-/read/projector',
+
       <View style={{ flex: 1 }}>
         {loading ? (
           <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
@@ -893,6 +970,8 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
                   { id: 'fallback-kja', code: 'KJA', name: 'KJA' },
                   { id: 'fallback-rv1909', code: 'RV1909', name: 'RV1909' },
                   { id: 'fallback-kougo', code: 'KOUGO', name: 'KOUGO' },
+                  { id: 'fallback-kjv', code: 'KJV', name: 'KJV' },
+                  { id: 'fallback-web', code: 'WEB', name: 'WEB' },
                 ]
             ).map((v) => {
               const active = v.code === versionCode;
@@ -904,7 +983,7 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
                     active ? { backgroundColor: '#007AFF' } : null,
                   ]}
                   onPress={() => {
-                    setBibleVersion(v.code);
+                    setVersionCode(v.code);
                     setShowVersions(false);
                   }}
                 >
@@ -973,9 +1052,6 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
   );
 }
 
-/* =========================
-   STYLES
-========================= */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
 
@@ -994,14 +1070,12 @@ const styles = StyleSheet.create({
     borderTopColor: '#eee',
     paddingTop: 10,
   },
-
   bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
   },
-
   navBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1010,14 +1084,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
   },
-
   navBtnDisabled: { backgroundColor: '#f1f1f1' },
   navText: { color: '#fff', fontWeight: '900', fontSize: 13 },
   navTextDisabled: { color: '#bbb' },
   counterText: { color: '#666', fontSize: 13, fontWeight: '800' },
 
   modal: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 16 },
-
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1026,17 +1098,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-
   modalTitle: { fontSize: 16, fontWeight: '900' },
   modalClose: { color: '#007AFF', fontSize: 16, fontWeight: '900' },
 
-  chapterGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingTop: 14,
-    paddingBottom: 30,
-  },
-
+  chapterGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingTop: 14, paddingBottom: 30 },
   chapterBtn: {
     width: 54,
     height: 54,
@@ -1046,13 +1111,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     margin: 8,
   },
-
   chapterActive: { backgroundColor: '#007AFF' },
   chapterText: { fontSize: 16, fontWeight: '900', color: '#111' },
   chapterActiveText: { color: '#fff' },
 
   aiSafe: { flex: 1, backgroundColor: '#F2F2F7' },
-
   aiHeader: {
     backgroundColor: '#fff',
     borderBottomWidth: 1,
@@ -1063,10 +1126,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-
   aiHeaderBtn: { paddingVertical: 6, paddingRight: 10 },
   aiHeaderText: { color: '#007AFF', fontSize: 16, fontWeight: '900' },
-
   aiHeaderTitle: {
     flex: 1,
     textAlign: 'center',
@@ -1075,7 +1136,6 @@ const styles = StyleSheet.create({
     color: '#111',
     paddingHorizontal: 10,
   },
-
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1085,26 +1145,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     gap: 6,
   },
-
   saveBtnText: { color: '#fff', fontWeight: '900', fontSize: 13 },
 
   aiLoading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   aiBody: { padding: 16, paddingBottom: 30 },
-
-  aiSubject: {
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '900',
-    marginBottom: 14,
-    color: '#111',
-  },
-
-  aiHint: {
-    marginTop: 10,
-    fontSize: 12,
-    color: '#8E8E93',
-    textAlign: 'center',
-  },
+  aiSubject: { textAlign: 'center', fontSize: 18, fontWeight: '900', marginBottom: 14, color: '#111' },
+  aiHint: { marginTop: 10, fontSize: 12, color: '#8E8E93', textAlign: 'center' },
 
   infoCard: {
     flexDirection: 'row',
@@ -1120,21 +1166,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-
   infoBar: { width: 5 },
   infoContent: { flex: 1, padding: 14, paddingVertical: 16 },
   infoHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   infoTitle: { fontSize: 12, fontWeight: '900', letterSpacing: 0.6 },
   infoText: { fontSize: 15, lineHeight: 22, color: '#333', textAlign: 'justify' },
 
-  rawBox: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#eee',
-  },
-
+  rawBox: { backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#eee' },
   rawText: { fontSize: 15, lineHeight: 22, color: '#222' },
 
   centerSafe: {
@@ -1144,27 +1182,8 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#fff',
   },
-
-  centerTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    marginBottom: 10,
-    color: '#111',
-  },
-
-  centerText: {
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-
-  centerBtn: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-
+  centerTitle: { fontSize: 18, fontWeight: '900', marginBottom: 10, color: '#111' },
+  centerText: { color: '#666', textAlign: 'center', marginBottom: 20, lineHeight: 20 },
+  centerBtn: { backgroundColor: '#007AFF', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },
   centerBtnText: { color: '#fff', fontWeight: '900' },
 });
