@@ -2,12 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
-    FlatList,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -69,14 +69,24 @@ export default function HarpaIndex() {
     <SafeAreaView style={styles.container}>
       {/* HERO HEADER */}
       <View style={styles.hero}>
-        <View style={styles.heroBadge}>
-          <Ionicons name="musical-notes" size={18} color="#fff" />
-          <Text style={styles.heroBadgeText}>Harpa Cristã</Text>
-        </View>
+  <View style={styles.heroTopRow}>
+    <TouchableOpacity
+      onPress={() => router.replace('/(tabs)' as any)}
+      style={styles.homeBackBtn}
+      activeOpacity={0.85}
+    >
+      <Ionicons name="chevron-back" size={18} color="#007AFF" />
+      <Text style={styles.homeBackText}>Início</Text>
+    </TouchableOpacity>
 
-        <Text style={styles.heroTitle}>Hinário Completo</Text>
-        <Text style={styles.heroSubtitle}>{HARPA.length} hinos • Offline</Text>
+    <View style={styles.heroBadge}>
+      <Ionicons name="musical-notes" size={18} color="#fff" />
+      <Text style={styles.heroBadgeText}>Harpa Cristã</Text>
+    </View>
+  </View>
 
+  <Text style={styles.heroTitle}>Hinário Completo</Text>
+  <Text style={styles.heroSubtitle}>{HARPA.length} hinos • Offline</Text>
         {/* SEARCH */}
         <View style={styles.searchWrap}>
           <Ionicons name="search" size={18} color="#6B7280" />
@@ -119,7 +129,28 @@ export default function HarpaIndex() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F6F7FB' },
-
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  
+  homeBackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFFCC',
+  },
+  
+  homeBackText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '800',
+    marginLeft: 4,
+  },
   hero: {
     paddingHorizontal: 16,
     paddingTop: 14,

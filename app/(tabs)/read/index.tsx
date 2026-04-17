@@ -87,6 +87,14 @@ const BOOK_MAP: BookItem[] = [
 
 export default function ReadIndexScreen() {
   const router = useRouter();
+<TouchableOpacity
+  onPress={() => router.replace('/(tabs)' as any)}
+  style={styles.homeBackBtn}
+  activeOpacity={0.85}
+>
+  <Ionicons name="chevron-back" size={18} color="#007AFF" />
+  <Text style={styles.homeBackText}>Início</Text>
+</TouchableOpacity>
 
   const OLD_TESTAMENT = useMemo(
     () => BOOK_MAP.filter((b) => b.id <= 39),
@@ -155,6 +163,21 @@ export default function ReadIndexScreen() {
 }
 
 const styles = StyleSheet.create({
+  homeBackBtn: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: 10,
+  paddingVertical: 6,
+  borderRadius: 10,
+  backgroundColor: '#FFFFFFCC',
+},
+
+homeBackText: {
+  color: '#007AFF',
+  fontSize: 14,
+  fontWeight: '800',
+  marginLeft: 4,
+},
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',

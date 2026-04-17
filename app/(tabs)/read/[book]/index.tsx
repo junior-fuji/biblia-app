@@ -786,7 +786,22 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
           ),
         }}
       />
-
+<TouchableOpacity
+  onPress={() =>
+    router.push({
+      pathname: '/read/projector',
+      params: {
+        book: String(bookId),
+        chapter: String(chapterNum),
+        version: versionCode,
+      },
+    } as any)
+  }
+  style={styles.projectorBtnInline}
+>
+  <Ionicons name="tv-outline" size={16} color="#fff" />
+  <Text style={styles.projectorBtnInlineText}>Projetor</Text>
+</TouchableOpacity>
       <View style={{ flex: 1 }}>
         {loading ? (
           <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
@@ -960,7 +975,22 @@ Se não souber algum campo, preencha com string curta explicando a limitação.
 /* =========================
    STYLES
 ========================= */
-const styles = StyleSheet.create({
+const styles = StyleSheet.create({projectorBtnInline: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#111827',
+  paddingHorizontal: 10,
+  paddingVertical: 7,
+  borderRadius: 10,
+  marginHorizontal: 4,
+},
+
+projectorBtnInlineText: {
+  color: '#fff',
+  fontWeight: '800',
+  fontSize: 12,
+  marginLeft: 6,
+},
   container: { flex: 1, backgroundColor: '#fff' },
 
   headerTitleContainer: { flexDirection: 'row', alignItems: 'center' },
