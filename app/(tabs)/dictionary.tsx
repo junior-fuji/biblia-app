@@ -234,9 +234,9 @@ export default function DictionaryScreen() {
       });
 
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((body as any)?.error || `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`);
 
-      const content: string = (body as any)?.choices?.[0]?.message?.content ?? (body as any)?.output_text ?? '';
+      const content: string = body?.choices?.[0]?.message?.content ?? body?.output_text ?? '';
       const maybeJson = extractJsonObject(String(content));
 
       if (maybeJson) {
