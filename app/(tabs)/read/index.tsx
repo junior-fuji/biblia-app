@@ -7,7 +7,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -119,23 +119,19 @@ export default function ReadIndexScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity
-            onPress={() => router.replace('/(tabs)' as any)}
-            style={styles.homeBackBtn}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="chevron-back" size={18} color="#007AFF" />
-            <Text style={styles.homeBackText}>Início</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          onPress={() => router.replace('/(tabs)' as any)}
+          style={styles.homeBackBtn}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="chevron-back" size={18} color="#007AFF" />
+          <Text style={styles.homeBackText}>Início</Text>
+        </TouchableOpacity>
 
-        <View style={styles.headerCenter}>
-          <Ionicons name="book" size={26} color="#007AFF" />
+        <View style={styles.headerTitleWrap}>
+          <Ionicons name="book" size={24} color="#007AFF" />
           <Text style={styles.title}>Bíblia Sagrada</Text>
         </View>
-
-        <View style={styles.headerRight} />
       </View>
 
       <View style={styles.searchWrap}>
@@ -191,9 +187,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F2F7' },
 
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 12,
@@ -202,35 +195,15 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E5EA',
   },
 
-  headerLeft: {
-    minWidth: 92,
-  },
-
-  headerCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-  },
-
-  headerRight: {
-    minWidth: 92,
-  },
-
-  title: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111',
-    marginLeft: 10,
-  },
-
   homeBackBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
-    backgroundColor: '#FFFFFFCC',
+    backgroundColor: '#F2F7FF',
+    marginBottom: 12,
   },
 
   homeBackText: {
@@ -238,6 +211,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     marginLeft: 4,
+  },
+
+  headerTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  title: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#111',
+    marginLeft: 10,
   },
 
   searchWrap: {
