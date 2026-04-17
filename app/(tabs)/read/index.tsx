@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  FlatList,
+  SectionList,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -16,7 +17,7 @@ type BookItem = {
   abbrev: string;
 };
 
-const BOOK_MAP: BookItem[] = [
+const OLD_TESTAMENT: BookItem[] = [
   { id: 1, name: 'Gênesis', abbrev: 'Gn' },
   { id: 2, name: 'Êxodo', abbrev: 'Êx' },
   { id: 3, name: 'Levítico', abbrev: 'Lv' },
@@ -56,6 +57,9 @@ const BOOK_MAP: BookItem[] = [
   { id: 37, name: 'Ageu', abbrev: 'Ag' },
   { id: 38, name: 'Zacarias', abbrev: 'Zc' },
   { id: 39, name: 'Malaquias', abbrev: 'Ml' },
+];
+
+const NEW_TESTAMENT: BookItem[] = [
   { id: 40, name: 'Mateus', abbrev: 'Mt' },
   { id: 41, name: 'Marcos', abbrev: 'Mc' },
   { id: 42, name: 'Lucas', abbrev: 'Lc' },
@@ -87,156 +91,243 @@ const BOOK_MAP: BookItem[] = [
 
 export default function ReadIndexScreen() {
   const router = useRouter();
-<TouchableOpacity
-  onPress={() => router.replace('/(tabs)' as any)}
-  style={styles.homeBackBtn}
-  activeOpacity={0.85}
->
-  <Ionicons name="chevron-back" size={18} color="#007AFF" />
-  <Text style={styles.homeBackText}>Início</Text>
-</TouchableOpacity>
+  const [query, setQuery] = useState('');
 
-  const OLD_TESTAMENT = useMemo(
-    () => BOOK_MAP.filter((b) => b.id <= 39),
-    []
-  );
+  const sections = useMemo(() => {
+    const q = query.trim().toLowerCase();
 
-  const NEW_TESTAMENT = useMemo(
-    () => BOOK_MAP.filter((b) => b.id >= 40),
-    []
-  );
+    const filterBooks = (books: BookItem[]) =>
+      !q
+        ? books
+        : books.filter(
+            (book) =>
+              book.name.toLowerCase().includes(q) ||
+              book.abbrev.toLowerCase().includes(q) ||
+              String(book.id).includes(q)
+          );
 
-  function openBook(bookId: number) {
-    router.push(`/read/${bookId}?chapter=1&returnTo=/(tabs)/read` as any);
-  }
+    return [
+      { title: 'ANTIGO TESTAMENTO', data: filterBooks(OLD_TESTAMENT) },
+      { title: 'NOVO TESTAMENTO', data: filterBooks(NEW_TESTAMENT) },
+    ].filter((section) => section.data.length > 0);
+  }, [query]);
 
-  function renderBook({ item }: { item: BookItem }) {
-    return (
-      <TouchableOpacity
-        style={styles.bookCard}
-        onPress={() => openBook(item.id)}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.bookAbbrev}>{item.abbrev}</Text>
-        <Text style={styles.bookName} numberOfLines={1}>
-          {item.name}
-        </Text>
-      </TouchableOpacity>
-    );
-  }
-
-  function renderSection(title: string, data: BookItem[]) {
-    return (
-      <View style={styles.sectionBlock}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        <FlatList
-          data={data}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderBook}
-          numColumns={2}
-          scrollEnabled={false}
-        />
-      </View>
-    );
-  }
+  const openBook = (book: BookItem) => {
+    router.push(`/(tabs)/read/${book.id}` as any);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Ionicons name="book" size={26} color="#007AFF" />
-        <Text style={styles.title}>Bíblia Sagrada</Text>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity
+            onPress={() => router.replace('/(tabs)' as any)}
+            style={styles.homeBackBtn}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="chevron-back" size={18} color="#007AFF" />
+            <Text style={styles.homeBackText}>Início</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.headerCenter}>
+          <Ionicons name="book" size={26} color="#007AFF" />
+          <Text style={styles.title}>Bíblia Sagrada</Text>
+        </View>
+
+        <View style={styles.headerRight} />
       </View>
 
-      <FlatList
-        data={[{ key: 'content' }]}
-        keyExtractor={(item) => item.key}
-        renderItem={() => (
-          <View style={styles.content}>
-            {renderSection('ANTIGO TESTAMENTO', OLD_TESTAMENT)}
-            {renderSection('NOVO TESTAMENTO', NEW_TESTAMENT)}
-          </View>
-        )}
+      <View style={styles.searchWrap}>
+        <Ionicons name="search" size={18} color="#8E8E93" />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Buscar livro"
+          placeholderTextColor="#8E8E93"
+          style={styles.searchInput}
+        />
+      </View>
+
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => String(item.id)}
+        contentContainerStyle={styles.listContent}
+        stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
+        renderSectionHeader={({ section }) => (
+          <Text style={styles.sectionTitle}>{section.title}</Text>
+        )}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.bookCard}
+            activeOpacity={0.85}
+            onPress={() => openBook(item)}
+          >
+            <View style={styles.bookBadge}>
+              <Text style={styles.bookBadgeText}>{item.abbrev}</Text>
+            </View>
+
+            <View style={styles.bookInfo}>
+              <Text style={styles.bookName}>{item.name}</Text>
+              <Text style={styles.bookMeta}>Livro {item.id}</Text>
+            </View>
+
+            <Ionicons name="chevron-forward" size={18} color="#B0B0B0" />
+          </TouchableOpacity>
+        )}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="search" size={28} color="#B0B0B0" />
+            <Text style={styles.emptyText}>Nenhum livro encontrado</Text>
+          </View>
+        }
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  homeBackBtn: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  paddingHorizontal: 10,
-  paddingVertical: 6,
-  borderRadius: 10,
-  backgroundColor: '#FFFFFFCC',
-},
-
-homeBackText: {
-  color: '#007AFF',
-  fontSize: 14,
-  fontWeight: '800',
-  marginLeft: 4,
-},
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
+  container: { flex: 1, backgroundColor: '#F2F2F7' },
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+
+  headerLeft: {
+    minWidth: 92,
+  },
+
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+  },
+
+  headerRight: {
+    minWidth: 92,
   },
 
   title: {
-    fontSize: 22,
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111',
+    marginLeft: 10,
+  },
+
+  homeBackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFFCC',
+  },
+
+  homeBackText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '800',
+    marginLeft: 4,
+  },
+
+  searchWrap: {
+    marginHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    color: '#111',
+    fontSize: 15,
+  },
+
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#6B7280',
+    marginTop: 14,
+    marginBottom: 10,
+    letterSpacing: 0.8,
+  },
+
+  bookCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ECECEC',
+  },
+
+  bookBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#007AFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+
+  bookBadgeText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+
+  bookInfo: {
+    flex: 1,
+  },
+
+  bookName: {
+    fontSize: 16,
     fontWeight: '800',
     color: '#111',
   },
 
-  content: {
-    paddingHorizontal: 16,
-    paddingBottom: 40,
+  bookMeta: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#6B7280',
   },
 
-  sectionBlock: {
-    marginTop: 8,
-  },
-
-  sectionTitle: {
-    marginTop: 20,
-    marginBottom: 12,
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#8E8E93',
-    letterSpacing: 1,
-  },
-
-  bookCard: {
-    flex: 1,
-    backgroundColor: '#F4F6F8',
-    margin: 6,
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
+  emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 40,
   },
 
-  bookAbbrev: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#007AFF',
-  },
-
-  bookName: {
-    fontSize: 13,
-    marginTop: 4,
-    textAlign: 'center',
+  emptyText: {
+    marginTop: 10,
+    fontSize: 15,
+    color: '#6B7280',
     fontWeight: '600',
-    color: '#333',
   },
 });
