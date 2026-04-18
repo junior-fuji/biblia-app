@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -36,6 +37,12 @@ type DictionaryResult = {
   application?: string;
 };
 
+type VersionRow = {
+  id: string;
+  code: string;
+  name: string;
+};
+
 function extractJsonObject(text: string): string | null {
   if (!text) return null;
   const first = text.indexOf('{');
@@ -51,6 +58,7 @@ function getDictionaryLanguage(versionCode: string) {
     code.includes('RVR') ||
     code.includes('RV') ||
     code.includes('REINA') ||
+    code.includes('RV1909') ||
     code.includes('ESPA') ||
     code.includes('SPAN')
   ) {
@@ -193,9 +201,27 @@ function InfoCard({
   );
 }
 
+async function fetchVersionsSafe(): Promise<VersionRow[]> {
+  const sb = getSupabaseOrNull();
+  if (!sb) return [];
+
+  const { data, error } = await sb
+    .from('bible_versions')
+    .select('id, code, name')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true });
+
+  if (error) {
+    console.log('FETCH_VERSIONS_DICTIONARY_ERROR', error);
+    return [];
+  }
+
+  return (data ?? []) as VersionRow[];
+}
+
 export default function DictionaryScreen() {
   const { settings } = useSettings();
-  const versionCode = useMemo(() => String(settings?.bibleVersion || 'ARA'), [settings?.bibleVersion]);
+  const settingsVersion = useMemo(() => String(settings?.bibleVersion || 'ARA').toUpperCase(), [settings?.bibleVersion]);
 
   const [term, setTerm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -203,6 +229,41 @@ export default function DictionaryScreen() {
   const [result, setResult] = useState<DictionaryResult | null>(null);
   const [rawText, setRawText] = useState('');
   const [searchedTerm, setSearchedTerm] = useState('');
+
+  const [versionCode, setVersionCode] = useState(settingsVersion);
+  const [versions, setVersions] = useState<VersionRow[]>([]);
+  const [showVersions, setShowVersions] = useState(false);
+
+  React.useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      const data = await fetchVersionsSafe();
+      if (!alive) return;
+
+      if (data.length > 0) {
+        setVersions(data);
+        if (!data.some((v) => v.code === versionCode)) {
+          setVersionCode(data[0].code);
+        }
+      } else {
+        setVersions([
+          { id: 'fallback-ara', code: 'ARA', name: 'ARA' },
+          { id: 'fallback-arc', code: 'ARC', name: 'ARC' },
+          { id: 'fallback-acf', code: 'ACF', name: 'ACF' },
+          { id: 'fallback-nvi', code: 'NVI', name: 'NVI' },
+          { id: 'fallback-rv1909', code: 'RV1909', name: 'RV1909' },
+          { id: 'fallback-kougo', code: 'KOUGO', name: 'KOUGO' },
+          { id: 'fallback-kjv', code: 'KJV', name: 'KJV' },
+          { id: 'fallback-web', code: 'WEB', name: 'WEB' },
+        ]);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [versionCode]);
 
   async function handleSearch() {
     const termTitle = term.trim();
@@ -234,9 +295,13 @@ export default function DictionaryScreen() {
       });
 
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`);
+      if (!res.ok) throw new Error((body as any)?.error || `HTTP ${res.status}`);
 
-      const content: string = body?.choices?.[0]?.message?.content ?? body?.output_text ?? '';
+      const content: string =
+        (body as any)?.choices?.[0]?.message?.content ??
+        (body as any)?.output_text ??
+        '';
+
       const maybeJson = extractJsonObject(String(content));
 
       if (maybeJson) {
@@ -289,6 +354,7 @@ export default function DictionaryScreen() {
         source: 'dictionary',
         title: `Dicionário: ${searchedTerm}`,
         term: searchedTerm,
+        version_code: versionCode,
         analysis: result,
         raw: rawText || null,
         created_at: new Date().toISOString(),
@@ -321,7 +387,12 @@ export default function DictionaryScreen() {
           </View>
 
           <Text style={styles.headerTitle}>Termos e conceitos</Text>
-          <Text style={styles.headerSubtitle}>Versão de referência: {versionCode}</Text>
+          <Text style={styles.headerSubtitle}>Versão atual: {versionCode}</Text>
+
+          <TouchableOpacity onPress={() => setShowVersions(true)} style={styles.versionChip}>
+            <Text style={styles.versionChipText}>{versionCode}</Text>
+            <Ionicons name="chevron-down" size={16} color="#2563EB" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.searchBox}>
@@ -395,6 +466,40 @@ export default function DictionaryScreen() {
             </View>
           ) : null}
         </ScrollView>
+
+        <Modal visible={showVersions} animationType="slide" onRequestClose={() => setShowVersions(false)}>
+          <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Escolha a versão</Text>
+              <TouchableOpacity onPress={() => setShowVersions(false)}>
+                <Text style={styles.modalClose}>Fechar</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 30 }}>
+              {versions.map((item) => {
+                const active = item.code === versionCode;
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    onPress={() => {
+                      setVersionCode(item.code);
+                      setShowVersions(false);
+                    }}
+                    style={[styles.versionItem, active && styles.versionItemActive]}
+                  >
+                    <Text style={[styles.versionItemCode, active && styles.versionItemCodeActive]}>
+                      {item.code}
+                    </Text>
+                    <Text style={[styles.versionItemName, active && styles.versionItemNameActive]}>
+                      {item.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </SafeAreaView>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -438,6 +543,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6B7280',
     fontWeight: '600',
+  },
+
+  versionChip: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+
+  versionChipText: {
+    color: '#2563EB',
+    fontSize: 13,
+    fontWeight: '900',
+    marginRight: 6,
   },
 
   searchBox: {
@@ -593,5 +716,65 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: '#222',
+  },
+
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+
+  modalHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#111',
+  },
+
+  modalClose: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#007AFF',
+  },
+
+  versionItem: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: 10,
+  },
+
+  versionItemActive: {
+    backgroundColor: '#007AFF',
+  },
+
+  versionItemCode: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#111',
+  },
+
+  versionItemCodeActive: {
+    color: '#fff',
+  },
+
+  versionItemName: {
+    marginTop: 4,
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+
+  versionItemNameActive: {
+    color: '#EAF2FF',
   },
 });

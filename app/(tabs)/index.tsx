@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Image,
   Platform,
   ScrollView,
   StatusBar,
@@ -11,8 +12,8 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
   useWindowDimensions,
+  View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -173,7 +174,7 @@ export default function HomeScreen() {
   const [greeting, setGreeting] = useState('Graça e Paz');
   const [quickQuery, setQuickQuery] = useState('');
   const [profileName, setProfileName] = useState<string>('');
-
+  const [avatarUrl, setAvatarUrl] = useState<string>('');
   const isWeb = Platform.OS === 'web';
   const isDesktop = isWeb && width >= 1100;
   const isTablet = isWeb && width >= 760 && width < 1100;
@@ -246,44 +247,49 @@ export default function HomeScreen() {
 
   useEffect(() => {
     let mounted = true;
-
+  
     async function loadProfile() {
       const sb = getSupabaseOrNull();
       const userId = session?.user?.id;
-
+  
       if (!sb || !userId) {
         setProfileName('');
+        setAvatarUrl('');
         return;
       }
-
+  
       try {
         const { data, error } = await sb
           .from('profiles')
-          .select('name')
+          .select('name, avatar_url')
           .eq('id', userId)
           .maybeSingle();
-
+  
         if (!mounted) return;
-
+  
         if (error) {
           console.log('LOAD_PROFILE_HOME_ERROR', error);
           setProfileName('');
+          setAvatarUrl('');
           return;
         }
-
+  
         setProfileName(String(data?.name ?? '').trim());
+        setAvatarUrl(String(data?.avatar_url ?? '').trim());
       } catch (e) {
         if (!mounted) return;
         console.log('LOAD_PROFILE_HOME_FATAL', e);
         setProfileName('');
+        setAvatarUrl('');
       }
     }
-
-    loadProfile();
-
+  
+    void loadProfile();
+  
     return () => {
       mounted = false;
     };
+  
   }, [session?.user?.id]);
 
   const displayName = useMemo(() => {
@@ -297,7 +303,7 @@ export default function HomeScreen() {
 
     return base.charAt(0).toUpperCase() + base.slice(1);
   }, [profileName, session]);
-
+  
   const avatarLabel = useMemo(() => {
     const source = profileName || session?.user?.email || 'US';
     const cleaned = source.replace(/[^a-zA-Z]/g, '').toUpperCase();
@@ -346,14 +352,20 @@ export default function HomeScreen() {
             </View>
 
             <TouchableOpacity
-              style={styles.avatar}
-              onPress={() => router.push('/settings')}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel="Abrir configurações"
-            >
-              <Text style={styles.avatarText}>{avatarLabel}</Text>
-            </TouchableOpacity>
+  onPress={() => router.push('/settings' as any)}
+  activeOpacity={0.8}
+  accessibilityRole="button"
+  accessibilityLabel="Abrir configurações"
+  style={styles.avatarButton}
+>
+  <View style={styles.avatar}>
+    {avatarUrl ? (
+      <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+    ) : (
+      <Text style={styles.avatarText}>{avatarLabel}</Text>
+    )}
+  </View>
+</TouchableOpacity>
           </View>
 
           <View style={[styles.heroWrap, isDesktop && styles.heroWrapDesktop]}>
@@ -502,18 +514,29 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  avatarButton: {
+    borderRadius: 24,
+  },
+  
   avatar: {
     width: 46,
     height: 46,
     borderRadius: 23,
-    backgroundColor: '#E5E7EB',
-    justifyContent: 'center',
+    backgroundColor: '#007AFF',
     alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
-
+  
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  
   avatarText: {
-    fontWeight: '800',
-    color: '#4B5563',
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '900',
   },
 
   heroWrap: {

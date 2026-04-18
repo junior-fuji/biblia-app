@@ -119,7 +119,7 @@ function getStudyTag(study: Study): {
     }
   }
 
-  return { key: 'unknown', label: 'Estudo', fg: '#666', bg: '#F2F2F7' };
+  return { key: 'unknown', label: 'Estudo', fg: '#5E5CE6', bg: '#EEF0FF' };
 }
 
 function buildManualSketchEnvelope(title?: string) {
@@ -381,155 +381,84 @@ export default function StudiesScreen() {
   };
 
   const openStudy = (study: Study) => {
-    const tag = getStudyTag(study);
-  
-    if (tag.key === 'manual') {
-      router.push(`/sketch/${study.id}` as any);
-      <View style={[styles.tagPill, { backgroundColor: tag.bg }]}>
-      <Text style={[styles.tagText, { color: tag.fg }]}>{tag.label}</Text>
-    </View>
-      return;
-    }
-    setSelectedStudy(study);
-    setModalVisible(true);
-    setIsEditing(false);
+  const tag = getStudyTag(study);
 
-    setOpenRef(null);
-    setParsedEnvelope(null);
-    setParsedOld(null);
-    setParsedKind('plain');
+  if (tag.key === 'manual') {
+    router.push(`/sketch/${study.id}` as any);
+    return;
+  }
 
-    let theme = study.title || 'Sem Título';
-    let history = '';
-    let exegesis = '';
-    let theology = '';
-    let application = '';
+  setSelectedStudy(study);
+  setModalVisible(true);
+  setIsEditing(false);
 
-    const content = String(study.content || '').trim();
+  setOpenRef(null);
+  setParsedEnvelope(null);
+  setParsedOld(null);
+  setParsedKind('plain');
 
-    if (content.startsWith('{')) {
-      const obj = safeParseJson(content);
+  let theme = study.title || 'Sem Título';
+  let history = '';
+  let exegesis = '';
+  let theology = '';
+  let application = '';
 
-      if (isEnvelope(obj)) {
-        setParsedKind('envelope');
-        setParsedEnvelope(obj);
+  const content = String(study.content || '').trim();
 
-        const a = obj.analysis || {};
-        theme = a.theme || obj.title || study.title || theme;
-        history = a.history || '';
-        exegesis = a.exegesis || '';
-        theology = a.theology || '';
-        application = a.application || '';
+  if (content.startsWith('{')) {
+    const obj = safeParseJson(content);
 
-        const r = obj.ref;
-        if (r && typeof r.book_id === 'number' && typeof r.chapter === 'number') {
-          setOpenRef({
-            book_id: r.book_id,
-            chapter: r.chapter,
-            verse: typeof r.verse === 'number' ? r.verse : null,
-            label: r.label || study.reference || undefined,
-          });
-        }
-      } else if (isOldJson(obj)) {
-        setParsedKind('oldjson');
-        setParsedOld(obj);
+    if (isEnvelope(obj)) {
+      setParsedKind('envelope');
+      setParsedEnvelope(obj);
 
-        theme = obj.theme || study.title || theme;
-        history = obj.history || '';
-        exegesis = obj.exegesis || '';
-        theology = obj.theology || '';
-        application = obj.application || '';
-      } else {
-        setParsedKind('plain');
-        exegesis = study.content || '';
+      const a = obj.analysis || {};
+      theme = a.theme || obj.title || study.title || theme;
+      history = a.history || '';
+      exegesis = a.exegesis || '';
+      theology = a.theology || '';
+      application = a.application || '';
+
+      const r = obj.ref;
+      if (r && typeof r.book_id === 'number' && typeof r.chapter === 'number') {
+        setOpenRef({
+          book_id: r.book_id,
+          chapter: r.chapter,
+          verse: typeof r.verse === 'number' ? r.verse : null,
+          label: r.label || study.reference || undefined,
+        });
       }
-    } else {
-      setParsedKind('plain');
-      exegesis = study.content || '';
-    }
-    type StudySourceTag =
-    | 'ai_chapter'
-    | 'ai_verse'
-    | 'dictionary'
-    | 'diary'
-    | 'manual'
-    | 'unknown';
-  
-  function getStudyTag(study: Study): {
-    key: StudySourceTag;
-    label: string;
-    fg: string;
-    bg: string;
-  } {
-    const raw = String(study.content || '').trim();
-  
-    if (!raw.startsWith('{')) {
-      return { key: 'unknown', label: 'Estudo', fg: '#666', bg: '#F2F2F7' };
-    }
-  
-    let obj: any = null;
-    try {
-      obj = JSON.parse(raw);
-    } catch {
-      return { key: 'unknown', label: 'Estudo', fg: '#666', bg: '#F2F2F7' };
-    }
-  
-    if (obj?.kind === 'ai_bible_study' && obj?.type === 'chapter') {
-      return { key: 'ai_chapter', label: 'IA • Capítulo', fg: '#AF52DE', bg: '#F3E5F5' };
-    }
-  
-    if (obj?.kind === 'ai_bible_study' && obj?.type === 'verse') {
-      return { key: 'ai_verse', label: 'IA • Versículo', fg: '#007AFF', bg: '#E3F2FD' };
-    }
-  
-    if (obj?.source === 'dictionary' || obj?.type === 'dictionary') {
-      return { key: 'dictionary', label: 'Dicionário', fg: '#FF9500', bg: '#FFF3E0' };
-    }
-  
-    if (obj?.source === 'diary' || obj?.type === 'personal_study') {
-      return { key: 'diary', label: 'Diário', fg: '#34C759', bg: '#E8F5E9' };
-    }
-  
-    if (obj?.source === 'manual' || obj?.type === 'sketch' || obj?.format === 'editable_study') {
-      return { key: 'manual', label: 'Esboço', fg: '#FF6B00', bg: '#FFF1E6' };
-    }
-  
-    return { key: 'unknown', label: 'Estudo', fg: '#666', bg: '#F2F2F7' };
-  }
-  
-  function buildManualSketchEnvelope(title?: string) {
-    return JSON.stringify({
-      version: 1,
-      type: 'sketch',
-      source: 'manual',
-      format: 'editable_study',
-      title: title || 'Novo Estudo',
-      sections: {
-        theme: '',
-        exegesis: '',
-        context: '',
-        theology: '',
-        application: '',
-      },
-      created_at: new Date().toISOString(),
-    });
-  }
-    if (study.observation) {
-      exegesis = exegesis ? `${exegesis}\n\n[Obs]: ${study.observation}` : study.observation;
-    }
-    if (study.application) {
-      application = application ? `${application}\n\n${study.application}` : study.application;
-    }
-    if (study.prayer) {
-      application = application ? `${application}\n\n🙏 Oração: ${study.prayer}` : `🙏 Oração: ${study.prayer}`;
-    }
+    } else if (isOldJson(obj)) {
+      setParsedKind('oldjson');
+      setParsedOld(obj);
 
-    setEditTheme(String(theme || ''));
-    setEditHistory(String(history || ''));
-    setEditExegesis(String(exegesis || ''));
-    setEditTheology(String(theology || ''));
-    setEditApplication(String(application || ''));
-  };
+      theme = obj.theme || study.title || theme;
+      history = obj.history || '';
+      exegesis = obj.exegesis || '';
+      theology = obj.theology || '';
+      application = obj.application || '';
+    
+  } else {
+    setParsedKind('plain');
+    exegesis = study.content || '';
+  }
+  exegesis ? `${exegesis}\n\n[Obs]: ${study.observation}` : study.observation;
+  }
+
+  if (study.application) {
+    application = application ? `${application}\n\n${study.application}` : study.application;
+  }
+
+  if (study.prayer) {
+    application = application ? `${application}\n\n🙏 Oração: ${study.prayer}` : `🙏 Oração: ${study.prayer}`;
+  }
+
+  setEditTheme(String(theme || ''));
+  setEditHistory(String(history || ''));
+  setEditExegesis(String(exegesis || ''));
+  setEditTheology(String(theology || ''));
+  setEditApplication(String(application || ''));
+};
 
   const canOpenBible = useMemo(() => !!openRef?.book_id && !!openRef?.chapter, [openRef]);
 
@@ -875,51 +804,69 @@ export default function StudiesScreen() {
       </View>
 
       {loading || !initialized ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#AF52DE" />
-        </View>
-      ) : (
-        <FlatList
-          data={studies}
-          keyExtractor={(item) => toStudyId(item.id)}
-          contentContainerStyle={{ padding: 20 }}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="document-text-outline" size={60} color="#ddd" />
-              <Text style={styles.emptyText}>{emptyMessage}</Text>
+  <View style={styles.center}>
+    <ActivityIndicator size="large" color="#AF52DE" />
+  </View>
+) : (
+  <FlatList
+    data={studies}
+    keyExtractor={(item) => toStudyId(item.id)}
+    contentContainerStyle={{ padding: 20 }}
+    ListEmptyComponent={
+      <View style={styles.emptyContainer}>
+        <Ionicons name="document-text-outline" size={60} color="#ddd" />
+        <Text style={styles.emptyText}>{emptyMessage}</Text>
+      </View>
+    }
+    renderItem={({ item }) => {
+      const tag = getStudyTag(item);
+
+      return (
+        <TouchableOpacity style={styles.card} onPress={() => openStudy(item)}>
+          <View style={[styles.cardIcon, { backgroundColor: tag.fg }]}>
+            <Ionicons
+              name={
+                tag.key === 'dictionary'
+                  ? 'library-outline'
+                  : tag.key === 'ai_chapter'
+                  ? 'school-outline'
+                  : tag.key === 'ai_verse'
+                  ? 'flash-outline'
+                  : tag.key === 'diary'
+                  ? 'journal-outline'
+                  : tag.key === 'manual'
+                  ? 'create-outline'
+                  : 'document-text-outline'
+              }
+              size={20}
+              color="#fff"
+            />
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle} numberOfLines={1}>
+              {item.title || 'Sem Título'}
+            </Text>
+
+            <View style={[styles.tagPill, { backgroundColor: tag.bg }]}>
+              <Text style={[styles.tagText, { color: tag.fg }]}>{tag.label}</Text>
             </View>
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.card} onPress={() => openStudy(item)}>
-              <View style={styles.cardIcon}>
-                <Ionicons name="document-text" size={24} color="#fff" />
-              </View>
 
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle} numberOfLines={1}>
-                  {item.title || 'Sem Título'}
-                </Text>
+            {!!item.reference && (
+              <Text style={styles.cardRef} numberOfLines={1}>
+                {item.reference}
+              </Text>
+            )}
 
-                <Text style={styles.cardDate}>
-                  {new Date(item.created_at).toLocaleDateString()}
-                </Text>
-
-                {!!item.reference && (
-                  <Text style={styles.cardRef} numberOfLines={1}>
-                    {item.reference}
-                  </Text>
-                )}
-
-                <Text style={styles.sourceTag}>
-                  {item.source === 'supabase' ? 'Nuvem' : 'Local'}
-                </Text>
-              </View>
-
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </TouchableOpacity>
-          )}
-        />
-      )}
+            <Text style={styles.cardDate}>
+              {item.created_at}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      );
+    }}
+  />
+)}
 
       <Modal visible={modalVisible} animationType="slide" onRequestClose={closeModal}>
         <KeyboardAvoidingView

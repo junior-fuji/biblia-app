@@ -30,7 +30,7 @@ export default function TabLayout() {
         options={{
           title: 'Diário',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="book-outline" color={color} size={size} />
+            <Ionicons name="journal-outline" color={color} size={size} />
           ),
         }}
       />

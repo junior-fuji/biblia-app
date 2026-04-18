@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
 
   homeBackText: {
     color: '#007AFF',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '800',
     marginLeft: 4,
   },
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     marginTop: 20,
     marginBottom: 12,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
     color: '#8E8E93',
     letterSpacing: 1,
@@ -281,14 +281,14 @@ const styles = StyleSheet.create({
   },
 
   bookAbbrev: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '900',
     color: '#007AFF',
     marginBottom: 6,
   },
 
   bookName: {
-    fontSize: 14,
+    fontSize:16,
     fontWeight: '700',
     color: '#111',
   },
