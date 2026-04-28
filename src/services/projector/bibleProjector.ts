@@ -1,10 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Router } from 'expo-router';
+import { Platform } from 'react-native';
 
 export type ProjectorSlideKind =
   | 'verse'
   | 'bible-title'
-  | 'bible-verse';
+  | 'bible-verse'
+  | 'event'
+  | 'sketch'
+  | 'custom'
+  | 'blank';
 
 export type ProjectorSlide = {
   id: string;
@@ -27,13 +32,13 @@ export type Verse = {
   text: string;
 };
 
-type StoredProjectorPayload = {
+export type StoredProjectorPayload = {
   title: string;
   subtitle?: string;
   slides: ProjectorSlide[];
 };
 
-const PROJECTOR_STORAGE_KEY = 'BIBLE_PROJECTOR_SLIDES_V1';
+export const PROJECTOR_STORAGE_KEY = 'BIBLE_PROJECTOR_SLIDES_V1';
 
 function normalizeText(value: string): string {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -47,6 +52,33 @@ function normalizeIdPart(value: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
+}
+
+function createDeckId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function getProjectorStorageKey(deckId: string): string {
+  return `${PROJECTOR_STORAGE_KEY}:${deckId}`;
+}
+
+async function setProjectorStorageItem(key: string, value: string) {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.localStorage.setItem(key, value);
+    return;
+  }
+
+  await AsyncStorage.setItem(key, value);
+}
+
+export async function getProjectorStorageItem(
+  key: string,
+): Promise<string | null> {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return window.localStorage.getItem(key);
+  }
+
+  return AsyncStorage.getItem(key);
 }
 
 function validateBibleSlidesInput(
@@ -128,19 +160,18 @@ export function buildBibleSlides(
   return [titleSlide, ...verseSlides];
 }
 
-export async function openBibleProjector(params: {
-  router: Router;
+export async function saveBibleProjectorPayload(params: {
   bookLabel: string;
   chapter: number;
   verses: Verse[];
-}) {
+}): Promise<string> {
   const slides = buildBibleSlides(
     params.bookLabel,
     params.chapter,
     params.verses,
   );
 
-  const deckId = `${Date.now()}`;
+  const deckId = createDeckId();
 
   const payload: StoredProjectorPayload = {
     title: `${params.bookLabel} ${params.chapter}`,
@@ -148,15 +179,47 @@ export async function openBibleProjector(params: {
     slides,
   };
 
-  await AsyncStorage.setItem(
-    `${PROJECTOR_STORAGE_KEY}:${deckId}`,
+  await setProjectorStorageItem(
+    getProjectorStorageKey(deckId),
     JSON.stringify(payload),
   );
 
-  params.router.push({
-    pathname: '/projector/bible' as never,
-    params: {
-      deckId,
-    },
+  return deckId;
+}
+
+export async function loadBibleProjectorPayload(
+  deckId: string,
+): Promise<StoredProjectorPayload | null> {
+  const raw = await getProjectorStorageItem(getProjectorStorageKey(deckId));
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as StoredProjectorPayload;
+
+    if (!parsed || !Array.isArray(parsed.slides)) {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export async function openBibleProjector(params: {
+  router: Router;
+  bookLabel: string;
+  chapter: number;
+  verses: Verse[];
+}) {
+  const deckId = await saveBibleProjectorPayload({
+    bookLabel: params.bookLabel,
+    chapter: params.chapter,
+    verses: params.verses,
   });
+
+  params.router.push(`/projector/bible?deckId=${encodeURIComponent(deckId)}` as never);
 }

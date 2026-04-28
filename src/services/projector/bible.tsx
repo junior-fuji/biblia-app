@@ -1,53 +1,51 @@
-import type { ProjectorSlide } from '@/src/services/projector/bibleProjector';
 import ProjectorScreen from '@/src/services/projector/ProjectorScreen';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+    loadBibleProjectorPayload,
+    StoredProjectorPayload,
+} from '@/src/services/projector/bibleProjector';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
-
-const PROJECTOR_STORAGE_KEY = 'BIBLE_PROJECTOR_SLIDES_V1';
-
-type StoredProjectorPayload = {
-  title: string;
-  subtitle?: string;
-  slides: ProjectorSlide[];
-};
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function BibleProjectorRoute() {
   const router = useRouter();
-  const { deckId } = useLocalSearchParams<{ deckId?: string }>();
+  const params = useLocalSearchParams<{ deckId?: string | string[] }>();
 
   const [loading, setLoading] = useState(true);
   const [payload, setPayload] = useState<StoredProjectorPayload | null>(null);
 
+  const deckId = useMemo(() => {
+    const raw = Array.isArray(params.deckId)
+      ? params.deckId[0]
+      : params.deckId;
+
+    return raw ? String(raw) : null;
+  }, [params.deckId]);
+
   useEffect(() => {
     let mounted = true;
 
-    async function loadSlides() {
+    async function loadPayload() {
+      setLoading(true);
+
       try {
-        const key = deckId
-          ? `${PROJECTOR_STORAGE_KEY}:${deckId}`
-          : PROJECTOR_STORAGE_KEY;
+        if (!deckId) {
+          if (mounted) {
+            setPayload(null);
+          }
 
-        const raw = await AsyncStorage.getItem(key);
-
-        if (!mounted) return;
-
-        if (!raw) {
-          setPayload(null);
           return;
         }
 
-        const parsed = JSON.parse(raw) as StoredProjectorPayload;
+        const loadedPayload = await loadBibleProjectorPayload(deckId);
 
-        if (!Array.isArray(parsed.slides)) {
-          setPayload(null);
+        if (!mounted) {
           return;
         }
 
-        setPayload(parsed);
+        setPayload(loadedPayload);
       } catch (error) {
-        console.log('LOAD_PROJECTOR_ROUTE_ERROR', error);
+        console.log('BIBLE_PROJECTOR_ROUTE_LOAD_ERROR', error);
 
         if (mounted) {
           setPayload(null);
@@ -59,7 +57,7 @@ export default function BibleProjectorRoute() {
       }
     }
 
-    void loadSlides();
+    void loadPayload();
 
     return () => {
       mounted = false;
@@ -72,23 +70,24 @@ export default function BibleProjectorRoute() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" />
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#AF52DE" />
+        <Text style={styles.loadingText}>Carregando projetor...</Text>
       </View>
     );
   }
 
   if (!payload || payload.slides.length === 0) {
     return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 24,
-        }}
-      >
-        <Text>Nenhum slide encontrado para o projetor.</Text>
+      <View style={styles.center}>
+        <Text style={styles.errorTitle}>Projetor indisponível</Text>
+        <Text style={styles.errorText}>
+          Nenhum slide foi encontrado. Volte para a Bíblia e abra o projetor novamente.
+        </Text>
+
+        <TouchableOpacity style={styles.backButton} onPress={handleClose}>
+          <Text style={styles.backButtonText}>Voltar</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -104,3 +103,41 @@ export default function BibleProjectorRoute() {
     />
   );
 }
+
+const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  loadingText: {
+    color: '#fff',
+    marginTop: 12,
+  },
+  errorTitle: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  errorText: {
+    color: '#ccc',
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  backButton: {
+    backgroundColor: '#AF52DE',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  backButtonText: {
+    color: '#fff',
+    fontWeight: '800',
+  },
+});
