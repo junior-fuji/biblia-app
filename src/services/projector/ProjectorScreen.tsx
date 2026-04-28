@@ -17,7 +17,19 @@ export type ProjectorSlide = {
   id: string;
   title?: string;
   content: string;
-  kind?: 'verse' | 'stanza' | 'chorus' | 'custom';
+  kind?:
+    | 'verse'
+    | 'stanza'
+    | 'chorus'
+    | 'custom'
+    | 'bible-title'
+    | 'bible-verse'
+    | 'event'
+    | 'sketch'
+    | 'blank';
+  reference?: string;
+  verseNumber?: number;
+  meta?: Record<string, unknown>;
 };
 
 type Props = {
@@ -46,9 +58,13 @@ function clamp(n: number, min: number, max: number) {
 }
 
 function getBaseFontSize(kind?: ProjectorSlide['kind']) {
+  if (kind === 'bible-title') return 46;
+  if (kind === 'bible-verse') return 38;
   if (kind === 'verse') return 34;
   if (kind === 'stanza') return 34;
-  if (kind === 'chorus') return 34;
+  if (kind === 'chorus') return 36;
+  if (kind === 'event') return 34;
+  if (kind === 'sketch') return 32;
   return 34;
 }
 
@@ -74,23 +90,35 @@ export default function ProjectorScreen({
   const [slideIndex, setSlideIndex] = useState(initialIndex);
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  const safeSlides = useMemo(() => {
+    return Array.isArray(slides) ? slides : [];
+  }, [slides]);
+
+  const lastSlideIndex = useMemo(() => {
+    return Math.max(safeSlides.length - 1, 0);
+  }, [safeSlides.length]);
+
   const isLightTheme = settings.projectorTheme === 'light';
 
   useEffect(() => {
-    setSlideIndex(clamp(initialIndex, 0, Math.max(slides.length - 1, 0)));
-  }, [initialIndex, slides.length]);
+    setSlideIndex(clamp(initialIndex, 0, lastSlideIndex));
+  }, [initialIndex, lastSlideIndex]);
 
-  const currentSlide = slides[slideIndex] ?? null;
-  const canPrevSlide = slideIndex > 0;
-  const canNextSlide = slideIndex < slides.length - 1;
+  useEffect(() => {
+    setSlideIndex((current) => clamp(current, 0, lastSlideIndex));
+  }, [lastSlideIndex]);
+
+  const currentSlide = safeSlides[slideIndex] ?? null;
+  const canPrevSlide = safeSlides.length > 0 && slideIndex > 0;
+  const canNextSlide = safeSlides.length > 0 && slideIndex < safeSlides.length - 1;
 
   const prevSlide = useCallback(() => {
-    setSlideIndex((prev) => Math.max(prev - 1, 0));
-  }, []);
+    setSlideIndex((prev) => clamp(prev - 1, 0, lastSlideIndex));
+  }, [lastSlideIndex]);
 
   const nextSlide = useCallback(() => {
-    setSlideIndex((prev) => Math.min(prev + 1, slides.length - 1));
-  }, [slides.length]);
+    setSlideIndex((prev) => clamp(prev + 1, 0, lastSlideIndex));
+  }, [lastSlideIndex]);
 
   const baseComputedFontSize = useMemo(() => {
     if (typeof baseFontSize === 'number') return baseFontSize;
@@ -98,38 +126,89 @@ export default function ProjectorScreen({
     return getBaseFontSize(currentSlide?.kind);
   }, [baseFontSize, uniformFontSize, currentSlide?.kind]);
 
-  const fontSize = clamp(baseComputedFontSize + manualOffset, MIN_FONT_SIZE, MAX_FONT_SIZE);
+  const fontSize = clamp(
+    baseComputedFontSize + manualOffset,
+    MIN_FONT_SIZE,
+    MAX_FONT_SIZE,
+  );
+
   const lineHeight = Math.round(fontSize * 1.38);
+
+  const decreaseFont = useCallback(() => {
+    setManualOffset((prev) => {
+      const next = prev - STEP;
+      const nextFont = clamp(
+        baseComputedFontSize + next,
+        MIN_FONT_SIZE,
+        MAX_FONT_SIZE,
+      );
+      const currentFont = clamp(
+        baseComputedFontSize + prev,
+        MIN_FONT_SIZE,
+        MAX_FONT_SIZE,
+      );
+
+      if (nextFont === currentFont && currentFont === MIN_FONT_SIZE) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, [baseComputedFontSize]);
+
+  const increaseFont = useCallback(() => {
+    setManualOffset((prev) => {
+      const next = prev + STEP;
+      const nextFont = clamp(
+        baseComputedFontSize + next,
+        MIN_FONT_SIZE,
+        MAX_FONT_SIZE,
+      );
+      const currentFont = clamp(
+        baseComputedFontSize + prev,
+        MIN_FONT_SIZE,
+        MAX_FONT_SIZE,
+      );
+
+      if (nextFont === currentFont && currentFont === MAX_FONT_SIZE) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, [baseComputedFontSize]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
 
     const win = globalThis?.window;
+
     if (!win) return;
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
-        e.preventDefault();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'Enter') {
+        event.preventDefault();
         nextSlide();
       }
 
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
         prevSlide();
       }
 
-      if (e.key === 'PageDown' && onNextGroup) {
-        e.preventDefault();
+      if (event.key === 'PageDown' && onNextGroup) {
+        event.preventDefault();
         onNextGroup();
       }
 
-      if (e.key === 'PageUp' && onPrevGroup) {
-        e.preventDefault();
+      if (event.key === 'PageUp' && onPrevGroup) {
+        event.preventDefault();
         onPrevGroup();
       }
 
-      if (e.key === 'Escape') {
-        e.preventDefault();
+      if (event.key === 'Escape') {
+        event.preventDefault();
+
         if (pickerOpen) {
           setPickerOpen(false);
         } else {
@@ -137,50 +216,45 @@ export default function ProjectorScreen({
         }
       }
 
-      if (e.key === '+' || e.key === '=') {
-        setManualOffset((prev) => {
-          const next = prev + STEP;
-          const nextFont = clamp(baseComputedFontSize + next, MIN_FONT_SIZE, MAX_FONT_SIZE);
-          const currentFont = clamp(baseComputedFontSize + prev, MIN_FONT_SIZE, MAX_FONT_SIZE);
-
-          if (nextFont === currentFont && currentFont === MAX_FONT_SIZE) {
-            return prev;
-          }
-
-          return next;
-        });
+      if (event.key === '+' || event.key === '=') {
+        increaseFont();
       }
 
-      if (e.key === '-' || e.key === '_') {
-        setManualOffset((prev) => {
-          const next = prev - STEP;
-          const nextFont = clamp(baseComputedFontSize + next, MIN_FONT_SIZE, MAX_FONT_SIZE);
-          const currentFont = clamp(baseComputedFontSize + prev, MIN_FONT_SIZE, MAX_FONT_SIZE);
-
-          if (nextFont === currentFont && currentFont === MIN_FONT_SIZE) {
-            return prev;
-          }
-
-          return next;
-        });
+      if (event.key === '-' || event.key === '_') {
+        decreaseFont();
       }
     };
 
     win.addEventListener('keydown', onKeyDown);
     return () => win.removeEventListener('keydown', onKeyDown);
-  }, [baseComputedFontSize, nextSlide, onClose, onNextGroup, onPrevGroup, pickerOpen, prevSlide]);
+  }, [
+    decreaseFont,
+    increaseFont,
+    nextSlide,
+    onClose,
+    onNextGroup,
+    onPrevGroup,
+    pickerOpen,
+    prevSlide,
+  ]);
 
-  function getSlideLabel(slide: ProjectorSlide, index: number) {
-    if (renderSlideLabel) return renderSlideLabel(slide, index);
-    if (slide.title?.trim()) return slide.title;
-    return `Slide ${index + 1}`;
-  }
+  const getSlideLabel = useCallback(
+    (slide: ProjectorSlide, index: number) => {
+      if (renderSlideLabel) return renderSlideLabel(slide, index);
+      if (slide.title?.trim()) return slide.title;
+      if (slide.reference?.trim()) return slide.reference;
+      return `Slide ${index + 1}`;
+    },
+    [renderSlideLabel],
+  );
 
   const colors = useMemo(
     () => ({
       bg: isLightTheme ? '#FFFFFF' : '#000000',
       panel: isLightTheme ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.08)',
-      panelBorder: isLightTheme ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)',
+      panelBorder: isLightTheme
+        ? 'rgba(0,0,0,0.08)'
+        : 'rgba(255,255,255,0.06)',
       mainText: isLightTheme ? '#111111' : '#F8F8F8',
       secondaryText: isLightTheme ? '#374151' : '#d8d8d8',
       mutedText: isLightTheme ? '#6B7280' : '#ffffff99',
@@ -193,7 +267,7 @@ export default function ProjectorScreen({
       buttonText: isLightTheme ? '#111111' : '#ffffffcc',
       buttonDisabled: '#7c7c7c',
     }),
-    [isLightTheme]
+    [isLightTheme],
   );
 
   return (
@@ -205,54 +279,41 @@ export default function ProjectorScreen({
           <Ionicons name="close" size={18} color={colors.mutedText} />
         </TouchableOpacity>
 
-        <View style={styles.topCenter} />
+        <View style={styles.topCenter}>
+          {!!title ? (
+            <Text style={[styles.topTitle, { color: colors.mainText }]} numberOfLines={1}>
+              {title}
+            </Text>
+          ) : null}
+
+          {!!subtitle ? (
+            <Text
+              style={[styles.topSubtitle, { color: colors.mutedText }]}
+              numberOfLines={1}
+            >
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
 
         <View style={styles.topActions}>
-          {slides.length > 0 ? (
+          {safeSlides.length > 0 ? (
             <TouchableOpacity
               onPress={() => setPickerOpen(true)}
               style={[styles.topPickerBtn, { backgroundColor: colors.panel }]}
               activeOpacity={0.85}
             >
-              <Text style={[styles.topPickerText, { color: colors.buttonText }]}>{pickerLabel}</Text>
+              <Text style={[styles.topPickerText, { color: colors.buttonText }]}>
+                {pickerLabel}
+              </Text>
             </TouchableOpacity>
           ) : null}
 
-          <TouchableOpacity
-            onPress={() =>
-              setManualOffset((prev) => {
-                const next = prev - STEP;
-                const nextFont = clamp(baseComputedFontSize + next, MIN_FONT_SIZE, MAX_FONT_SIZE);
-                const currentFont = clamp(baseComputedFontSize + prev, MIN_FONT_SIZE, MAX_FONT_SIZE);
-
-                if (nextFont === currentFont && currentFont === MIN_FONT_SIZE) {
-                  return prev;
-                }
-
-                return next;
-              })
-            }
-            style={styles.topMiniBtn}
-          >
+          <TouchableOpacity onPress={decreaseFont} style={styles.topMiniBtn}>
             <Text style={[styles.control, { color: colors.mutedText }]}>A-</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() =>
-              setManualOffset((prev) => {
-                const next = prev + STEP;
-                const nextFont = clamp(baseComputedFontSize + next, MIN_FONT_SIZE, MAX_FONT_SIZE);
-                const currentFont = clamp(baseComputedFontSize + prev, MIN_FONT_SIZE, MAX_FONT_SIZE);
-
-                if (nextFont === currentFont && currentFont === MAX_FONT_SIZE) {
-                  return prev;
-                }
-
-                return next;
-              })
-            }
-            style={styles.topMiniBtn}
-          >
+          <TouchableOpacity onPress={increaseFont} style={styles.topMiniBtn}>
             <Text style={[styles.control, { color: colors.mutedText }]}>A+</Text>
           </TouchableOpacity>
         </View>
@@ -289,9 +350,18 @@ export default function ProjectorScreen({
                 >
                   {currentSlide.content}
                 </Text>
+
+                {!!currentSlide.reference &&
+                currentSlide.reference !== currentSlide.title ? (
+                  <Text style={[styles.slideReference, { color: colors.mutedText }]}>
+                    {currentSlide.reference}
+                  </Text>
+                ) : null}
               </>
             ) : (
-              <Text style={[styles.emptyText, { color: colors.mainText }]}>Sem conteúdo para projetar</Text>
+              <Text style={[styles.emptyText, { color: colors.mainText }]}>
+                Sem conteúdo para projetar
+              </Text>
             )}
           </View>
         </View>
@@ -319,14 +389,19 @@ export default function ProjectorScreen({
             size={18}
             color={!canPrevSlide ? colors.buttonDisabled : colors.buttonText}
           />
-          <Text style={[styles.navText, { color: !canPrevSlide ? colors.buttonDisabled : colors.buttonText }]}>
+          <Text
+            style={[
+              styles.navText,
+              { color: !canPrevSlide ? colors.buttonDisabled : colors.buttonText },
+            ]}
+          >
             Slide anterior
           </Text>
         </TouchableOpacity>
 
         <View style={styles.counterBlock}>
           <Text style={[styles.counter, { color: colors.mutedText }]}>
-            Slide {slides.length ? slideIndex + 1 : 0} de {slides.length}
+            Slide {safeSlides.length ? slideIndex + 1 : 0} de {safeSlides.length}
           </Text>
         </View>
 
@@ -339,7 +414,12 @@ export default function ProjectorScreen({
           ]}
           disabled={!canNextSlide}
         >
-          <Text style={[styles.navText, { color: !canNextSlide ? colors.buttonDisabled : colors.buttonText }]}>
+          <Text
+            style={[
+              styles.navText,
+              { color: !canNextSlide ? colors.buttonDisabled : colors.buttonText },
+            ]}
+          >
             Próximo slide
           </Text>
           <Ionicons
@@ -352,7 +432,11 @@ export default function ProjectorScreen({
 
       {(onPrevGroup || onNextGroup) && (
         <View style={styles.groupNavBar}>
-          <TouchableOpacity onPress={onPrevGroup} style={styles.groupNavBtn} disabled={!onPrevGroup}>
+          <TouchableOpacity
+            onPress={onPrevGroup}
+            style={styles.groupNavBtn}
+            disabled={!onPrevGroup}
+          >
             <Ionicons
               name="play-skip-back"
               size={18}
@@ -361,18 +445,30 @@ export default function ProjectorScreen({
             <Text
               style={[
                 styles.groupNavText,
-                { color: onPrevGroup ? colors.buttonText : colors.buttonDisabled },
+                {
+                  color: onPrevGroup
+                    ? colors.buttonText
+                    : colors.buttonDisabled,
+                },
               ]}
             >
               {prevGroupLabel}
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={onNextGroup} style={styles.groupNavBtn} disabled={!onNextGroup}>
+          <TouchableOpacity
+            onPress={onNextGroup}
+            style={styles.groupNavBtn}
+            disabled={!onNextGroup}
+          >
             <Text
               style={[
                 styles.groupNavText,
-                { color: onNextGroup ? colors.buttonText : colors.buttonDisabled },
+                {
+                  color: onNextGroup
+                    ? colors.buttonText
+                    : colors.buttonDisabled,
+                },
               ]}
             >
               {nextGroupLabel}
@@ -386,18 +482,41 @@ export default function ProjectorScreen({
         </View>
       )}
 
-      <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
+      <Modal
+        visible={pickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerOpen(false)}
+      >
         <View style={[styles.modalOverlay, { backgroundColor: colors.modalOverlay }]}>
-          <View style={[styles.modalContent, { backgroundColor: colors.modalBg, borderColor: colors.modalBorder }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.modalBorder }]}>
-              <Text style={[styles.modalTitle, { color: colors.mainText }]}>{pickerTitle}</Text>
+          <View
+            style={[
+              styles.modalContent,
+              {
+                backgroundColor: colors.modalBg,
+                borderColor: colors.modalBorder,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.modalHeader,
+                { borderBottomColor: colors.modalBorder },
+              ]}
+            >
+              <Text style={[styles.modalTitle, { color: colors.mainText }]}>
+                {pickerTitle}
+              </Text>
+
               <TouchableOpacity onPress={() => setPickerOpen(false)}>
-                <Text style={[styles.modalClose, { color: colors.accentText }]}>Fechar</Text>
+                <Text style={[styles.modalClose, { color: colors.accentText }]}>
+                  Fechar
+                </Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              {slides.map((slide, index) => {
+              {safeSlides.map((slide, index) => {
                 const active = index === slideIndex;
 
                 return (
@@ -472,6 +591,20 @@ const styles = StyleSheet.create({
 
   topCenter: {
     flex: 1,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  topTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+
+  topSubtitle: {
+    marginTop: 1,
+    fontSize: 10,
+    fontWeight: '600',
   },
 
   topActions: {
@@ -517,6 +650,13 @@ const styles = StyleSheet.create({
     width: '100%',
     textAlign: 'center',
     letterSpacing: 0.2,
+  },
+
+  slideReference: {
+    marginTop: 24,
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 
   emptyText: {

@@ -1,6 +1,15 @@
-import { clearBrokenSupabaseSession, getSupabaseOrNull } from '@/lib/supabaseClient';
+import {
+  clearBrokenSupabaseSession,
+  getSupabaseOrNull,
+} from '@/lib/supabaseClient';
 import type { Session, User } from '@supabase/supabase-js';
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 
 type AuthContextValue = {
   initialized: boolean;
@@ -14,8 +23,24 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
 });
 
+function isBrokenRefreshTokenError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const message =
+    'message' in error && typeof error.message === 'string'
+      ? error.message
+      : '';
+
+  return (
+    message.includes('Invalid Refresh Token') ||
+    message.includes('Refresh Token Not Found')
+  );
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const sb = getSupabaseOrNull();
+  const supabaseClient = useMemo(() => getSupabaseOrNull(), []);
 
   const [initialized, setInitialized] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
@@ -23,50 +48,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    if (!sb) {
+    if (!supabaseClient) {
+      setSession(null);
       setInitialized(true);
-      return;
+
+      return () => {
+        mounted = false;
+      };
     }
 
-    const bootstrap = async () => {
+    const sb = supabaseClient;
+
+    async function bootstrap() {
       try {
         const { data, error } = await sb.auth.getSession();
 
         if (error) {
           console.log('AUTH_BOOTSTRAP_GET_SESSION_ERROR', error);
 
-          const msg = String(error.message || '');
-          if (
-            msg.includes('Invalid Refresh Token') ||
-            msg.includes('Refresh Token Not Found')
-          ) {
+          if (isBrokenRefreshTokenError(error)) {
             await clearBrokenSupabaseSession();
           }
 
-          if (!mounted) return;
+          if (!mounted) {
+            return;
+          }
+
           setSession(null);
           setInitialized(true);
           return;
         }
 
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
+
         setSession(data.session ?? null);
         setInitialized(true);
       } catch (error) {
         console.log('AUTH_BOOTSTRAP_FATAL', error);
-        if (!mounted) return;
+
+        if (!mounted) {
+          return;
+        }
+
         setSession(null);
         setInitialized(true);
       }
-    };
+    }
 
-    bootstrap();
+    void bootstrap();
 
     const {
       data: { subscription },
     } = sb.auth.onAuthStateChange((event, nextSession) => {
       console.log('AUTH_STATE_CHANGE', event, Boolean(nextSession?.user?.id));
-      if (!mounted) return;
+
+      if (!mounted) {
+        return;
+      }
+
       setSession(nextSession ?? null);
       setInitialized(true);
     });
@@ -75,7 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [sb]);
+  }, [supabaseClient]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -83,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session,
       user: session?.user ?? null,
     }),
-    [initialized, session]
+    [initialized, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

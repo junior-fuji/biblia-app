@@ -1,8 +1,13 @@
 import { getSupabaseOrThrow } from '@/lib/supabaseClient';
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 type Event = {
   id: number;
@@ -11,33 +16,59 @@ type Event = {
 };
 
 export default function EventDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id?: string | string[] }>();
 
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!id) return;
-    loadEvent();
-  }, [id]);
+  const eventId = useMemo(() => {
+    const rawId = Array.isArray(params.id) ? params.id[0] : params.id;
 
-  async function loadEvent() {
-    setLoading(true);
-
-    const sb = getSupabaseOrThrow();
-    const { data, error } = await sb .from('events')
-    .select('id, title, description')
-      .eq('id', Number(id))
-      .single();
-
-    if (error) {
-      console.error('Erro ao carregar evento:', error.message);
-    } else {
-      setEvent(data);
+    if (!rawId) {
+      return null;
     }
 
-    setLoading(false);
-  }
+    const parsedId = Number(rawId);
+
+    return Number.isFinite(parsedId) ? parsedId : null;
+  }, [params.id]);
+
+  const loadEvent = useCallback(async () => {
+    if (!eventId) {
+      setEvent(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const sb = getSupabaseOrThrow();
+
+      const { data, error } = await sb
+        .from('events')
+        .select('id, title, description')
+        .eq('id', eventId)
+        .single();
+
+      if (error) {
+        console.error('Erro ao carregar evento:', error.message);
+        setEvent(null);
+        return;
+      }
+
+      setEvent(data as Event);
+    } catch (error) {
+      console.error('Erro inesperado ao carregar evento:', error);
+      setEvent(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [eventId]);
+
+  useEffect(() => {
+    void loadEvent();
+  }, [loadEvent]);
 
   if (loading) {
     return (
