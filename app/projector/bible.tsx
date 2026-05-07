@@ -100,8 +100,8 @@ export default function BibleProjectorRoute() {
 
   return (
     <ProjectorScreen
-      title={payload.title}
-      subtitle={payload.subtitle}
+      title=""
+      subtitle=""
       slides={payload.slides}
       onClose={handleClose}
       pickerLabel="Versículos"
