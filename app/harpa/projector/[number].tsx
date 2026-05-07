@@ -1,7 +1,9 @@
-import ProjectorScreen, { ProjectorSlide } from '@/src/services/projector/ProjectorScreen';
+import ProjectorScreen, {
+  ProjectorSlide,
+} from '@/src/services/projector/ProjectorScreen';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { Platform, View } from 'react-native';
 
 const HARPA = require('../../../assets/harpa_clean.json');
@@ -37,7 +39,7 @@ function buildSlides(hymn: HarpaSong): ProjectorSlide[] {
   const chorus = normalizeText(hymn.coro);
   const hasChorus = chorus.length > 0;
 
-  for (let index = 0; index < verses.length; index++) {
+  for (let index = 0; index < verses.length; index += 1) {
     const verse = verses[index];
     const verseText = normalizeText(verse?.text);
 
@@ -79,11 +81,14 @@ export default function HarpaProjectorScreen() {
   const { number } = useLocalSearchParams<{ number?: string }>();
 
   const isWeb = Platform.OS === 'web';
-  const currentNumber = useMemo(() => clamp(Number(number) || 1, 1, 640), [number]);
+  const currentNumber = useMemo(
+    () => clamp(Number(number) || 1, 1, 640),
+    [number],
+  );
 
   useEffect(() => {
     if (!isWeb) {
-      router.replace(`/harpa/${currentNumber}` as any);
+      router.replace(`/harpa/${currentNumber}` as never);
     }
   }, [currentNumber, isWeb, router]);
 
@@ -97,13 +102,23 @@ export default function HarpaProjectorScreen() {
     return buildSlides(hymn);
   }, [hymn]);
 
-  const goTo = (n: number) => {
-    const nextNumber = clamp(n, 1, 640);
-    router.replace(`/harpa/projector/${nextNumber}` as any);
-  };
+  const handleClose = useCallback(() => {
+    router.back();
+  }, [router]);
 
-  const next = () => goTo(currentNumber + 1);
-  const prev = () => goTo(currentNumber - 1);
+  const renderSlideLabel = useCallback((slide: ProjectorSlide) => {
+    if (slide.kind === 'chorus') {
+      return 'Refrão';
+    }
+
+    const match = slide.id.match(/verse-(\d+)/);
+
+    if (match?.[1]) {
+      return `Estrofe ${match[1]}`;
+    }
+
+    return 'Slide';
+  }, []);
 
   if (!isWeb) {
     return <View style={{ flex: 1, backgroundColor: '#000' }} />;
@@ -115,32 +130,36 @@ export default function HarpaProjectorScreen() {
         title="Harpa Cristã"
         subtitle="Hino não encontrado"
         slides={[]}
-        onClose={() => router.back()}
-        onPrevGroup={currentNumber > 1 ? prev : undefined}
-        onNextGroup={currentNumber < 640 ? next : undefined}
-        prevGroupLabel="Hino anterior"
-        nextGroupLabel="Próximo hino"
+        onClose={handleClose}
+        pickerLabel="Partes"
+        pickerTitle="Selecionar parte"
+        showHeaderLabels={false}
+        showFooterCounter={false}
+        showGroupNavigation={false}
+        autoFitText
+        minFontSize={8}
+        maxFontSize={76}
       />
     );
   }
 
- return (
-  <ProjectorScreen
-  title={`${hymn.number} — ${hymn.title}`}
-  subtitle="Harpa Cristã"
-  slides={slides}
-  onClose={() => router.back()}
-  onPrevGroup={currentNumber > 1 ? prev : undefined}
-  onNextGroup={currentNumber < 640 ? next : undefined}
-  prevGroupLabel="Hino anterior"
-  nextGroupLabel="Próximo hino"
-  baseFontSize={40}
-  uniformFontSize
-  pickerLabel="Partes"
-  pickerTitle={`${hymn.number} — ${hymn.title}`}
-  renderSlideLabel={(slide, index) =>
-    slide.kind === 'chorus' ? `Refrão ${index + 1}` : `Estrofe ${index + 1}`
-  }
-/>
- );
+  return (
+    <ProjectorScreen
+      title={`${hymn.number} — ${hymn.title}`}
+      subtitle="Harpa Cristã"
+      slides={slides}
+      onClose={handleClose}
+      baseFontSize={42}
+      uniformFontSize
+      pickerLabel="Partes"
+      pickerTitle={`${hymn.number} — ${hymn.title}`}
+      renderSlideLabel={renderSlideLabel}
+      showHeaderLabels={false}
+      showFooterCounter={false}
+      showGroupNavigation={false}
+      autoFitText
+      minFontSize={8}
+      maxFontSize={82}
+    />
+  );
 }

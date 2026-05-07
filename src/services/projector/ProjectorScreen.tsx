@@ -47,11 +47,26 @@ type Props = {
   pickerLabel?: string;
   pickerTitle?: string;
   renderSlideLabel?: (slide: ProjectorSlide, index: number) => string;
+
+  /**
+   * Usado principalmente na Harpa para não poluir a projeção com:
+   * "Harpa Cristã", título do hino, contador e navegação de hino.
+   */
+  showHeaderLabels?: boolean;
+  showFooterCounter?: boolean;
+  showGroupNavigation?: boolean;
+
+  /**
+   * Ajuste automático para textos longos.
+   */
+  autoFitText?: boolean;
+  minFontSize?: number;
+  maxFontSize?: number;
 };
 
-const MIN_FONT_SIZE = 12;
-const MAX_FONT_SIZE = 72;
-const STEP = 2;
+const DEFAULT_MIN_FONT_SIZE = 8;
+const DEFAULT_MAX_FONT_SIZE = 82;
+const STEP = 4;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -61,11 +76,59 @@ function getBaseFontSize(kind?: ProjectorSlide['kind']) {
   if (kind === 'bible-title') return 46;
   if (kind === 'bible-verse') return 38;
   if (kind === 'verse') return 34;
-  if (kind === 'stanza') return 34;
-  if (kind === 'chorus') return 36;
+  if (kind === 'stanza') return 38;
+  if (kind === 'chorus') return 40;
   if (kind === 'event') return 34;
   if (kind === 'sketch') return 32;
   return 34;
+}
+
+function estimateFittedFontSize(params: {
+  content: string;
+  requestedFontSize: number;
+  minFontSize: number;
+  maxFontSize: number;
+  autoFitText: boolean;
+}) {
+  const {
+    content,
+    requestedFontSize,
+    minFontSize,
+    maxFontSize,
+    autoFitText,
+  } = params;
+
+  const normalizedContent = String(content || '').trim();
+
+  if (!autoFitText || !normalizedContent) {
+    return clamp(requestedFontSize, minFontSize, maxFontSize);
+  }
+
+  const lines = normalizedContent.split('\n').filter(Boolean);
+  const lineCount = Math.max(lines.length, 1);
+  const longestLine = lines.reduce(
+    (max, line) => Math.max(max, line.trim().length),
+    0,
+  );
+  const totalLength = normalizedContent.length;
+
+  let fitted = requestedFontSize;
+
+  if (lineCount >= 12) fitted = Math.min(fitted, 22);
+  else if (lineCount >= 10) fitted = Math.min(fitted, 26);
+  else if (lineCount >= 8) fitted = Math.min(fitted, 30);
+  else if (lineCount >= 6) fitted = Math.min(fitted, 34);
+
+  if (longestLine >= 72) fitted = Math.min(fitted, 22);
+  else if (longestLine >= 60) fitted = Math.min(fitted, 26);
+  else if (longestLine >= 48) fitted = Math.min(fitted, 30);
+
+  if (totalLength >= 900) fitted = Math.min(fitted, 20);
+  else if (totalLength >= 720) fitted = Math.min(fitted, 24);
+  else if (totalLength >= 560) fitted = Math.min(fitted, 28);
+  else if (totalLength >= 420) fitted = Math.min(fitted, 32);
+
+  return clamp(fitted, minFontSize, maxFontSize);
 }
 
 export default function ProjectorScreen({
@@ -83,6 +146,12 @@ export default function ProjectorScreen({
   pickerLabel = 'Slides',
   pickerTitle = 'Selecionar slide',
   renderSlideLabel,
+  showHeaderLabels = true,
+  showFooterCounter = true,
+  showGroupNavigation = true,
+  autoFitText = true,
+  minFontSize = DEFAULT_MIN_FONT_SIZE,
+  maxFontSize = DEFAULT_MAX_FONT_SIZE,
 }: Props) {
   const { settings } = useSettings();
 
@@ -110,7 +179,8 @@ export default function ProjectorScreen({
 
   const currentSlide = safeSlides[slideIndex] ?? null;
   const canPrevSlide = safeSlides.length > 0 && slideIndex > 0;
-  const canNextSlide = safeSlides.length > 0 && slideIndex < safeSlides.length - 1;
+  const canNextSlide =
+    safeSlides.length > 0 && slideIndex < safeSlides.length - 1;
 
   const prevSlide = useCallback(() => {
     setSlideIndex((prev) => clamp(prev - 1, 0, lastSlideIndex));
@@ -122,61 +192,33 @@ export default function ProjectorScreen({
 
   const baseComputedFontSize = useMemo(() => {
     if (typeof baseFontSize === 'number') return baseFontSize;
-    if (uniformFontSize) return 36;
+    if (uniformFontSize) return 38;
     return getBaseFontSize(currentSlide?.kind);
-  }, [baseFontSize, uniformFontSize, currentSlide?.kind]);
+  }, [baseFontSize, currentSlide?.kind, uniformFontSize]);
 
-  const fontSize = clamp(
+  const requestedFontSize = clamp(
     baseComputedFontSize + manualOffset,
-    MIN_FONT_SIZE,
-    MAX_FONT_SIZE,
+    minFontSize,
+    maxFontSize,
   );
 
-  const lineHeight = Math.round(fontSize * 1.38);
+  const fontSize = estimateFittedFontSize({
+    content: currentSlide?.content ?? '',
+    requestedFontSize,
+    minFontSize,
+    maxFontSize,
+    autoFitText,
+  });
+
+  const lineHeight = Math.round(fontSize * 1.34);
 
   const decreaseFont = useCallback(() => {
-    setManualOffset((prev) => {
-      const next = prev - STEP;
-      const nextFont = clamp(
-        baseComputedFontSize + next,
-        MIN_FONT_SIZE,
-        MAX_FONT_SIZE,
-      );
-      const currentFont = clamp(
-        baseComputedFontSize + prev,
-        MIN_FONT_SIZE,
-        MAX_FONT_SIZE,
-      );
-
-      if (nextFont === currentFont && currentFont === MIN_FONT_SIZE) {
-        return prev;
-      }
-
-      return next;
-    });
-  }, [baseComputedFontSize]);
+    setManualOffset((prev) => prev - STEP);
+  }, []);
 
   const increaseFont = useCallback(() => {
-    setManualOffset((prev) => {
-      const next = prev + STEP;
-      const nextFont = clamp(
-        baseComputedFontSize + next,
-        MIN_FONT_SIZE,
-        MAX_FONT_SIZE,
-      );
-      const currentFont = clamp(
-        baseComputedFontSize + prev,
-        MIN_FONT_SIZE,
-        MAX_FONT_SIZE,
-      );
-
-      if (nextFont === currentFont && currentFont === MAX_FONT_SIZE) {
-        return prev;
-      }
-
-      return next;
-    });
-  }, [baseComputedFontSize]);
+    setManualOffset((prev) => prev + STEP);
+  }, []);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -186,7 +228,11 @@ export default function ProjectorScreen({
     if (!win) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'Enter') {
+      if (
+        event.key === 'ArrowRight' ||
+        event.key === ' ' ||
+        event.key === 'Enter'
+      ) {
         event.preventDefault();
         nextSlide();
       }
@@ -270,6 +316,9 @@ export default function ProjectorScreen({
     [isLightTheme],
   );
 
+  const shouldShowGroupNavigation =
+    showGroupNavigation && Boolean(onPrevGroup || onNextGroup);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
       <StatusBar hidden />
@@ -280,13 +329,16 @@ export default function ProjectorScreen({
         </TouchableOpacity>
 
         <View style={styles.topCenter}>
-          {!!title ? (
-            <Text style={[styles.topTitle, { color: colors.mainText }]} numberOfLines={1}>
+          {showHeaderLabels && title ? (
+            <Text
+              style={[styles.topTitle, { color: colors.mainText }]}
+              numberOfLines={1}
+            >
               {title}
             </Text>
           ) : null}
 
-          {!!subtitle ? (
+          {showHeaderLabels && subtitle ? (
             <Text
               style={[styles.topSubtitle, { color: colors.mutedText }]}
               numberOfLines={1}
@@ -331,8 +383,13 @@ export default function ProjectorScreen({
           <View style={styles.slideInner}>
             {currentSlide ? (
               <>
-                {!!currentSlide.title ? (
-                  <Text style={[styles.slideTitle, { color: colors.secondaryText }]}>
+                {showHeaderLabels && currentSlide.title ? (
+                  <Text
+                    style={[
+                      styles.slideTitle,
+                      { color: colors.secondaryText },
+                    ]}
+                  >
                     {currentSlide.title}
                   </Text>
                 ) : null}
@@ -351,9 +408,15 @@ export default function ProjectorScreen({
                   {currentSlide.content}
                 </Text>
 
-                {!!currentSlide.reference &&
+                {showHeaderLabels &&
+                currentSlide.reference &&
                 currentSlide.reference !== currentSlide.title ? (
-                  <Text style={[styles.slideReference, { color: colors.mutedText }]}>
+                  <Text
+                    style={[
+                      styles.slideReference,
+                      { color: colors.mutedText },
+                    ]}
+                  >
                     {currentSlide.reference}
                   </Text>
                 ) : null}
@@ -392,18 +455,27 @@ export default function ProjectorScreen({
           <Text
             style={[
               styles.navText,
-              { color: !canPrevSlide ? colors.buttonDisabled : colors.buttonText },
+              {
+                color: !canPrevSlide
+                  ? colors.buttonDisabled
+                  : colors.buttonText,
+              },
             ]}
           >
             Slide anterior
           </Text>
         </TouchableOpacity>
 
-        <View style={styles.counterBlock}>
-          <Text style={[styles.counter, { color: colors.mutedText }]}>
-            Slide {safeSlides.length ? slideIndex + 1 : 0} de {safeSlides.length}
-          </Text>
-        </View>
+        {showFooterCounter ? (
+          <View style={styles.counterBlock}>
+            <Text style={[styles.counter, { color: colors.mutedText }]}>
+              Slide {safeSlides.length ? slideIndex + 1 : 0} de{' '}
+              {safeSlides.length}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.counterBlockHidden} />
+        )}
 
         <TouchableOpacity
           onPress={nextSlide}
@@ -417,7 +489,11 @@ export default function ProjectorScreen({
           <Text
             style={[
               styles.navText,
-              { color: !canNextSlide ? colors.buttonDisabled : colors.buttonText },
+              {
+                color: !canNextSlide
+                  ? colors.buttonDisabled
+                  : colors.buttonText,
+              },
             ]}
           >
             Próximo slide
@@ -430,7 +506,7 @@ export default function ProjectorScreen({
         </TouchableOpacity>
       </View>
 
-      {(onPrevGroup || onNextGroup) && (
+      {shouldShowGroupNavigation ? (
         <View style={styles.groupNavBar}>
           <TouchableOpacity
             onPress={onPrevGroup}
@@ -480,7 +556,7 @@ export default function ProjectorScreen({
             />
           </TouchableOpacity>
         </View>
-      )}
+      ) : null}
 
       <Modal
         visible={pickerOpen}
@@ -488,7 +564,12 @@ export default function ProjectorScreen({
         animationType="fade"
         onRequestClose={() => setPickerOpen(false)}
       >
-        <View style={[styles.modalOverlay, { backgroundColor: colors.modalOverlay }]}>
+        <View
+          style={[
+            styles.modalOverlay,
+            { backgroundColor: colors.modalOverlay },
+          ]}
+        >
           <View
             style={[
               styles.modalContent,
@@ -559,8 +640,8 @@ const styles = StyleSheet.create({
 
   topBar: {
     paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 4,
+    paddingTop: 6,
+    paddingBottom: 2,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -568,9 +649,9 @@ const styles = StyleSheet.create({
   },
 
   topMiniBtn: {
-    minWidth: 30,
-    height: 30,
-    borderRadius: 15,
+    minWidth: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -594,6 +675,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 30,
   },
 
   topTitle: {
@@ -613,8 +695,8 @@ const styles = StyleSheet.create({
   },
 
   control: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '900',
   },
 
   slideWrap: {
@@ -623,20 +705,21 @@ const styles = StyleSheet.create({
   },
 
   sideTap: {
-    width: 20,
+    width: 18,
   },
 
   slideContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
+    paddingHorizontal: 26,
+    paddingVertical: 12,
   },
 
   slideInner: {
     width: '100%',
-    transform: [{ translateY: -110 }],
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   slideTitle: {
@@ -675,12 +758,12 @@ const styles = StyleSheet.create({
   },
 
   navBtn: {
-    minWidth: 118,
+    minWidth: 132,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 16,
     borderWidth: 1,
   },
@@ -690,7 +773,7 @@ const styles = StyleSheet.create({
   },
 
   navText: {
-    marginLeft: 6,
+    marginHorizontal: 6,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -699,6 +782,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
+    minWidth: 92,
+  },
+
+  counterBlockHidden: {
+    minWidth: 20,
   },
 
   counter: {

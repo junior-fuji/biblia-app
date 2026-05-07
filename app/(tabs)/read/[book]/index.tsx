@@ -1,4 +1,5 @@
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
+import { openBibleProjector } from '@/src/services/projector/bibleProjector';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -111,13 +112,15 @@ function clamp(n: number, min: number, max: number) {
 }
 
 const API_BASE_URL_RAW =
-  process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '') || 'https://biblia-app-six.vercel.app';
+  process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '') ||
+  'https://biblia-app-six.vercel.app';
 
 function normalizeBaseUrl(base: string) {
   if (!base) return '';
   if (!/^https?:\/\//i.test(base)) return `https://${base}`;
   return base;
 }
+
 const API_BASE_URL = normalizeBaseUrl(API_BASE_URL_RAW);
 
 function extractJsonObject(text: string): string | null {
@@ -171,7 +174,11 @@ function getAnalysisLanguage(versionCode: string) {
   return 'pt';
 }
 
-function buildChapterPrompt(language: 'pt' | 'es' | 'ja' | 'en', bookName: string, chapterNum: number) {
+function buildChapterPrompt(
+  language: 'pt' | 'es' | 'ja' | 'en',
+  bookName: string,
+  chapterNum: number,
+) {
   if (language === 'es') {
     return `Escribe un comentario bíblico extenso, erudito y profundamente detallado sobre ${bookName} capítulo ${chapterNum}. Analiza el capítulo como una unidad completa, explicando su tema central, contexto histórico, contexto cultural, estructura literaria, exégesis, teología bíblica y aplicación pastoral.`;
   }
@@ -184,7 +191,7 @@ function buildChapterPrompt(language: 'pt' | 'es' | 'ja' | 'en', bookName: strin
     return `Write a broad, scholarly, deeply detailed biblical commentary on ${bookName} chapter ${chapterNum}. Analyze the chapter as a complete literary unit, explaining its central theme, historical background, cultural background, literary structure, exegesis, biblical theology, and pastoral application.`;
   }
 
-  return `Escreva um comentário bíblico extenso, erudito e profundamente detalhado sobre ${bookName} capítulo ${chapterNum}. Analise o capítulo como uma unidade completa, explicando seu tema central, contexto histórico, contexto cultural, estrutura literária, exegese, teologia bíblica e aplicação pastoral.`;
+  return `Escreva um comentário bíblico amplo, erudito e profundamente detalhado sobre ${bookName} capítulo ${chapterNum}. Analise o capítulo como uma unidade literária completa, explicando tema central, contexto histórico, contexto cultural, estrutura literária, exegese, teologia bíblica e aplicação pastoral.`;
 }
 
 function buildVersePrompt(
@@ -192,14 +199,14 @@ function buildVersePrompt(
   verseText: string,
   bookName: string,
   chapterNum: number,
-  verseNum: number
+  verseNum: number,
 ) {
   if (language === 'es') {
-    return `Haz una exégesis profundamente detallada del versículo "${verseText}" (${bookName} ${chapterNum}:${verseNum}). Analiza su idea central, contexto histórico, contexto cultural, matices del original, estructura gramatical, implicaciones teológicas y aplicación pastoral fiel al texto.`;
+    return `Haz una exégesis profundamente detallada del versículo "${verseText}" (${bookName} ${chapterNum}:${verseNum}). Analiza su idea central, contexto histórico, contexto cultural, matices de los idiomas originales, estructura gramatical, implicaciones teológicas y aplicación pastoral fiel al texto.`;
   }
 
   if (language === 'ja') {
-    return `次の聖句「${verseText}」(${bookName} ${chapterNum}:${verseNum})について、非常に詳細で学術的な釈義を行ってください。中心テーマ、歴史的背景、文化的背景、原語のニュアンス、文法構造、神学的意義、本文に忠実な実践的適用を含めてください。`;
+    return `「${verseText}」（${bookName} ${chapterNum}:${verseNum}）について、深く詳細な釈義を行ってください。中心思想、歴史的背景、文化的背景、原語のニュアンス、文法構造、神学的意味、本文に忠実な牧会的適用を分析してください。`;
   }
 
   if (language === 'en') {
@@ -283,9 +290,10 @@ function InfoCard({
   title: string;
   text?: string;
   color: string;
-  icon: any;
+  icon: keyof typeof Ionicons.glyphMap;
 }) {
   if (!text) return null;
+
   return (
     <View style={styles.infoCard}>
       <View style={[styles.infoBar, { backgroundColor: color }]} />
@@ -416,32 +424,32 @@ export default function ReadBookScreen() {
 
         if (!alive) return;
 
-        if (!error && data && data.length > 0 && Number.isFinite(Number((data as any)[0].chapter))) {
-          const max = Number((data as any)[0].chapter);
-          setTotalChapters((prev) => (prev !== max ? max : prev));
-          setChapterNum((prev) => clamp(prev, 1, max));
-        } else {
+        if (error) {
+          console.log('LOAD_TOTAL_CHAPTERS_ERROR', error);
           setTotalChapters(0);
+        } else {
+          const maxChapter = Number(data?.[0]?.chapter) || 0;
+          setTotalChapters(maxChapter);
         }
       } catch (e) {
-        console.log('LOAD_TOTAL_ERROR', e);
+        console.log('LOAD_TOTAL_CHAPTERS_FATAL', e);
         if (!alive) return;
         setTotalChapters(0);
       }
     }
 
-    loadTotal();
+    void loadTotal();
+
     return () => {
       alive = false;
     };
-  }, [isValidBook, bookId, versionCode]);
+  }, [bookId, isValidBook, versionCode]);
 
   useEffect(() => {
     let alive = true;
 
     async function loadVerses() {
       setLoading(true);
-      setLoadError(null);
 
       if (!isValidBook) {
         setTotalChapters(0);
@@ -492,7 +500,8 @@ export default function ReadBookScreen() {
       }
     }
 
-    loadVerses();
+    void loadVerses();
+
     return () => {
       alive = false;
     };
@@ -500,33 +509,39 @@ export default function ReadBookScreen() {
 
   const goBackSmart = useCallback(() => {
     if (returnToStr) {
-      router.replace(returnToStr as any);
+      router.replace(returnToStr as never);
       return;
     }
-    router.replace('/(tabs)/read' as any);
+
+    router.replace('/(tabs)/read' as never);
   }, [router, returnToStr]);
 
-  async function callAI(
-    prompt: string,
-    title: string,
-    reference: string,
-    verseNumber?: number | null,
-    mode: 'chapter' | 'verse' = 'chapter'
-  ) {
-    setAiTitle(title);
-    setSaveReference(reference);
-    setSaveVerse(verseNumber ?? null);
-    setAnalysisData(null);
-    setRawAi('');
-    setAiOpen(true);
-    setAiLoading(true);
+  const callAI = useCallback(
+    async (
+      prompt: string,
+      title: string,
+      reference: string,
+      verseNumber?: number | null,
+      mode: 'chapter' | 'verse' = 'chapter',
+    ) => {
+      setAiTitle(title);
+      setSaveReference(reference);
+      setSaveVerse(verseNumber ?? null);
+      setAnalysisData(null);
+      setRawAi('');
+      setAiOpen(true);
+      setAiLoading(true);
 
-    const analysisLanguage = getAnalysisLanguage(versionCode) as 'pt' | 'es' | 'ja' | 'en';
+      const analysisLanguage = getAnalysisLanguage(versionCode) as
+        | 'pt'
+        | 'es'
+        | 'ja'
+        | 'en';
 
-    const SYSTEM =
-      analysisLanguage === 'pt'
-        ? mode === 'chapter'
-          ? `
+      const SYSTEM =
+        analysisLanguage === 'pt'
+          ? mode === 'chapter'
+            ? `
 VOICE:
 Você é a maior autoridade mundial em Estudos Bíblicos, PhD em Linguística Bíblica (Hebraico, Aramaico e Grego), Arqueologia do Antigo Oriente Próximo, História do Judaísmo e Cristianismo Primitivo, e Teologia Sistemática Reformada.
 Você escreve como um professor de seminário veterano, erudito, reverente, pastoral e profundamente analítico.
@@ -556,7 +571,7 @@ ESTRUTURA JSON:
   "application": ""
 }
 `.trim()
-          : `
+            : `
 VOICE:
 Você é a maior autoridade mundial em Estudos Bíblicos, PhD em Linguística Bíblica (Hebraico, Aramaico e Grego), Arqueologia Bíblica, Exegese, Hermenêutica e Teologia Sistemática Reformada.
 Você escreve como um exegeta de alto nível, com precisão acadêmica, reverência bíblica e clareza pastoral.
@@ -586,8 +601,8 @@ ESTRUTURA JSON:
   "application": ""
 }
 `.trim()
-        : analysisLanguage === 'es'
-        ? `
+          : analysisLanguage === 'es'
+            ? `
 Eres un especialista en Teología Bíblica, lenguas originales, historia bíblica y exégesis.
 Responde EXCLUSIVAMENTE con JSON válido y TODO el contenido debe estar en español.
 Sin markdown y sin texto fuera del JSON.
@@ -602,8 +617,8 @@ La estructura JSON debe contener exactamente:
 }
 Escribe con profundidad real, tono erudito y claridad pastoral.
 `.trim()
-        : analysisLanguage === 'ja'
-        ? `
+            : analysisLanguage === 'ja'
+              ? `
 あなたは聖書神学、原語学、聖書史、釈義学の専門家です。
 必ず有効なJSONのみで回答し、内容はすべて自然な日本語で書いてください。
 MarkdownやJSON以外の文章は禁止です。
@@ -619,7 +634,7 @@ JSONの構造は必ず次の6項目です:
 深い学術性と牧会的明瞭さを両立してください。
 日本語以外を混ぜないでください。
 `.trim()
-        : `
+              : `
 You are a specialist in Biblical Theology, original languages, biblical history, and exegesis.
 Respond EXCLUSIVELY with valid JSON and ALL content must be in English.
 No markdown and no text outside the JSON.
@@ -635,49 +650,61 @@ The JSON structure must contain exactly:
 Write with real depth, scholarly tone, and pastoral clarity.
 `.trim();
 
-    try {
-      const url = Platform.OS === 'web' ? '/api/chat' : `${API_BASE_URL}/api/chat`;
+      try {
+        const url =
+          Platform.OS === 'web' ? '/api/chat' : `${API_BASE_URL}/api/chat`;
 
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [
-            { role: 'system', content: SYSTEM },
-            { role: 'user', content: prompt },
-          ],
-        }),
-      });
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [
+              { role: 'system', content: SYSTEM },
+              { role: 'user', content: prompt },
+            ],
+          }),
+        });
 
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((body as any)?.error || `HTTP ${res.status}`);
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error((body as { error?: string })?.error || `HTTP ${res.status}`);
+        }
 
-      const content: string = (body as any)?.choices?.[0]?.message?.content ?? (body as any)?.output_text ?? '';
-      const maybeJson = extractJsonObject(String(content));
+        const content: string =
+          (body as any)?.choices?.[0]?.message?.content ??
+          (body as any)?.output_text ??
+          '';
 
-      if (maybeJson) {
-        try {
-          const parsed = JSON.parse(maybeJson);
-          setAnalysisData({
-            theme: parsed.theme,
-            history: parsed.history,
-            culture: parsed.culture,
-            exegesis: parsed.exegisis ?? parsed.exegesis,
-            theology: parsed.theology,
-            application: parsed.application,
-          });
-        } catch {
+        const maybeJson = extractJsonObject(String(content));
+
+        if (maybeJson) {
+          try {
+            const parsed = JSON.parse(maybeJson);
+            setAnalysisData({
+              theme: parsed.theme,
+              history: parsed.history,
+              culture: parsed.culture,
+              exegesis: parsed.exegisis ?? parsed.exegesis,
+              theology: parsed.theology,
+              application: parsed.application,
+            });
+          } catch {
+            setRawAi(String(content));
+          }
+        } else {
           setRawAi(String(content));
         }
-      } else {
-        setRawAi(String(content));
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : 'não foi possível consultar a IA';
+
+        setRawAi(`Erro: ${message}`);
+      } finally {
+        setAiLoading(false);
       }
-    } catch (e: any) {
-      setRawAi(`Erro: ${e?.message || 'não foi possível consultar a IA'}`);
-    } finally {
-      setAiLoading(false);
-    }
-  }
+    },
+    [versionCode],
+  );
 
   const analyzeChapter = useCallback(() => {
     const language = getAnalysisLanguage(versionCode) as 'pt' | 'es' | 'ja' | 'en';
@@ -687,9 +714,9 @@ Write with real depth, scholarly tone, and pastoral clarity.
       `Análise — ${safeBookName} ${chapterNum}`,
       `${safeBookName} ${chapterNum} (${versionCode})`,
       null,
-      'chapter'
+      'chapter',
     );
-  }, [safeBookName, chapterNum, versionCode]);
+  }, [callAI, chapterNum, safeBookName, versionCode]);
 
   const analyzeVerse = useCallback(
     (v: Verse) => {
@@ -700,24 +727,69 @@ Write with real depth, scholarly tone, and pastoral clarity.
         `Exegese — ${safeBookName} ${chapterNum}:${v.verse}`,
         `${safeBookName} ${chapterNum}:${v.verse} (${versionCode})`,
         v.verse,
-        'verse'
+        'verse',
       );
     },
-    [safeBookName, chapterNum, versionCode]
+    [callAI, chapterNum, safeBookName, versionCode],
   );
+
+  const handleOpenProjector = useCallback(async () => {
+    try {
+      const safeVerses = versesState
+        .map((item) => ({
+          verse: Number(item.verse),
+          text: String(item.text || '').trim(),
+        }))
+        .filter((item) => Number.isFinite(item.verse) && item.verse > 0 && item.text.length > 0);
+
+      if (!safeBookName.trim()) {
+        Alert.alert('Projetor', 'Livro inválido para projeção.');
+        return;
+      }
+
+      if (!Number.isFinite(chapterNum) || chapterNum <= 0) {
+        Alert.alert('Projetor', 'Capítulo inválido para projeção.');
+        return;
+      }
+
+      if (safeVerses.length === 0) {
+        Alert.alert('Projetor', 'Nenhum versículo carregado para projetar.');
+        return;
+      }
+
+      await openBibleProjector({
+        router,
+        bookLabel: safeBookName,
+        chapter: chapterNum,
+        verses: safeVerses,
+      });
+    } catch (error) {
+      console.log('OPEN_BIBLE_PROJECTOR_ERROR', error);
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível abrir o projetor.';
+
+      Alert.alert('Erro no projetor', message);
+    }
+  }, [chapterNum, router, safeBookName, versesState]);
 
   async function handleSaveAI() {
     if (!analysisData && !rawAi) return;
 
     setSaving(true);
+
     try {
       const sb = getSupabaseOrNull();
+
       if (!sb) {
         Alert.alert('Supabase', 'Supabase não configurado neste build.');
         return;
       }
 
       const { data: sessionData, error: sessionErr } = await sb.auth.getSession();
+
       if (sessionErr) {
         console.log('AUTH_GET_SESSION_ERROR', sessionErr);
         throw sessionErr;
@@ -730,7 +802,7 @@ Write with real depth, scholarly tone, and pastoral clarity.
           { text: 'Cancelar', style: 'cancel' },
           {
             text: 'Ir para login',
-            onPress: () => router.push('/(auth)/login' as any),
+            onPress: () => router.push('/(auth)/login' as never),
           },
         ]);
         return;
@@ -761,15 +833,20 @@ Write with real depth, scholarly tone, and pastoral clarity.
 
       if (error) {
         console.log('SAVE_NOTE_ERROR', error);
-        Alert.alert('Erro ao salvar', `${error.message}\n(code: ${(error as any).code ?? '-'})`);
+        Alert.alert(
+          'Erro ao salvar',
+          `${error.message}\n(code: ${(error as { code?: string }).code ?? '-'})`,
+        );
         return;
       }
 
       console.log('SAVED_NOTE_ID', data?.id);
       Alert.alert('Salvo', 'Análise salva em Meus Estudos.');
-    } catch (e: any) {
+    } catch (e) {
       console.log('HANDLE_SAVE_AI_FATAL', e);
-      Alert.alert('Erro ao salvar', e?.message || 'Falha inesperada.');
+
+      const message = e instanceof Error ? e.message : 'Falha inesperada.';
+      Alert.alert('Erro ao salvar', message);
     } finally {
       setSaving(false);
     }
@@ -782,7 +859,11 @@ Write with real depth, scholarly tone, and pastoral clarity.
     if (idx < 0) return;
 
     const t = setTimeout(() => {
-      listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.25 });
+      listRef.current?.scrollToIndex({
+        index: idx,
+        animated: true,
+        viewPosition: 0.25,
+      });
     }, 250);
 
     return () => clearTimeout(t);
@@ -810,7 +891,7 @@ Write with real depth, scholarly tone, and pastoral clarity.
         </Text>
       </TouchableOpacity>
     ),
-    [analyzeVerse, fontSize]
+    [analyzeVerse, fontSize],
   );
 
   if (!isValidBook) {
@@ -820,7 +901,7 @@ Write with real depth, scholarly tone, and pastoral clarity.
         <Text style={styles.centerText}>
           Essa tela precisa abrir com um livro (ex: /read/1). Volte e selecione um livro.
         </Text>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/read' as any)} style={styles.centerBtn}>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)/read' as never)} style={styles.centerBtn}>
           <Text style={styles.centerBtnText}>Ir para a lista de livros</Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -869,9 +950,7 @@ Write with real depth, scholarly tone, and pastoral clarity.
 
           {isWeb ? (
             <TouchableOpacity
-              onPress={() => {
-                Alert.alert('Projetor', 'Envie o componente real da projeção da Bíblia para eu religar corretamente.');
-              }}
+              onPress={() => void handleOpenProjector()}
               style={styles.actionChip}
             >
               <Ionicons name="tv-outline" size={18} color="#111827" />
@@ -879,11 +958,17 @@ Write with real depth, scholarly tone, and pastoral clarity.
             </TouchableOpacity>
           ) : null}
 
-          <TouchableOpacity onPress={() => setFontSize((p) => clamp(p - 2, 12, 40))} style={styles.actionChip}>
+          <TouchableOpacity
+            onPress={() => setFontSize((p) => clamp(p - 2, 12, 40))}
+            style={styles.actionChip}
+          >
             <Text style={styles.actionChipText}>A-</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => setFontSize((p) => clamp(p + 2, 12, 40))} style={styles.actionChip}>
+          <TouchableOpacity
+            onPress={() => setFontSize((p) => clamp(p + 2, 12, 40))}
+            style={styles.actionChip}
+          >
             <Text style={styles.actionChipText}>A+</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -894,21 +979,27 @@ Write with real depth, scholarly tone, and pastoral clarity.
           <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
         ) : (
           <>
-            {loadError && (
+            {loadError ? (
               <Text style={{ color: '#D70015', textAlign: 'center', paddingHorizontal: 18, paddingTop: 10 }}>
                 {loadError}
               </Text>
-            )}
+            ) : null}
 
             <FlatList
               ref={listRef}
               data={versesState}
               keyExtractor={(item) => String(item.id)}
-              contentContainerStyle={[styles.list, { paddingBottom: 20 + Math.max(insets.bottom, 0) + 62 }]}
+              contentContainerStyle={[
+                styles.list,
+                { paddingBottom: 20 + Math.max(insets.bottom, 0) + 62 },
+              ]}
               showsVerticalScrollIndicator={false}
               renderItem={renderVerse}
               onScrollToIndexFailed={() => {
-                setTimeout(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }), 150);
+                setTimeout(
+                  () => listRef.current?.scrollToOffset({ offset: 0, animated: true }),
+                  150,
+                );
               }}
             />
           </>
@@ -917,7 +1008,11 @@ Write with real depth, scholarly tone, and pastoral clarity.
 
       <View style={[styles.bottomWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         <View style={styles.bottomBar}>
-          <TouchableOpacity style={[styles.navBtn, !canPrev && styles.navBtnDisabled]} onPress={goPrev} disabled={!canPrev}>
+          <TouchableOpacity
+            style={[styles.navBtn, !canPrev && styles.navBtnDisabled]}
+            onPress={goPrev}
+            disabled={!canPrev}
+          >
             <Ionicons name="chevron-back" size={18} color={!canPrev ? '#bbb' : '#fff'} />
             <Text style={[styles.navText, !canPrev && styles.navTextDisabled]}> Anterior</Text>
           </TouchableOpacity>
@@ -926,7 +1021,11 @@ Write with real depth, scholarly tone, and pastoral clarity.
             {chapterNum} / {totalChapters || '—'}
           </Text>
 
-          <TouchableOpacity style={[styles.navBtn, !canNext && styles.navBtnDisabled]} onPress={goNext} disabled={!canNext}>
+          <TouchableOpacity
+            style={[styles.navBtn, !canNext && styles.navBtnDisabled]}
+            onPress={goNext}
+            disabled={!canNext}
+          >
             <Text style={[styles.navText, !canNext && styles.navTextDisabled]}>Próximo </Text>
             <Ionicons name="chevron-forward" size={18} color={!canNext ? '#bbb' : '#fff'} />
           </TouchableOpacity>
@@ -952,7 +1051,9 @@ Write with real depth, scholarly tone, and pastoral clarity.
                   setShowChapters(false);
                 }}
               >
-                <Text style={[styles.chapterText, c === chapterNum && styles.chapterActiveText]}>{c}</Text>
+                <Text style={[styles.chapterText, c === chapterNum && styles.chapterActiveText]}>
+                  {c}
+                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -962,53 +1063,37 @@ Write with real depth, scholarly tone, and pastoral clarity.
       <Modal visible={showVersions} animationType="slide" onRequestClose={() => setShowVersions(false)}>
         <SafeAreaView style={[styles.modal, { paddingTop: Math.max(insets.top, 12) }]} edges={['top', 'bottom']}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Versão da Bíblia</Text>
+            <Text style={styles.modalTitle}>Versões</Text>
             <TouchableOpacity onPress={() => setShowVersions(false)}>
               <Text style={styles.modalClose}>Fechar</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={{ paddingTop: 14 }}>
-            {(versions.length
-              ? versions
-              : [
-                  { id: 'fallback-ara', code: 'ARA', name: 'ARA' },
-                  { id: 'fallback-arc', code: 'ARC', name: 'ARC' },
-                  { id: 'fallback-acf', code: 'ACF', name: 'ACF' },
-                  { id: 'fallback-nvi', code: 'NVI', name: 'NVI' },
-                  { id: 'fallback-kja', code: 'KJA', name: 'KJA' },
-                  { id: 'fallback-rv1909', code: 'RV1909', name: 'RV1909' },
-                  { id: 'fallback-kougo', code: 'KOUGO', name: 'KOUGO' },
-                  { id: 'fallback-kjv', code: 'KJV', name: 'KJV' },
-                  { id: 'fallback-web', code: 'WEB', name: 'WEB' },
-                ]
-            ).map((v) => {
-              const active = v.code === versionCode;
-              return (
-                <TouchableOpacity
-                  key={v.id}
-                  style={[
-                    { padding: 14, borderRadius: 12, backgroundColor: '#f2f2f7', marginBottom: 10 },
-                    active ? { backgroundColor: '#007AFF' } : null,
-                  ]}
-                  onPress={() => {
-                    setVersionCode(v.code);
-                    setShowVersions(false);
-                  }}
-                >
-                  <Text style={{ fontWeight: '900', color: active ? '#fff' : '#111' }}>
-                    {v.code} — {v.name}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <ScrollView contentContainerStyle={styles.versionList}>
+            {versions.map((v) => (
+              <TouchableOpacity
+                key={v.code}
+                style={[styles.versionBtn, v.code === versionCode && styles.versionActive]}
+                onPress={() => {
+                  setVersionCode(v.code);
+                  setShowVersions(false);
+                }}
+              >
+                <Text style={[styles.versionCode, v.code === versionCode && styles.versionActiveText]}>
+                  {v.code}
+                </Text>
+                <Text style={[styles.versionName, v.code === versionCode && styles.versionActiveText]}>
+                  {v.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </SafeAreaView>
       </Modal>
 
       <Modal visible={aiOpen} animationType="slide" onRequestClose={() => setAiOpen(false)}>
-        <SafeAreaView style={styles.aiSafe} edges={['top', 'bottom']}>
-          <View style={[styles.aiHeader, { paddingTop: Math.max(insets.top, 12) }]}>
+        <SafeAreaView style={[styles.aiSafe, { paddingTop: Math.max(insets.top, 12) }]} edges={['top', 'bottom']}>
+          <View style={styles.aiHeader}>
             <TouchableOpacity onPress={() => setAiOpen(false)} style={styles.aiHeaderBtn}>
               <Text style={styles.aiHeaderText}>Fechar</Text>
             </TouchableOpacity>
@@ -1113,41 +1198,77 @@ const styles = StyleSheet.create({
   bottomWrap: {
     backgroundColor: '#fff',
     borderTopWidth: 1,
-    borderTopColor: '#eee',
-    paddingTop: 10,
+    borderTopColor: '#E5E5EA',
+    paddingHorizontal: 12,
+    paddingTop: 8,
   },
+
   bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
   },
-  navBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  navBtnDisabled: { backgroundColor: '#f1f1f1' },
-  navText: { color: '#fff', fontWeight: '900', fontSize: 13 },
-  navTextDisabled: { color: '#bbb' },
-  counterText: { color: '#666', fontSize: 13, fontWeight: '800' },
 
-  modal: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 16 },
-  modalHeader: {
+  navBtn: {
+    minWidth: 112,
+    backgroundColor: '#007AFF',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    justifyContent: 'center',
+  },
+
+  navBtnDisabled: {
+    backgroundColor: '#F2F2F7',
+  },
+
+  navText: {
+    color: '#fff',
+    fontWeight: '900',
+    fontSize: 13,
+  },
+
+  navTextDisabled: {
+    color: '#bbb',
+  },
+
+  counterText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#111',
+  },
+
+  modal: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+
+  modalHeader: {
+    paddingHorizontal: 16,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  modalTitle: { fontSize: 16, fontWeight: '900' },
-  modalClose: { color: '#007AFF', fontSize: 16, fontWeight: '900' },
+
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#111',
+  },
+
+  modalClose: {
+    color: '#007AFF',
+    fontSize: 16,
+    fontWeight: '900',
+  },
 
   chapterGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingTop: 14, paddingBottom: 30 },
+
   chapterBtn: {
     width: 54,
     height: 54,
@@ -1157,11 +1278,49 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     margin: 8,
   },
+
   chapterActive: { backgroundColor: '#007AFF' },
   chapterText: { fontSize: 16, fontWeight: '900', color: '#111' },
   chapterActiveText: { color: '#fff' },
 
+  versionList: {
+    padding: 16,
+    paddingBottom: 30,
+  },
+
+  versionBtn: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#ECECEC',
+  },
+
+  versionActive: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+
+  versionCode: {
+    color: '#111',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+
+  versionName: {
+    color: '#666',
+    fontSize: 13,
+    marginTop: 2,
+  },
+
+  versionActiveText: {
+    color: '#fff',
+  },
+
   aiSafe: { flex: 1, backgroundColor: '#F2F2F7' },
+
   aiHeader: {
     backgroundColor: '#fff',
     borderBottomWidth: 1,
@@ -1172,8 +1331,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+
   aiHeaderBtn: { paddingVertical: 6, paddingRight: 10 },
   aiHeaderText: { color: '#007AFF', fontSize: 16, fontWeight: '900' },
+
   aiHeaderTitle: {
     flex: 1,
     textAlign: 'center',
@@ -1182,6 +1343,7 @@ const styles = StyleSheet.create({
     color: '#111',
     paddingHorizontal: 10,
   },
+
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1191,6 +1353,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     gap: 6,
   },
+
   saveBtnText: { color: '#fff', fontWeight: '900', fontSize: 13 },
 
   aiLoading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -1212,6 +1375,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
+
   infoBar: { width: 5 },
   infoContent: { flex: 1, padding: 14, paddingVertical: 16 },
   infoHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
@@ -1228,6 +1392,7 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#fff',
   },
+
   centerTitle: { fontSize: 18, fontWeight: '900', marginBottom: 10, color: '#111' },
   centerText: { color: '#666', textAlign: 'center', marginBottom: 20, lineHeight: 20 },
   centerBtn: { backgroundColor: '#007AFF', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },

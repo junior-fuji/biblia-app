@@ -221,5 +221,7 @@ export async function openBibleProjector(params: {
     verses: params.verses,
   });
 
-  params.router.push(`/projector/bible?deckId=${encodeURIComponent(deckId)}` as never);
+  const href = `/projector/bible?deckId=${encodeURIComponent(deckId)}`;
+
+  params.router.push(href as never);
 }

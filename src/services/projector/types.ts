@@ -1,6 +1,11 @@
 export type ProjectorSlideKind =
+  | 'verse'
+  | 'stanza'
+  | 'chorus'
   | 'bible-title'
   | 'bible-verse'
+  | 'event'
+  | 'sketch'
   | 'custom'
   | 'blank';
 
@@ -10,6 +15,7 @@ export type ProjectorSlide = {
   title: string;
   content: string;
   reference?: string;
+  verseNumber?: number;
   meta?: {
     bookLabel?: string;
     chapter?: number;
