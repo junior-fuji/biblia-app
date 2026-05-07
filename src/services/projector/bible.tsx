@@ -100,21 +100,21 @@ export default function BibleProjectorRoute() {
 
   return (
     <ProjectorScreen
-      title=""
-      subtitle=""
-      slides={payload.slides}
-      onClose={handleClose}
-      pickerLabel="Versículos"
-      pickerTitle="Selecionar versículo"
-      showTopHeader={false}
-      showSlideHeader
-      showFooterCounter={false}
-      showGroupNavigation={false}
-      autoFitText={false}
-      baseFontSize={36}
-      minFontSize={20}
-      maxFontSize={60}
-    />
+    title=""
+    subtitle=""
+    slides={payload.slides}
+    onClose={handleClose}
+    pickerLabel="Versículos"
+    pickerTitle="Selecionar versículo"
+    showTopHeader={false}
+    showSlideHeader
+    showFooterCounter={false}
+    showGroupNavigation={false}
+    autoFitText={false}
+    baseFontSize={36}
+    minFontSize={20}
+    maxFontSize={60}
+  />
   );
 }
 
