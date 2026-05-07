@@ -33,6 +33,68 @@ function normalizeText(text?: string) {
     .join('\n');
 }
 
+function splitTextForProjection(
+  text: string,
+  options?: {
+    maxChars?: number;
+    maxLines?: number;
+  },
+): string[] {
+  const maxChars = options?.maxChars ?? 210;
+  const maxLines = options?.maxLines ?? 4;
+
+  const normalized = String(text || '')
+    .replace(/\r/g, '')
+    .trim();
+
+  if (!normalized) {
+    return [];
+  }
+
+  const explicitLines = normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (explicitLines.length > 1) {
+    const chunks: string[] = [];
+
+    for (let index = 0; index < explicitLines.length; index += maxLines) {
+      chunks.push(explicitLines.slice(index, index + maxLines).join('\n'));
+    }
+
+    return chunks;
+  }
+
+  if (normalized.length <= maxChars) {
+    return [normalized];
+  }
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+  const chunks: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+
+    if (next.length <= maxChars) {
+      current = next;
+    } else {
+      if (current) {
+        chunks.push(current);
+      }
+
+      current = word.length > maxChars ? word.slice(0, maxChars) : word;
+    }
+  }
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
+
 function buildSlides(hymn: HarpaSong): ProjectorSlide[] {
   const slides: ProjectorSlide[] = [];
   const verses = Array.isArray(hymn.verses) ? hymn.verses : [];
@@ -44,30 +106,51 @@ function buildSlides(hymn: HarpaSong): ProjectorSlide[] {
     const verseText = normalizeText(verse?.text);
 
     if (verseText) {
-      slides.push({
-        id: `verse-${index + 1}`,
-        title: '',
-        content: verseText,
-        kind: 'stanza',
+      const verseParts = splitTextForProjection(verseText, {
+        maxLines: 4,
+        maxChars: 210,
+      });
+
+      verseParts.forEach((part, partIndex) => {
+        slides.push({
+          id: `verse-${index + 1}-${partIndex + 1}`,
+          title: '',
+          content: part,
+          kind: 'stanza',
+        });
       });
 
       if (hasChorus) {
-        slides.push({
-          id: `chorus-${index + 1}`,
-          title: '',
-          content: chorus,
-          kind: 'chorus',
+        const chorusParts = splitTextForProjection(chorus, {
+          maxLines: 4,
+          maxChars: 210,
+        });
+
+        chorusParts.forEach((part, partIndex) => {
+          slides.push({
+            id: `chorus-${index + 1}-${partIndex + 1}`,
+            title: '',
+            content: part,
+            kind: 'chorus',
+          });
         });
       }
     }
   }
 
   if (slides.length === 0 && hasChorus) {
-    slides.push({
-      id: 'chorus-only',
-      title: '',
-      content: chorus,
-      kind: 'chorus',
+    const chorusParts = splitTextForProjection(chorus, {
+      maxLines: 4,
+      maxChars: 210,
+    });
+
+    chorusParts.forEach((part, partIndex) => {
+      slides.push({
+        id: `chorus-only-${partIndex + 1}`,
+        title: '',
+        content: part,
+        kind: 'chorus',
+      });
     });
   }
 
@@ -81,6 +164,7 @@ export default function HarpaProjectorScreen() {
   const { number } = useLocalSearchParams<{ number?: string }>();
 
   const isWeb = Platform.OS === 'web';
+
   const currentNumber = useMemo(
     () => clamp(Number(number) || 1, 1, 640),
     [number],
@@ -108,13 +192,19 @@ export default function HarpaProjectorScreen() {
 
   const renderSlideLabel = useCallback((slide: ProjectorSlide) => {
     if (slide.kind === 'chorus') {
+      const match = slide.id.match(/chorus-(\d+)-(\d+)/);
+
+      if (match?.[1] && match?.[2]) {
+        return `Refrão ${match[1]} · parte ${match[2]}`;
+      }
+
       return 'Refrão';
     }
 
-    const match = slide.id.match(/verse-(\d+)/);
+    const match = slide.id.match(/verse-(\d+)-(\d+)/);
 
-    if (match?.[1]) {
-      return `Estrofe ${match[1]}`;
+    if (match?.[1] && match?.[2]) {
+      return `Estrofe ${match[1]} · parte ${match[2]}`;
     }
 
     return 'Slide';
@@ -133,12 +223,14 @@ export default function HarpaProjectorScreen() {
         onClose={handleClose}
         pickerLabel="Partes"
         pickerTitle="Selecionar parte"
-        showHeaderLabels={false}
+        showTopHeader={false}
+        showSlideHeader={false}
         showFooterCounter={false}
         showGroupNavigation={false}
-        autoFitText
-        minFontSize={8}
-        maxFontSize={76}
+        autoFitText={false}
+        baseFontSize={38}
+        minFontSize={30}
+        maxFontSize={42}
       />
     );
   }
@@ -149,17 +241,18 @@ export default function HarpaProjectorScreen() {
       subtitle="Harpa Cristã"
       slides={slides}
       onClose={handleClose}
-      baseFontSize={42}
+      baseFontSize={38}
       uniformFontSize
       pickerLabel="Partes"
       pickerTitle={`${hymn.number} — ${hymn.title}`}
       renderSlideLabel={renderSlideLabel}
-      showHeaderLabels={false}
+      showTopHeader={false}
+      showSlideHeader={false}
       showFooterCounter={false}
       showGroupNavigation={false}
-      autoFitText
-      minFontSize={8}
-      maxFontSize={82}
+      autoFitText={false}
+      minFontSize={30}
+      maxFontSize={42}
     />
   );
 }

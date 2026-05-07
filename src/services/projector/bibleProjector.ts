@@ -4,7 +4,6 @@ import { Platform } from 'react-native';
 
 export type ProjectorSlideKind =
   | 'verse'
-  | 'bible-title'
   | 'bible-verse'
   | 'event'
   | 'sketch'
@@ -22,6 +21,8 @@ export type ProjectorSlide = {
     bookLabel?: string;
     chapter?: number;
     verse?: number;
+    part?: number;
+    totalParts?: number;
     [key: string]: unknown;
   };
 };
@@ -99,6 +100,68 @@ function validateBibleSlidesInput(
   }
 }
 
+function splitTextForProjection(
+  text: string,
+  options?: {
+    maxChars?: number;
+    maxLines?: number;
+  },
+): string[] {
+  const maxChars = options?.maxChars ?? 230;
+  const maxLines = options?.maxLines ?? 4;
+
+  const normalized = String(text || '')
+    .replace(/\r/g, '')
+    .trim();
+
+  if (!normalized) {
+    return [];
+  }
+
+  const explicitLines = normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (explicitLines.length > 1) {
+    const chunks: string[] = [];
+
+    for (let index = 0; index < explicitLines.length; index += maxLines) {
+      chunks.push(explicitLines.slice(index, index + maxLines).join('\n'));
+    }
+
+    return chunks;
+  }
+
+  if (normalized.length <= maxChars) {
+    return [normalized];
+  }
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+  const chunks: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+
+    if (next.length <= maxChars) {
+      current = next;
+    } else {
+      if (current) {
+        chunks.push(current);
+      }
+
+      current = word.length > maxChars ? word.slice(0, maxChars) : word;
+    }
+  }
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
+
 export function buildBibleSlides(
   bookLabel: string,
   chapter: number,
@@ -127,37 +190,39 @@ export function buildBibleSlides(
     throw new Error('Nenhum versículo válido encontrado para projetar.');
   }
 
-  const titleSlide: ProjectorSlide = {
-    id: `bible-${safeBookId}-${chapter}-title`,
-    title: `${cleanBookLabel} ${chapter}`,
-    content: `${cleanBookLabel} ${chapter}`,
-    kind: 'bible-title',
-    reference: `${cleanBookLabel} ${chapter}`,
-    meta: {
-      bookLabel: cleanBookLabel,
-      chapter,
-    },
-  };
-
-  const verseSlides: ProjectorSlide[] = validVerses.map((verse) => {
+  const verseSlides: ProjectorSlide[] = validVerses.flatMap((verse) => {
     const reference = `${cleanBookLabel} ${chapter}:${verse.verse}`;
 
-    return {
-      id: `bible-${safeBookId}-${chapter}-${verse.verse}`,
-      title: reference,
-      content: verse.text,
-      kind: 'bible-verse',
-      reference,
-      verseNumber: verse.verse,
-      meta: {
-        bookLabel: cleanBookLabel,
-        chapter,
-        verse: verse.verse,
-      },
-    };
+    const parts = splitTextForProjection(verse.text, {
+      maxChars: 230,
+      maxLines: 4,
+    });
+
+    return parts.map((part, index) => {
+      const hasMultipleParts = parts.length > 1;
+      const displayTitle = hasMultipleParts
+        ? `${reference} · ${index + 1}/${parts.length}`
+        : reference;
+
+      return {
+        id: `bible-${safeBookId}-${chapter}-${verse.verse}-${index + 1}`,
+        title: displayTitle,
+        content: part,
+        kind: 'bible-verse',
+        reference: displayTitle,
+        verseNumber: verse.verse,
+        meta: {
+          bookLabel: cleanBookLabel,
+          chapter,
+          verse: verse.verse,
+          part: index + 1,
+          totalParts: parts.length,
+        },
+      };
+    });
   });
 
-  return [titleSlide, ...verseSlides];
+  return verseSlides;
 }
 
 export async function saveBibleProjectorPayload(params: {

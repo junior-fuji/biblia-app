@@ -49,15 +49,20 @@ type Props = {
   renderSlideLabel?: (slide: ProjectorSlide, index: number) => string;
 
   /**
-   * Usado principalmente na Harpa para não poluir a projeção com:
-   * "Harpa Cristã", título do hino, contador e navegação de hino.
+   * Compatibilidade com chamadas antigas.
    */
   showHeaderLabels?: boolean;
+
+  /**
+   * Controle separado.
+   */
+  showTopHeader?: boolean;
+  showSlideHeader?: boolean;
   showFooterCounter?: boolean;
   showGroupNavigation?: boolean;
 
   /**
-   * Ajuste automático para textos longos.
+   * Proteção opcional. Para projeção estável, prefira dividir slides e usar autoFitText={false}.
    */
   autoFitText?: boolean;
   minFontSize?: number;
@@ -66,18 +71,21 @@ type Props = {
 
 const DEFAULT_MIN_FONT_SIZE = 8;
 const DEFAULT_MAX_FONT_SIZE = 82;
-const STEP = 4;
+const FONT_STEP = 4;
+const VERTICAL_STEP = 24;
+const MIN_VERTICAL_OFFSET = -260;
+const MAX_VERTICAL_OFFSET = 260;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
 function getBaseFontSize(kind?: ProjectorSlide['kind']) {
-  if (kind === 'bible-title') return 46;
-  if (kind === 'bible-verse') return 38;
+  if (kind === 'bible-title') return 44;
+  if (kind === 'bible-verse') return 36;
   if (kind === 'verse') return 34;
   if (kind === 'stanza') return 38;
-  if (kind === 'chorus') return 40;
+  if (kind === 'chorus') return 38;
   if (kind === 'event') return 34;
   if (kind === 'sketch') return 32;
   return 34;
@@ -146,9 +154,13 @@ export default function ProjectorScreen({
   pickerLabel = 'Slides',
   pickerTitle = 'Selecionar slide',
   renderSlideLabel,
-  showHeaderLabels = true,
+
+  showHeaderLabels,
+  showTopHeader,
+  showSlideHeader,
   showFooterCounter = true,
   showGroupNavigation = true,
+
   autoFitText = true,
   minFontSize = DEFAULT_MIN_FONT_SIZE,
   maxFontSize = DEFAULT_MAX_FONT_SIZE,
@@ -156,8 +168,23 @@ export default function ProjectorScreen({
   const { settings } = useSettings();
 
   const [manualOffset, setManualOffset] = useState(0);
+  const [verticalOffset, setVerticalOffset] = useState(0);
   const [slideIndex, setSlideIndex] = useState(initialIndex);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  const effectiveShowTopHeader =
+    typeof showTopHeader === 'boolean'
+      ? showTopHeader
+      : typeof showHeaderLabels === 'boolean'
+        ? showHeaderLabels
+        : true;
+
+  const effectiveShowSlideHeader =
+    typeof showSlideHeader === 'boolean'
+      ? showSlideHeader
+      : typeof showHeaderLabels === 'boolean'
+        ? showHeaderLabels
+        : true;
 
   const safeSlides = useMemo(() => {
     return Array.isArray(slides) ? slides : [];
@@ -213,17 +240,33 @@ export default function ProjectorScreen({
   const lineHeight = Math.round(fontSize * 1.34);
 
   const decreaseFont = useCallback(() => {
-    setManualOffset((prev) => prev - STEP);
+    setManualOffset((prev) => prev - FONT_STEP);
   }, []);
 
   const increaseFont = useCallback(() => {
-    setManualOffset((prev) => prev + STEP);
+    setManualOffset((prev) => prev + FONT_STEP);
+  }, []);
+
+  const moveTextUp = useCallback(() => {
+    setVerticalOffset((prev) =>
+      clamp(prev - VERTICAL_STEP, MIN_VERTICAL_OFFSET, MAX_VERTICAL_OFFSET),
+    );
+  }, []);
+
+  const moveTextDown = useCallback(() => {
+    setVerticalOffset((prev) =>
+      clamp(prev + VERTICAL_STEP, MIN_VERTICAL_OFFSET, MAX_VERTICAL_OFFSET),
+    );
+  }, []);
+
+  const resetVerticalOffset = useCallback(() => {
+    setVerticalOffset(0);
   }, []);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
 
-    const win = globalThis?.window;
+    const win = globalThis.window;
 
     if (!win) return;
 
@@ -240,6 +283,21 @@ export default function ProjectorScreen({
       if (event.key === 'ArrowLeft') {
         event.preventDefault();
         prevSlide();
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        moveTextUp();
+      }
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        moveTextDown();
+      }
+
+      if (event.key === '0') {
+        event.preventDefault();
+        resetVerticalOffset();
       }
 
       if (event.key === 'PageDown' && onNextGroup) {
@@ -263,10 +321,12 @@ export default function ProjectorScreen({
       }
 
       if (event.key === '+' || event.key === '=') {
+        event.preventDefault();
         increaseFont();
       }
 
       if (event.key === '-' || event.key === '_') {
+        event.preventDefault();
         decreaseFont();
       }
     };
@@ -276,12 +336,15 @@ export default function ProjectorScreen({
   }, [
     decreaseFont,
     increaseFont,
+    moveTextDown,
+    moveTextUp,
     nextSlide,
     onClose,
     onNextGroup,
     onPrevGroup,
     pickerOpen,
     prevSlide,
+    resetVerticalOffset,
   ]);
 
   const getSlideLabel = useCallback(
@@ -329,7 +392,7 @@ export default function ProjectorScreen({
         </TouchableOpacity>
 
         <View style={styles.topCenter}>
-          {showHeaderLabels && title ? (
+          {effectiveShowTopHeader && title ? (
             <Text
               style={[styles.topTitle, { color: colors.mainText }]}
               numberOfLines={1}
@@ -338,7 +401,7 @@ export default function ProjectorScreen({
             </Text>
           ) : null}
 
-          {showHeaderLabels && subtitle ? (
+          {effectiveShowTopHeader && subtitle ? (
             <Text
               style={[styles.topSubtitle, { color: colors.mutedText }]}
               numberOfLines={1}
@@ -361,6 +424,18 @@ export default function ProjectorScreen({
             </TouchableOpacity>
           ) : null}
 
+          <TouchableOpacity onPress={moveTextUp} style={styles.topMiniBtn}>
+            <Ionicons name="arrow-up" size={16} color={colors.mutedText} />
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={moveTextDown} style={styles.topMiniBtn}>
+            <Ionicons name="arrow-down" size={16} color={colors.mutedText} />
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={resetVerticalOffset} style={styles.topMiniBtn}>
+            <Ionicons name="locate-outline" size={16} color={colors.mutedText} />
+          </TouchableOpacity>
+
           <TouchableOpacity onPress={decreaseFont} style={styles.topMiniBtn}>
             <Text style={[styles.control, { color: colors.mutedText }]}>A-</Text>
           </TouchableOpacity>
@@ -380,10 +455,17 @@ export default function ProjectorScreen({
         />
 
         <View style={styles.slideContent}>
-          <View style={styles.slideInner}>
+          <View
+            style={[
+              styles.slideInner,
+              {
+                transform: [{ translateY: verticalOffset }],
+              },
+            ]}
+          >
             {currentSlide ? (
               <>
-                {showHeaderLabels && currentSlide.title ? (
+                {effectiveShowSlideHeader && currentSlide.title ? (
                   <Text
                     style={[
                       styles.slideTitle,
@@ -408,7 +490,7 @@ export default function ProjectorScreen({
                   {currentSlide.content}
                 </Text>
 
-                {showHeaderLabels &&
+                {effectiveShowSlideHeader &&
                 currentSlide.reference &&
                 currentSlide.reference !== currentSlide.title ? (
                   <Text
