@@ -106,6 +106,14 @@ export default function BibleProjectorRoute() {
       onClose={handleClose}
       pickerLabel="Versículos"
       pickerTitle="Selecionar versículo"
+      showTopHeader={false}
+      showSlideHeader
+      showFooterCounter={false}
+      showGroupNavigation={false}
+      autoFitText={false}
+      baseFontSize={36}
+      minFontSize={20}
+      maxFontSize={60}
     />
   );
 }
