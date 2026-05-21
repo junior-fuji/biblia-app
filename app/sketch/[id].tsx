@@ -1,7 +1,7 @@
 import { getSupabaseOrThrow } from '@/lib/supabaseClient';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -64,13 +64,17 @@ function CardSection({
   bgColor,
   fontSize,
 }: CardSectionProps) {
-
   if (!isEditing && !textValue) return null;
 
   return (
     <View style={[styles.card, { borderLeftColor: color }]}>
       <View style={[styles.cardHeader, { backgroundColor: bgColor }]}>
-        <Ionicons name={icon} size={20} color={color} style={{ marginRight: 8 }} />
+        <Ionicons
+          name={icon}
+          size={20}
+          color={color}
+          style={{ marginRight: 8 }}
+        />
         <Text style={[styles.cardTitle, { color }]}>{title}</Text>
       </View>
 
@@ -82,9 +86,15 @@ function CardSection({
             value={textValue || ''}
             onChangeText={onChangeText}
             placeholder={`Digite aqui o conteúdo de ${title}...`}
+            textAlignVertical="top"
           />
         ) : (
-          <Text style={[styles.cardText, { fontSize, lineHeight: fontSize * 1.5 }]}>
+          <Text
+            style={[
+              styles.cardText,
+              { fontSize, lineHeight: fontSize * 1.5 },
+            ]}
+          >
             {textValue}
           </Text>
         )}
@@ -93,12 +103,15 @@ function CardSection({
   );
 }
 
-function normalizeSketchContent(raw: SavedNoteRow['content'], fallbackTitle: string): SavedSketchEnvelope {
-  let parsed: any = raw;
+function normalizeSketchContent(
+  raw: SavedNoteRow['content'],
+  fallbackTitle: string,
+): SavedSketchEnvelope {
+  let parsed: SavedSketchEnvelope | string = raw;
 
   if (typeof raw === 'string') {
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(raw) as SavedSketchEnvelope;
     } catch {
       parsed = {
         version: 1,
@@ -117,21 +130,39 @@ function normalizeSketchContent(raw: SavedNoteRow['content'], fallbackTitle: str
     }
   }
 
-  const sections = parsed?.sections ?? {};
+  const normalized =
+    typeof parsed === 'object' && parsed !== null
+      ? parsed
+      : {
+          version: 1,
+          type: 'sketch',
+          source: 'manual',
+          format: 'editable_study',
+          title: fallbackTitle,
+          sections: {
+            theme: '',
+            exegesis: '',
+            context: '',
+            theology: '',
+            application: '',
+          },
+        };
+
+  const sections = normalized.sections ?? {};
 
   return {
-    version: parsed?.version ?? 1,
-    type: parsed?.type ?? 'sketch',
-    source: parsed?.source ?? 'manual',
-    format: parsed?.format ?? 'editable_study',
-    title: parsed?.title ?? fallbackTitle,
-    created_at: parsed?.created_at,
+    version: normalized.version ?? 1,
+    type: normalized.type ?? 'sketch',
+    source: normalized.source ?? 'manual',
+    format: normalized.format ?? 'editable_study',
+    title: normalized.title ?? fallbackTitle,
+    created_at: normalized.created_at,
     sections: {
-      theme: sections?.theme ?? '',
-      exegesis: sections?.exegesis ?? '',
-      context: sections?.context ?? '',
-      theology: sections?.theology ?? '',
-      application: sections?.application ?? '',
+      theme: sections.theme ?? '',
+      exegesis: sections.exegesis ?? '',
+      context: sections.context ?? '',
+      theology: sections.theology ?? '',
+      application: sections.application ?? '',
     },
   };
 }
@@ -147,7 +178,9 @@ export default function SketchDetailScreen() {
   const [fontSize, setFontSize] = useState(16);
   const [saving, setSaving] = useState(false);
 
-  async function loadSketch() {
+  const loadSketch = useCallback(async () => {
+    setLoading(true);
+
     try {
       const sb = getSupabaseOrThrow();
 
@@ -157,6 +190,7 @@ export default function SketchDetailScreen() {
       } = await sb.auth.getSession();
 
       if (sessionError) throw sessionError;
+
       if (!session?.user?.id) {
         Alert.alert('Login necessário', 'Faça login para acessar este estudo.');
         router.back();
@@ -175,17 +209,22 @@ export default function SketchDetailScreen() {
       const row = data as SavedNoteRow;
       setNote(row);
       setContent(normalizeSketchContent(row.content, row.title));
-    } catch (error: any) {
-      Alert.alert('Erro', error?.message || 'Não foi possível carregar o estudo.');
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível carregar o estudo.';
+
+      Alert.alert('Erro', message);
       router.back();
     } finally {
       setLoading(false);
     }
-  }
+  }, [id, router]);
 
   useEffect(() => {
-    loadSketch();
-  }, [id]);
+    void loadSketch();
+  }, [loadSketch]);
 
   function updateSection(field: keyof SketchSections, value: string) {
     setContent((prev) =>
@@ -201,7 +240,7 @@ export default function SketchDetailScreen() {
               [field]: value,
             },
           }
-        : prev
+        : prev,
     );
   }
 
@@ -240,8 +279,13 @@ _Gerado pelo meu App Bíblia IA_
       `.trim();
 
       await Share.share({ message });
-    } catch (error: any) {
-      Alert.alert('Erro', error?.message || 'Não foi possível compartilhar.');
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível compartilhar.';
+
+      Alert.alert('Erro', message);
     }
   }
 
@@ -259,6 +303,7 @@ _Gerado pelo meu App Bíblia IA_
       } = await sb.auth.getSession();
 
       if (sessionError) throw sessionError;
+
       if (!session?.user?.id) {
         throw new Error('Usuário não autenticado.');
       }
@@ -269,7 +314,8 @@ _Gerado pelo meu App Bíblia IA_
         source: 'manual',
         format: 'editable_study',
         title: content.title || note.title,
-        created_at: content.created_at || note.created_at || new Date().toISOString(),
+        created_at:
+          content.created_at || note.created_at || new Date().toISOString(),
         sections: {
           theme: content.sections?.theme ?? '',
           exegesis: content.sections?.exegesis ?? '',
@@ -299,15 +345,24 @@ _Gerado pelo meu App Bíblia IA_
       setIsEditing(false);
 
       Alert.alert('Sucesso', 'Estudo atualizado!');
-    } catch (error: any) {
-      Alert.alert('Erro ao atualizar', error?.message || 'Falha ao salvar.');
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Falha ao salvar.';
+
+      Alert.alert('Erro ao atualizar', message);
     } finally {
       setSaving(false);
     }
   }
 
   if (loading) {
-    return <ActivityIndicator size="large" color="#AF52DE" style={{ marginTop: 50 }} />;
+    return (
+      <ActivityIndicator
+        size="large"
+        color="#AF52DE"
+        style={{ marginTop: 50 }}
+      />
+    );
   }
 
   if (!note || !content) {
@@ -326,7 +381,10 @@ _Gerado pelo meu App Bíblia IA_
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={undefined} style={{ flex: 1 }}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.iconButton}
+          >
             <Ionicons name="arrow-back" size={24} color="#333" />
           </TouchableOpacity>
 
@@ -359,7 +417,10 @@ _Gerado pelo meu App Bíblia IA_
                 )}
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.actionBtn}>
+              <TouchableOpacity
+                onPress={() => setIsEditing(true)}
+                style={styles.actionBtn}
+              >
                 <Ionicons name="pencil" size={22} color="#007AFF" />
               </TouchableOpacity>
             )}
@@ -370,14 +431,14 @@ _Gerado pelo meu App Bíblia IA_
           <View style={styles.fontControlsContainer}>
             <View style={styles.fontControls}>
               <TouchableOpacity
-                onPress={() => setFontSize(Math.max(12, fontSize - 2))}
+                onPress={() => setFontSize((current) => Math.max(12, current - 2))}
                 style={styles.fontBtn}
               >
                 <Text style={styles.fontBtnText}>A-</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => setFontSize(Math.min(26, fontSize + 2))}
+                onPress={() => setFontSize((current) => Math.min(26, current + 2))}
                 style={styles.fontBtn}
               >
                 <Text style={styles.fontBtnText}>A+</Text>
@@ -386,7 +447,10 @@ _Gerado pelo meu App Bíblia IA_
           </View>
         ) : null}
 
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.themeBox}>
             <Text style={styles.themeLabel}>TEMA CENTRAL</Text>
             {isEditing ? (
@@ -395,6 +459,7 @@ _Gerado pelo meu App Bíblia IA_
                 multiline
                 value={sections.theme}
                 onChangeText={(text) => updateSection('theme', text)}
+                textAlignVertical="top"
               />
             ) : (
               <Text style={styles.themeText}>{sections.theme}</Text>

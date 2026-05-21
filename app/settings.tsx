@@ -1,18 +1,24 @@
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
 import { useAuth } from '@/src/providers/AuthProvider';
-import { ProjectorTheme, useSettings } from '@/src/providers/SettingsProvider';
+import {
+  AppTheme,
+  ProjectorTheme,
+  useSettings,
+} from '@/src/providers/SettingsProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { decode } from 'base64-arraybuffer';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -33,13 +39,18 @@ type OptionRowProps = {
   isDestructive?: boolean;
   onPress?: () => void;
   rightText?: string;
+  children?: React.ReactNode;
 };
 
 function timeoutAfter(ms: number) {
   return new Promise((_, reject) => {
     const id = setTimeout(() => {
       clearTimeout(id);
-      reject(new Error('Tempo esgotado ao salvar perfil. Verifique conexão e permissões.'));
+      reject(
+        new Error(
+          'Tempo esgotado ao salvar perfil. Verifique conexão e permissões.',
+        ),
+      );
     }, ms);
   });
 }
@@ -51,16 +62,26 @@ function OptionRow({
   isDestructive,
   onPress,
   rightText,
+  children,
 }: OptionRowProps) {
   return (
-    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity
+      style={styles.row}
+      onPress={onPress}
+      activeOpacity={onPress ? 0.85 : 1}
+      disabled={!onPress}
+    >
       <View style={[styles.iconBox, { backgroundColor: color }]}>
         <Ionicons name={icon} size={20} color="#fff" />
       </View>
 
-      <Text style={[styles.rowLabel, isDestructive && { color: '#FF3B30' }]}>{label}</Text>
+      <Text style={[styles.rowLabel, isDestructive && { color: '#FF3B30' }]}>
+        {label}
+      </Text>
 
-      {rightText ? (
+      {children ? (
+        children
+      ) : rightText ? (
         <Text style={styles.rightText}>{rightText}</Text>
       ) : !isDestructive ? (
         <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
@@ -72,7 +93,17 @@ function OptionRow({
 export default function SettingsScreen() {
   const router = useRouter();
   const { session, initialized } = useAuth();
-  const { settings, setBibleVersion, setFontSize, setProjectorTheme } = useSettings();
+
+  const {
+    settings,
+    setBibleVersion,
+    setFontSize,
+    setDarkMode,
+    setAppTheme,
+    setProjectorTheme,
+    resetSettings,
+    reloadSettings,
+  } = useSettings();
 
   const [profileName, setProfileName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -85,6 +116,7 @@ export default function SettingsScreen() {
   const [versionModal, setVersionModal] = useState(false);
   const [fontModal, setFontModal] = useState(false);
   const [projectorThemeModal, setProjectorThemeModal] = useState(false);
+  const [appThemeModal, setAppThemeModal] = useState(false);
 
   const [editNameModal, setEditNameModal] = useState(false);
   const [editName, setEditName] = useState('');
@@ -96,8 +128,9 @@ export default function SettingsScreen() {
       { label: 'Média', value: 16 },
       { label: 'Grande', value: 18 },
       { label: 'Extra', value: 20 },
+      { label: 'Máxima', value: 24 },
     ],
-    []
+    [],
   );
 
   const projectorThemes = useMemo(
@@ -113,7 +146,28 @@ export default function SettingsScreen() {
         description: 'Fundo branco com letras pretas em negrito',
       },
     ],
-    []
+    [],
+  );
+
+  const appThemes = useMemo(
+    () => [
+      {
+        label: 'Sistema',
+        value: 'system' as AppTheme,
+        description: 'Segue o tema configurado no dispositivo',
+      },
+      {
+        label: 'Claro',
+        value: 'light' as AppTheme,
+        description: 'Interface clara',
+      },
+      {
+        label: 'Escuro',
+        value: 'dark' as AppTheme,
+        description: 'Interface escura',
+      },
+    ],
+    [],
   );
 
   useEffect(() => {
@@ -121,7 +175,10 @@ export default function SettingsScreen() {
 
     async function loadVersions() {
       const sb = getSupabaseOrNull();
-      if (!sb) return;
+
+      if (!sb) {
+        return;
+      }
 
       try {
         setVersionsLoading(true);
@@ -132,7 +189,9 @@ export default function SettingsScreen() {
           .eq('is_active', true)
           .order('sort_order', { ascending: true });
 
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
         if (error) {
           console.log('SETTINGS_LOAD_VERSIONS_ERROR', error);
@@ -142,14 +201,22 @@ export default function SettingsScreen() {
         const rows = (data ?? []) as VersionRow[];
         setVersions(rows);
 
-        if (rows.length > 0 && !rows.some((v) => v.code === settings.bibleVersion)) {
+        if (
+          rows.length > 0 &&
+          !rows.some((version) => version.code === settings.bibleVersion)
+        ) {
           setBibleVersion(rows[0].code);
         }
-      } catch (e) {
-        if (!mounted) return;
-        console.log('SETTINGS_LOAD_VERSIONS_FATAL', e);
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+
+        console.log('SETTINGS_LOAD_VERSIONS_FATAL', error);
       } finally {
-        if (mounted) setVersionsLoading(false);
+        if (mounted) {
+          setVersionsLoading(false);
+        }
       }
     }
 
@@ -176,13 +243,22 @@ export default function SettingsScreen() {
 
       try {
         const result = await Promise.race([
-          sb.from('profiles').select('name, avatar_url').eq('id', userId).maybeSingle(),
+          sb
+            .from('profiles')
+            .select('name, avatar_url')
+            .eq('id', userId)
+            .maybeSingle(),
           timeoutAfter(10000),
         ]);
 
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
-        const { data, error } = result as any;
+        const { data, error } = result as {
+          data?: { name?: string | null; avatar_url?: string | null } | null;
+          error?: { message?: string } | null;
+        };
 
         if (error) {
           console.log('LOAD_PROFILE_SETTINGS_ERROR', error);
@@ -195,9 +271,12 @@ export default function SettingsScreen() {
         setProfileName(String(data?.name ?? '').trim());
         setAvatarUrl(String(data?.avatar_url ?? '').trim());
         setAvatarPreviewUri('');
-      } catch (e) {
-        if (!mounted) return;
-        console.log('LOAD_PROFILE_SETTINGS_FATAL', e);
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+
+        console.log('LOAD_PROFILE_SETTINGS_FATAL', error);
         setProfileName('');
         setAvatarUrl('');
         setAvatarPreviewUri('');
@@ -211,7 +290,7 @@ export default function SettingsScreen() {
     };
   }, [session?.user?.id]);
 
-  async function handleLogout() {
+  const handleLogout = useCallback(async () => {
     try {
       const sb = getSupabaseOrNull();
 
@@ -221,16 +300,22 @@ export default function SettingsScreen() {
       }
 
       const { error } = await sb.auth.signOut();
-      if (error) throw error;
+
+      if (error) {
+        throw error;
+      }
 
       Alert.alert('Conta', 'Você saiu da conta com sucesso.');
-      router.replace('/(auth)/login' as any);
-    } catch (e: any) {
-      Alert.alert('Conta', e?.message || 'Não foi possível sair da conta.');
-    }
-  }
+      router.replace('/(auth)/login' as never);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Não foi possível sair da conta.';
 
-  async function handleSaveName() {
+      Alert.alert('Conta', message);
+    }
+  }, [router]);
+
+  const handleSaveName = useCallback(async () => {
     if (!session?.user) {
       Alert.alert('Perfil', 'Faça login para editar o perfil.');
       return;
@@ -247,7 +332,10 @@ export default function SettingsScreen() {
       setSavingName(true);
 
       const sb = getSupabaseOrNull();
-      if (!sb) throw new Error('Supabase indisponível');
+
+      if (!sb) {
+        throw new Error('Supabase indisponível');
+      }
 
       const profilePayload = {
         id: session.user.id,
@@ -261,7 +349,9 @@ export default function SettingsScreen() {
         .select('id, name, avatar_url')
         .single();
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       setProfileName(String(savedProfile?.name ?? nextName));
       setAvatarUrl(String(savedProfile?.avatar_url ?? avatarUrl ?? ''));
@@ -269,17 +359,21 @@ export default function SettingsScreen() {
       setEditNameModal(false);
 
       Alert.alert('Perfil', 'Nome atualizado com sucesso.');
-    } catch (e: any) {
-      console.log('SAVE_PROFILE_NAME_ERROR', e);
-      Alert.alert('Erro', e?.message || 'Erro ao atualizar nome.');
+    } catch (error) {
+      console.log('SAVE_PROFILE_NAME_ERROR', error);
+
+      const message =
+        error instanceof Error ? error.message : 'Erro ao atualizar nome.';
+
+      Alert.alert('Erro', message);
     } finally {
       setSavingName(false);
     }
-  }
+  }, [avatarUrl, editName, session?.user]);
 
-  async function handlePickAvatar() {
+  const handlePickAvatar = useCallback(async () => {
     if (!session?.user) {
-      router.push('/(auth)/login' as any);
+      router.push('/(auth)/login' as never);
       return;
     }
 
@@ -287,7 +381,10 @@ export default function SettingsScreen() {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permission.granted) {
-        Alert.alert('Permissão necessária', 'Permita acesso à galeria para escolher uma foto de perfil.');
+        Alert.alert(
+          'Permissão necessária',
+          'Permita acesso à galeria para escolher uma foto de perfil.',
+        );
         return;
       }
 
@@ -299,7 +396,9 @@ export default function SettingsScreen() {
         base64: true,
       });
 
-      if (result.canceled || !result.assets?.length) return;
+      if (result.canceled || !result.assets?.length) {
+        return;
+      }
 
       const asset = result.assets[0];
 
@@ -313,6 +412,7 @@ export default function SettingsScreen() {
       }
 
       const sb = getSupabaseOrNull();
+
       if (!sb) {
         Alert.alert('Avatar', 'Supabase indisponível neste build.');
         return;
@@ -320,10 +420,9 @@ export default function SettingsScreen() {
 
       setUploadingAvatar(true);
 
-      const ext =
-        asset.mimeType?.includes('png')
-          ? 'png'
-          : asset.mimeType?.includes('webp')
+      const ext = asset.mimeType?.includes('png')
+        ? 'png'
+        : asset.mimeType?.includes('webp')
           ? 'webp'
           : 'jpg';
 
@@ -342,8 +441,13 @@ export default function SettingsScreen() {
         return;
       }
 
-      const { data: publicData } = sb.storage.from('avatars').getPublicUrl(filePath);
-      const publicUrl = publicData?.publicUrl ? `${publicData.publicUrl}?t=${Date.now()}` : '';
+      const { data: publicData } = sb.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      const publicUrl = publicData?.publicUrl
+        ? `${publicData.publicUrl}?t=${Date.now()}`
+        : '';
 
       if (!publicUrl) {
         Alert.alert('Avatar', 'Não foi possível obter a URL da imagem.');
@@ -373,17 +477,70 @@ export default function SettingsScreen() {
       setAvatarPreviewUri('');
 
       Alert.alert('Avatar', 'Foto de perfil atualizada com sucesso.');
-    } catch (e: any) {
-      console.log('HANDLE_PICK_AVATAR_ERROR', e);
-      Alert.alert('Avatar', e?.message || 'Não foi possível atualizar a foto.');
+    } catch (error) {
+      console.log('HANDLE_PICK_AVATAR_ERROR', error);
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível atualizar a foto.';
+
+      Alert.alert('Avatar', message);
     } finally {
       setUploadingAvatar(false);
     }
-  }
+  }, [profileName, router, session?.user]);
+
+  const handleResetSettings = useCallback(() => {
+    const runReset = async () => {
+      await resetSettings();
+      await reloadSettings();
+      Alert.alert('Ajustes', 'Preferências restauradas com sucesso.');
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed =
+        typeof window !== 'undefined'
+          ? window.confirm('Restaurar todas as preferências do app?')
+          : true;
+
+      if (confirmed) {
+        void runReset();
+      }
+
+      return;
+    }
+
+    Alert.alert(
+      'Restaurar ajustes',
+      'Tem certeza que deseja restaurar as preferências padrão?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Restaurar',
+          style: 'destructive',
+          onPress: () => {
+            void runReset();
+          },
+        },
+      ],
+    );
+  }, [reloadSettings, resetSettings]);
 
   const userEmail = session?.user?.email || 'Não autenticado';
-  const displayName = profileName || session?.user?.email?.split('@')[0] || 'Usuário';
-  const projectorThemeLabel = settings.projectorTheme === 'light' ? 'Claro' : 'Escuro';
+  const displayName =
+    profileName || session?.user?.email?.split('@')[0] || 'Usuário';
+
+  const projectorThemeLabel =
+    settings.projectorTheme === 'light' ? 'Claro' : 'Escuro';
+
+  const appThemeLabel =
+    settings.appTheme === 'system'
+      ? 'Sistema'
+      : settings.appTheme === 'dark'
+        ? 'Escuro'
+        : 'Claro';
+
   const avatarSource = avatarPreviewUri || avatarUrl;
 
   return (
@@ -416,19 +573,27 @@ export default function SettingsScreen() {
               ) : null}
             </View>
 
-            <TouchableOpacity style={styles.editAvatarLink} onPress={handlePickAvatar} disabled={uploadingAvatar}>
-              <Text style={styles.editAvatarLinkText}>Editar</Text>
+            <TouchableOpacity
+              style={styles.editAvatarLink}
+              onPress={handlePickAvatar}
+              disabled={uploadingAvatar}
+            >
+              <Text style={styles.editAvatarLinkText}>
+                {uploadingAvatar ? 'Enviando...' : 'Editar'}
+              </Text>
             </TouchableOpacity>
           </View>
 
           <Text style={styles.profileName}>{displayName}</Text>
-          <Text style={styles.profileRole}>{!initialized ? 'Verificando sessão...' : userEmail}</Text>
+          <Text style={styles.profileRole}>
+            {!initialized ? 'Verificando sessão...' : userEmail}
+          </Text>
 
           <TouchableOpacity
             style={styles.editProfileBtn}
             onPress={() => {
               if (!session?.user) {
-                router.push('/(auth)/login' as any);
+                router.push('/(auth)/login' as never);
                 return;
               }
 
@@ -445,17 +610,24 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>GERAL</Text>
         <View style={styles.section}>
           <OptionRow
-            icon="moon"
+            icon="contrast"
             color="#5856D6"
-            label="Modo Escuro"
-            rightText="Em breve"
-            onPress={() =>
-              Alert.alert(
-                'Em breve',
-                'O tema do app inteiro ainda não foi implementado. Por enquanto, a configuração real disponível é o Tema da Projeção.'
-              )
-            }
+            label="Tema do App"
+            rightText={appThemeLabel}
+            onPress={() => setAppThemeModal(true)}
           />
+          <View style={styles.divider} />
+          <OptionRow icon="moon" color="#1C1C1E" label="Modo Escuro">
+            <Switch
+              value={settings.darkMode}
+              onValueChange={(value) => {
+                setDarkMode(value);
+                setAppTheme(value ? 'dark' : 'light');
+              }}
+              trackColor={{ false: '#D1D5DB', true: '#5856D6' }}
+              thumbColor="#fff"
+            />
+          </OptionRow>
           <View style={styles.divider} />
           <OptionRow
             icon="notifications"
@@ -465,7 +637,7 @@ export default function SettingsScreen() {
             onPress={() =>
               Alert.alert(
                 'Em breve',
-                'As notificações ainda não estão integradas. Vamos deixar esse item apenas informativo por enquanto.'
+                'As notificações ainda não estão integradas.',
               )
             }
           />
@@ -513,7 +685,7 @@ export default function SettingsScreen() {
                 icon="log-in"
                 color="#007AFF"
                 label="Entrar / Criar conta"
-                onPress={() => router.push('/(auth)/login' as any)}
+                onPress={() => router.push('/(auth)/login' as never)}
               />
               <View style={styles.divider} />
             </>
@@ -523,7 +695,21 @@ export default function SettingsScreen() {
             icon="help-circle"
             color="#8E8E93"
             label="Ajuda e Suporte"
-            onPress={() => Alert.alert('Contato', 'Defina aqui seu canal de suporte da igreja ou WhatsApp.')}
+            onPress={() =>
+              Alert.alert(
+                'Contato',
+                'Defina aqui seu canal de suporte da igreja ou WhatsApp.',
+              )
+            }
+          />
+
+          <View style={styles.divider} />
+
+          <OptionRow
+            icon="refresh"
+            color="#FF9500"
+            label="Restaurar Ajustes"
+            onPress={handleResetSettings}
           />
 
           {session?.user ? (
@@ -543,64 +729,146 @@ export default function SettingsScreen() {
         <Text style={styles.version}>Versão 1.0.0 (Beta)</Text>
       </ScrollView>
 
-      <Modal visible={versionModal} transparent animationType="fade" onRequestClose={() => setVersionModal(false)}>
+      <Modal
+        visible={appThemeModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAppThemeModal(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Versão da Bíblia</Text>
+            <Text style={styles.modalTitle}>Tema do App</Text>
 
-            {versionsLoading ? (
-              <ActivityIndicator color="#007AFF" />
-            ) : (
-              versions.map((v) => (
-                <TouchableOpacity
-                  key={v.id}
-                  style={styles.modalItem}
-                  onPress={() => {
-                    setBibleVersion(v.code);
-                    setVersionModal(false);
-                  }}
-                >
-                  <Text style={[styles.modalItemText, v.code === settings.bibleVersion && { color: '#007AFF' }]}>
-                    {v.code} — {v.name}
+            {appThemes.map((item) => (
+              <TouchableOpacity
+                key={item.value}
+                style={styles.modalItem}
+                onPress={() => {
+                  setAppTheme(item.value);
+                  setDarkMode(item.value === 'dark');
+                  setAppThemeModal(false);
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.modalItemText,
+                      item.value === settings.appTheme && { color: '#007AFF' },
+                    ]}
+                  >
+                    {item.label}
                   </Text>
-                  {v.code === settings.bibleVersion ? (
-                    <Ionicons name="checkmark" size={18} color="#007AFF" />
-                  ) : null}
-                </TouchableOpacity>
-              ))
-            )}
+                  <Text style={styles.modalItemDescription}>
+                    {item.description}
+                  </Text>
+                </View>
 
-            <TouchableOpacity style={styles.modalClose} onPress={() => setVersionModal(false)}>
+                {item.value === settings.appTheme ? (
+                  <Ionicons name="checkmark" size={18} color="#007AFF" />
+                ) : null}
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => setAppThemeModal(false)}
+            >
               <Text style={styles.modalCloseText}>Fechar</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      <Modal visible={fontModal} transparent animationType="fade" onRequestClose={() => setFontModal(false)}>
+      <Modal
+        visible={versionModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setVersionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Versão da Bíblia</Text>
+
+            {versionsLoading ? (
+              <ActivityIndicator color="#007AFF" />
+            ) : versions.length === 0 ? (
+              <Text style={styles.emptyModalText}>
+                Nenhuma versão carregada. Verifique a conexão com o Supabase.
+              </Text>
+            ) : (
+              versions.map((version) => (
+                <TouchableOpacity
+                  key={version.id}
+                  style={styles.modalItem}
+                  onPress={() => {
+                    setBibleVersion(version.code);
+                    setVersionModal(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.modalItemText,
+                      version.code === settings.bibleVersion && {
+                        color: '#007AFF',
+                      },
+                    ]}
+                  >
+                    {version.code} — {version.name}
+                  </Text>
+                  {version.code === settings.bibleVersion ? (
+                    <Ionicons name="checkmark" size={18} color="#007AFF" />
+                  ) : null}
+                </TouchableOpacity>
+              ))
+            )}
+
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => setVersionModal(false)}
+            >
+              <Text style={styles.modalCloseText}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={fontModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFontModal(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Tamanho da Fonte</Text>
 
-            {fontSizes.map((f) => (
+            {fontSizes.map((font) => (
               <TouchableOpacity
-                key={f.value}
+                key={font.value}
                 style={styles.modalItem}
                 onPress={() => {
-                  setFontSize(f.value);
+                  setFontSize(font.value);
                   setFontModal(false);
                 }}
               >
-                <Text style={[styles.modalItemText, f.value === settings.fontSize && { color: '#007AFF' }]}>
-                  {f.label} ({f.value})
+                <Text
+                  style={[
+                    styles.modalItemText,
+                    font.value === settings.fontSize && { color: '#007AFF' },
+                  ]}
+                >
+                  {font.label} ({font.value})
                 </Text>
-                {f.value === settings.fontSize ? (
+                {font.value === settings.fontSize ? (
                   <Ionicons name="checkmark" size={18} color="#007AFF" />
                 ) : null}
               </TouchableOpacity>
             ))}
 
-            <TouchableOpacity style={styles.modalClose} onPress={() => setFontModal(false)}>
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => setFontModal(false)}
+            >
               <Text style={styles.modalCloseText}>Fechar</Text>
             </TouchableOpacity>
           </View>
@@ -630,12 +898,16 @@ export default function SettingsScreen() {
                   <Text
                     style={[
                       styles.modalItemText,
-                      item.value === settings.projectorTheme && { color: '#007AFF' },
+                      item.value === settings.projectorTheme && {
+                        color: '#007AFF',
+                      },
                     ]}
                   >
                     {item.label}
                   </Text>
-                  <Text style={styles.modalItemDescription}>{item.description}</Text>
+                  <Text style={styles.modalItemDescription}>
+                    {item.description}
+                  </Text>
                 </View>
 
                 {item.value === settings.projectorTheme ? (
@@ -644,14 +916,22 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             ))}
 
-            <TouchableOpacity style={styles.modalClose} onPress={() => setProjectorThemeModal(false)}>
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => setProjectorThemeModal(false)}
+            >
               <Text style={styles.modalCloseText}>Fechar</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      <Modal visible={editNameModal} transparent animationType="fade" onRequestClose={() => setEditNameModal(false)}>
+      <Modal
+        visible={editNameModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditNameModal(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Editar nome</Text>
@@ -665,7 +945,11 @@ export default function SettingsScreen() {
               editable={!savingName}
             />
 
-            <TouchableOpacity onPress={handleSaveName} disabled={savingName} style={styles.primaryActionBtn}>
+            <TouchableOpacity
+              onPress={handleSaveName}
+              disabled={savingName}
+              style={[styles.primaryActionBtn, savingName && styles.disabledBtn]}
+            >
               {savingName ? (
                 <ActivityIndicator color="#fff" />
               ) : (
@@ -748,6 +1032,7 @@ const styles = StyleSheet.create({
 
   profileName: { fontSize: 24, fontWeight: '800', color: '#000' },
   profileRole: { fontSize: 13, color: '#8E8E93', marginBottom: 10 },
+
   editProfileBtn: {
     paddingHorizontal: 15,
     paddingVertical: 6,
@@ -764,6 +1049,7 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     marginTop: 20,
   },
+
   projectorHint: {
     marginTop: 10,
     marginHorizontal: 20,
@@ -771,18 +1057,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
   },
+
   section: {
     backgroundColor: '#fff',
     borderRadius: 10,
     overflow: 'hidden',
     marginHorizontal: 15,
   },
+
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
     justifyContent: 'space-between',
+    minHeight: 54,
   },
+
   iconBox: {
     width: 30,
     height: 30,
@@ -791,11 +1081,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 15,
   },
+
   rowLabel: { flex: 1, fontSize: 16, color: '#000' },
   divider: { height: 1, backgroundColor: '#E5E5EA', marginLeft: 57 },
   rightText: { color: '#8E8E93', fontWeight: '700' },
 
-  version: { textAlign: 'center', color: '#C7C7CC', marginTop: 30, fontSize: 12 },
+  version: {
+    textAlign: 'center',
+    color: '#C7C7CC',
+    marginTop: 30,
+    fontSize: 12,
+  },
 
   modalOverlay: {
     flex: 1,
@@ -803,8 +1099,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
   },
+
   modalContent: { backgroundColor: '#fff', borderRadius: 20, padding: 18 },
-  modalTitle: { fontSize: 18, fontWeight: '800', marginBottom: 12, textAlign: 'center' },
+
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+
   modalItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -813,8 +1117,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F2F2F7',
   },
+
   modalItemText: { fontSize: 16, fontWeight: '700', color: '#111' },
   modalItemDescription: { marginTop: 4, fontSize: 13, color: '#6B7280' },
+
+  emptyModalText: {
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingVertical: 16,
+  },
+
   modalClose: {
     marginTop: 12,
     backgroundColor: '#007AFF',
@@ -822,6 +1135,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
+
   modalCloseText: { color: '#fff', fontWeight: '800' },
 
   inputInline: {
@@ -842,15 +1156,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
   },
+
   primaryActionBtnText: {
     color: '#fff',
     fontWeight: '800',
+  },
+
+  disabledBtn: {
+    opacity: 0.65,
   },
 
   secondaryActionBtn: {
     marginTop: 10,
     alignItems: 'center',
   },
+
   secondaryActionBtnText: {
     color: '#666',
   },

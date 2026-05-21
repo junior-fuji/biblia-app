@@ -3,13 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    SafeAreaView,
-    SectionList,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  SafeAreaView,
+  SectionList,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 // --- DADOS DO PLANO (Exemplo: ERA 1 e 2 Completas) ---
@@ -71,7 +71,7 @@ export default function ReadingPlanScreen() {
     try {
       const saved = await AsyncStorage.getItem('@bible_progress');
       if (saved) setCompletedDays(JSON.parse(saved));
-    } catch (e) {
+    } catch  {
       console.log("Erro ao carregar");
     }
   };

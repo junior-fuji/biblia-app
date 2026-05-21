@@ -82,7 +82,7 @@ export default function AtlasScreen() {
 
     try {
           const sb = getSupabaseOrThrow();
-          const { data, error } = await sb.from('saved_notes').insert({
+          const { error } = await sb.from('saved_notes').insert({
               title: `Diário: ${selectedEra}`,
             reference: "Atlas Histórico",
             content: JSON.stringify(studyContent)
