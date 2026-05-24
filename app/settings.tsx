@@ -22,6 +22,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useColorScheme,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -32,10 +33,32 @@ type VersionRow = {
   name: string;
 };
 
+type ThemeColors = {
+  background: string;
+  header: string;
+  section: string;
+  text: string;
+  muted: string;
+  secondaryText: string;
+  border: string;
+  divider: string;
+  inputBackground: string;
+  modalBackground: string;
+  modalOverlay: string;
+  primary: string;
+  danger: string;
+  avatarBackground: string;
+  editProfileBackground: string;
+  switchOff: string;
+  switchOn: string;
+  chevron: string;
+};
+
 type OptionRowProps = {
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
   label: string;
+  colors: ThemeColors;
   isDestructive?: boolean;
   onPress?: () => void;
   rightText?: string;
@@ -59,6 +82,7 @@ function OptionRow({
   icon,
   color,
   label,
+  colors,
   isDestructive,
   onPress,
   rightText,
@@ -75,16 +99,23 @@ function OptionRow({
         <Ionicons name={icon} size={20} color="#fff" />
       </View>
 
-      <Text style={[styles.rowLabel, isDestructive && { color: '#FF3B30' }]}>
+      <Text
+        style={[
+          styles.rowLabel,
+          { color: isDestructive ? colors.danger : colors.text },
+        ]}
+      >
         {label}
       </Text>
 
       {children ? (
         children
       ) : rightText ? (
-        <Text style={styles.rightText}>{rightText}</Text>
+        <Text style={[styles.rightText, { color: colors.muted }]}>
+          {rightText}
+        </Text>
       ) : !isDestructive ? (
-        <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
+        <Ionicons name="chevron-forward" size={20} color={colors.chevron} />
       ) : null}
     </TouchableOpacity>
   );
@@ -92,6 +123,7 @@ function OptionRow({
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const systemScheme = useColorScheme();
   const { session, initialized } = useAuth();
 
   const {
@@ -121,6 +153,60 @@ export default function SettingsScreen() {
   const [editNameModal, setEditNameModal] = useState(false);
   const [editName, setEditName] = useState('');
   const [savingName, setSavingName] = useState(false);
+
+  const isDark = useMemo(() => {
+    if (settings.appTheme === 'dark') return true;
+    if (settings.appTheme === 'light') return false;
+    if (settings.appTheme === 'system') return systemScheme === 'dark';
+
+    return settings.darkMode;
+  }, [settings.appTheme, settings.darkMode, systemScheme]);
+
+  const colors = useMemo<ThemeColors>(
+    () =>
+      isDark
+        ? {
+            background: '#000000',
+            header: '#111111',
+            section: '#1C1C1E',
+            text: '#FFFFFF',
+            muted: '#A1A1AA',
+            secondaryText: '#D1D5DB',
+            border: '#2C2C2E',
+            divider: '#2C2C2E',
+            inputBackground: '#111111',
+            modalBackground: '#1C1C1E',
+            modalOverlay: 'rgba(0,0,0,0.72)',
+            primary: '#0A84FF',
+            danger: '#FF453A',
+            avatarBackground: '#3A3A3C',
+            editProfileBackground: '#0A84FF22',
+            switchOff: '#3A3A3C',
+            switchOn: '#5856D6',
+            chevron: '#636366',
+          }
+        : {
+            background: '#F2F2F7',
+            header: '#FFFFFF',
+            section: '#FFFFFF',
+            text: '#000000',
+            muted: '#8E8E93',
+            secondaryText: '#6B7280',
+            border: '#E5E5EA',
+            divider: '#E5E5EA',
+            inputBackground: '#F2F2F7',
+            modalBackground: '#FFFFFF',
+            modalOverlay: 'rgba(0,0,0,0.45)',
+            primary: '#007AFF',
+            danger: '#FF3B30',
+            avatarBackground: '#C7C7CC',
+            editProfileBackground: '#E3F2FD',
+            switchOff: '#D1D5DB',
+            switchOn: '#5856D6',
+            chevron: '#C7C7CC',
+          },
+    [isDark],
+  );
 
   const fontSizes = useMemo(
     () => [
@@ -369,9 +455,7 @@ export default function SettingsScreen() {
     } finally {
       setSavingName(false);
     }
-  }, [avatarUrl, editName, session?.user]);
-
-  const handlePickAvatar = useCallback(async () => {
+  }, [avatarUrl, editName, session?.user]);  const handlePickAvatar = useCallback(async () => {
     if (!session?.user) {
       router.push('/(auth)/login' as never);
       return;
@@ -527,6 +611,27 @@ export default function SettingsScreen() {
     );
   }, [reloadSettings, resetSettings]);
 
+  const handleSelectAppTheme = useCallback(
+    (value: AppTheme) => {
+      setAppTheme(value);
+
+      if (value === 'dark') {
+        setDarkMode(true);
+      }
+
+      if (value === 'light') {
+        setDarkMode(false);
+      }
+
+      if (value === 'system') {
+        setDarkMode(systemScheme === 'dark');
+      }
+
+      setAppThemeModal(false);
+    },
+    [setAppTheme, setDarkMode, systemScheme],
+  );
+
   const userEmail = session?.user?.email || 'Não autenticado';
   const displayName =
     profileName || session?.user?.email?.split('@')[0] || 'Usuário';
@@ -544,14 +649,28 @@ export default function SettingsScreen() {
   const avatarSource = avatarPreviewUri || avatarUrl;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: colors.header,
+            borderBottomColor: colors.border,
+          },
+        ]}
+      >
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={28} color="#007AFF" />
-          <Text style={styles.backText}>Voltar</Text>
+          <Ionicons name="chevron-back" size={28} color={colors.primary} />
+          <Text style={[styles.backText, { color: colors.primary }]}>
+            Voltar
+          </Text>
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>Ajustes</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>
+          Ajustes
+        </Text>
 
         <View style={{ width: 70 }} />
       </View>
@@ -559,7 +678,12 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.profileSection}>
           <View style={styles.avatarWrap}>
-            <View style={styles.avatarPlaceholder}>
+            <View
+              style={[
+                styles.avatarPlaceholder,
+                { backgroundColor: colors.avatarBackground },
+              ]}
+            >
               {avatarSource ? (
                 <Image source={{ uri: avatarSource }} style={styles.avatarImage} />
               ) : (
@@ -578,19 +702,29 @@ export default function SettingsScreen() {
               onPress={handlePickAvatar}
               disabled={uploadingAvatar}
             >
-              <Text style={styles.editAvatarLinkText}>
+              <Text
+                style={[
+                  styles.editAvatarLinkText,
+                  { color: colors.primary },
+                ]}
+              >
                 {uploadingAvatar ? 'Enviando...' : 'Editar'}
               </Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.profileName}>{displayName}</Text>
-          <Text style={styles.profileRole}>
+          <Text style={[styles.profileName, { color: colors.text }]}>
+            {displayName}
+          </Text>
+          <Text style={[styles.profileRole, { color: colors.muted }]}>
             {!initialized ? 'Verificando sessão...' : userEmail}
           </Text>
 
           <TouchableOpacity
-            style={styles.editProfileBtn}
+            style={[
+              styles.editProfileBtn,
+              { backgroundColor: colors.editProfileBackground },
+            ]}
             onPress={() => {
               if (!session?.user) {
                 router.push('/(auth)/login' as never);
@@ -601,39 +735,48 @@ export default function SettingsScreen() {
               setEditNameModal(true);
             }}
           >
-            <Text style={styles.editProfileText}>
+            <Text style={[styles.editProfileText, { color: colors.primary }]}>
               {session?.user ? 'Editar Perfil' : 'Entrar na conta'}
             </Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.sectionTitle}>GERAL</Text>
-        <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.muted }]}>
+          GERAL
+        </Text>
+        <View style={[styles.section, { backgroundColor: colors.section }]}>
           <OptionRow
             icon="contrast"
             color="#5856D6"
             label="Tema do App"
             rightText={appThemeLabel}
+            colors={colors}
             onPress={() => setAppThemeModal(true)}
           />
-          <View style={styles.divider} />
-          <OptionRow icon="moon" color="#1C1C1E" label="Modo Escuro">
+          <View style={[styles.divider, { backgroundColor: colors.divider }]} />
+          <OptionRow
+            icon="moon"
+            color="#1C1C1E"
+            label="Modo Escuro"
+            colors={colors}
+          >
             <Switch
-              value={settings.darkMode}
+              value={isDark}
               onValueChange={(value) => {
                 setDarkMode(value);
                 setAppTheme(value ? 'dark' : 'light');
               }}
-              trackColor={{ false: '#D1D5DB', true: '#5856D6' }}
+              trackColor={{ false: colors.switchOff, true: colors.switchOn }}
               thumbColor="#fff"
             />
           </OptionRow>
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: colors.divider }]} />
           <OptionRow
             icon="notifications"
             color="#FF3B30"
             label="Notificações"
             rightText="Em breve"
+            colors={colors}
             onPress={() =>
               Alert.alert(
                 'Em breve',
@@ -643,51 +786,66 @@ export default function SettingsScreen() {
           />
         </View>
 
-        <Text style={styles.sectionTitle}>CONTEÚDO</Text>
-        <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.muted }]}>
+          CONTEÚDO
+        </Text>
+        <View style={[styles.section, { backgroundColor: colors.section }]}>
           <OptionRow
             icon="book"
-            color="#007AFF"
+            color={colors.primary}
             label="Versão da Bíblia"
             rightText={settings.bibleVersion}
+            colors={colors}
             onPress={() => setVersionModal(true)}
           />
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: colors.divider }]} />
           <OptionRow
             icon="text"
             color="#34C759"
             label="Tamanho da Fonte"
             rightText={`${settings.fontSize}`}
+            colors={colors}
             onPress={() => setFontModal(true)}
           />
         </View>
 
-        <Text style={styles.sectionTitle}>PROJEÇÃO</Text>
-        <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.muted }]}>
+          PROJEÇÃO
+        </Text>
+        <View style={[styles.section, { backgroundColor: colors.section }]}>
           <OptionRow
             icon="tv"
-            color="#111827"
+            color={isDark ? '#6366F1' : '#111827'}
             label="Tema da Projeção"
             rightText={projectorThemeLabel}
+            colors={colors}
             onPress={() => setProjectorThemeModal(true)}
           />
         </View>
 
-        <Text style={styles.projectorHint}>
+        <Text style={[styles.projectorHint, { color: colors.secondaryText }]}>
           Use “Claro” para igrejas com ambiente iluminado: fundo branco e letras pretas em negrito.
         </Text>
 
-        <Text style={styles.sectionTitle}>CONTA</Text>
-        <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.muted }]}>
+          CONTA
+        </Text>
+        <View style={[styles.section, { backgroundColor: colors.section }]}>
           {!session?.user ? (
             <>
               <OptionRow
                 icon="log-in"
-                color="#007AFF"
+                color={colors.primary}
                 label="Entrar / Criar conta"
+                colors={colors}
                 onPress={() => router.push('/(auth)/login' as never)}
               />
-              <View style={styles.divider} />
+              <View
+                style={[
+                  styles.divider,
+                  { backgroundColor: colors.divider },
+                ]}
+              />
             </>
           ) : null}
 
@@ -695,6 +853,7 @@ export default function SettingsScreen() {
             icon="help-circle"
             color="#8E8E93"
             label="Ajuda e Suporte"
+            colors={colors}
             onPress={() =>
               Alert.alert(
                 'Contato',
@@ -703,30 +862,39 @@ export default function SettingsScreen() {
             }
           />
 
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 
           <OptionRow
             icon="refresh"
             color="#FF9500"
             label="Restaurar Ajustes"
+            colors={colors}
             onPress={handleResetSettings}
           />
 
           {session?.user ? (
             <>
-              <View style={styles.divider} />
+              <View
+                style={[
+                  styles.divider,
+                  { backgroundColor: colors.divider },
+                ]}
+              />
               <OptionRow
                 icon="log-out"
-                color="#FF3B30"
+                color={colors.danger}
                 label="Sair da Conta"
                 isDestructive
+                colors={colors}
                 onPress={handleLogout}
               />
             </>
           ) : null}
         </View>
 
-        <Text style={styles.version}>Versão 1.0.0 (Beta)</Text>
+        <Text style={[styles.version, { color: colors.muted }]}>
+          Versão 1.0.0 (Beta)
+        </Text>
       </ScrollView>
 
       <Modal
@@ -735,42 +903,61 @@ export default function SettingsScreen() {
         animationType="fade"
         onRequestClose={() => setAppThemeModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Tema do App</Text>
+        <View
+          style={[
+            styles.modalOverlay,
+            { backgroundColor: colors.modalOverlay },
+          ]}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.modalBackground },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Tema do App
+            </Text>
 
             {appThemes.map((item) => (
               <TouchableOpacity
                 key={item.value}
-                style={styles.modalItem}
-                onPress={() => {
-                  setAppTheme(item.value);
-                  setDarkMode(item.value === 'dark');
-                  setAppThemeModal(false);
-                }}
+                style={[
+                  styles.modalItem,
+                  { borderBottomColor: colors.divider },
+                ]}
+                onPress={() => handleSelectAppTheme(item.value)}
               >
                 <View style={{ flex: 1 }}>
                   <Text
                     style={[
                       styles.modalItemText,
-                      item.value === settings.appTheme && { color: '#007AFF' },
+                      { color: colors.text },
+                      item.value === settings.appTheme && {
+                        color: colors.primary,
+                      },
                     ]}
                   >
                     {item.label}
                   </Text>
-                  <Text style={styles.modalItemDescription}>
+                  <Text
+                    style={[
+                      styles.modalItemDescription,
+                      { color: colors.secondaryText },
+                    ]}
+                  >
                     {item.description}
                   </Text>
                 </View>
 
                 {item.value === settings.appTheme ? (
-                  <Ionicons name="checkmark" size={18} color="#007AFF" />
+                  <Ionicons name="checkmark" size={18} color={colors.primary} />
                 ) : null}
               </TouchableOpacity>
             ))}
 
             <TouchableOpacity
-              style={styles.modalClose}
+              style={[styles.modalClose, { backgroundColor: colors.primary }]}
               onPress={() => setAppThemeModal(false)}
             >
               <Text style={styles.modalCloseText}>Fechar</Text>
@@ -785,21 +972,41 @@ export default function SettingsScreen() {
         animationType="fade"
         onRequestClose={() => setVersionModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Versão da Bíblia</Text>
+        <View
+          style={[
+            styles.modalOverlay,
+            { backgroundColor: colors.modalOverlay },
+          ]}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.modalBackground },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Versão da Bíblia
+            </Text>
 
             {versionsLoading ? (
-              <ActivityIndicator color="#007AFF" />
+              <ActivityIndicator color={colors.primary} />
             ) : versions.length === 0 ? (
-              <Text style={styles.emptyModalText}>
+              <Text
+                style={[
+                  styles.emptyModalText,
+                  { color: colors.secondaryText },
+                ]}
+              >
                 Nenhuma versão carregada. Verifique a conexão com o Supabase.
               </Text>
             ) : (
               versions.map((version) => (
                 <TouchableOpacity
                   key={version.id}
-                  style={styles.modalItem}
+                  style={[
+                    styles.modalItem,
+                    { borderBottomColor: colors.divider },
+                  ]}
                   onPress={() => {
                     setBibleVersion(version.code);
                     setVersionModal(false);
@@ -808,22 +1015,27 @@ export default function SettingsScreen() {
                   <Text
                     style={[
                       styles.modalItemText,
+                      { color: colors.text },
                       version.code === settings.bibleVersion && {
-                        color: '#007AFF',
+                        color: colors.primary,
                       },
                     ]}
                   >
                     {version.code} — {version.name}
                   </Text>
                   {version.code === settings.bibleVersion ? (
-                    <Ionicons name="checkmark" size={18} color="#007AFF" />
+                    <Ionicons
+                      name="checkmark"
+                      size={18}
+                      color={colors.primary}
+                    />
                   ) : null}
                 </TouchableOpacity>
               ))
             )}
 
             <TouchableOpacity
-              style={styles.modalClose}
+              style={[styles.modalClose, { backgroundColor: colors.primary }]}
               onPress={() => setVersionModal(false)}
             >
               <Text style={styles.modalCloseText}>Fechar</Text>
@@ -838,14 +1050,29 @@ export default function SettingsScreen() {
         animationType="fade"
         onRequestClose={() => setFontModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Tamanho da Fonte</Text>
+        <View
+          style={[
+            styles.modalOverlay,
+            { backgroundColor: colors.modalOverlay },
+          ]}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.modalBackground },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Tamanho da Fonte
+            </Text>
 
             {fontSizes.map((font) => (
               <TouchableOpacity
                 key={font.value}
-                style={styles.modalItem}
+                style={[
+                  styles.modalItem,
+                  { borderBottomColor: colors.divider },
+                ]}
                 onPress={() => {
                   setFontSize(font.value);
                   setFontModal(false);
@@ -854,19 +1081,22 @@ export default function SettingsScreen() {
                 <Text
                   style={[
                     styles.modalItemText,
-                    font.value === settings.fontSize && { color: '#007AFF' },
+                    { color: colors.text },
+                    font.value === settings.fontSize && {
+                      color: colors.primary,
+                    },
                   ]}
                 >
                   {font.label} ({font.value})
                 </Text>
                 {font.value === settings.fontSize ? (
-                  <Ionicons name="checkmark" size={18} color="#007AFF" />
+                  <Ionicons name="checkmark" size={18} color={colors.primary} />
                 ) : null}
               </TouchableOpacity>
             ))}
 
             <TouchableOpacity
-              style={styles.modalClose}
+              style={[styles.modalClose, { backgroundColor: colors.primary }]}
               onPress={() => setFontModal(false)}
             >
               <Text style={styles.modalCloseText}>Fechar</Text>
@@ -881,14 +1111,29 @@ export default function SettingsScreen() {
         animationType="fade"
         onRequestClose={() => setProjectorThemeModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Tema da Projeção</Text>
+        <View
+          style={[
+            styles.modalOverlay,
+            { backgroundColor: colors.modalOverlay },
+          ]}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.modalBackground },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Tema da Projeção
+            </Text>
 
             {projectorThemes.map((item) => (
               <TouchableOpacity
                 key={item.value}
-                style={styles.modalItem}
+                style={[
+                  styles.modalItem,
+                  { borderBottomColor: colors.divider },
+                ]}
                 onPress={() => {
                   setProjectorTheme(item.value);
                   setProjectorThemeModal(false);
@@ -898,26 +1143,32 @@ export default function SettingsScreen() {
                   <Text
                     style={[
                       styles.modalItemText,
+                      { color: colors.text },
                       item.value === settings.projectorTheme && {
-                        color: '#007AFF',
+                        color: colors.primary,
                       },
                     ]}
                   >
                     {item.label}
                   </Text>
-                  <Text style={styles.modalItemDescription}>
+                  <Text
+                    style={[
+                      styles.modalItemDescription,
+                      { color: colors.secondaryText },
+                    ]}
+                  >
                     {item.description}
                   </Text>
                 </View>
 
                 {item.value === settings.projectorTheme ? (
-                  <Ionicons name="checkmark" size={18} color="#007AFF" />
+                  <Ionicons name="checkmark" size={18} color={colors.primary} />
                 ) : null}
               </TouchableOpacity>
             ))}
 
             <TouchableOpacity
-              style={styles.modalClose}
+              style={[styles.modalClose, { backgroundColor: colors.primary }]}
               onPress={() => setProjectorThemeModal(false)}
             >
               <Text style={styles.modalCloseText}>Fechar</Text>
@@ -932,23 +1183,46 @@ export default function SettingsScreen() {
         animationType="fade"
         onRequestClose={() => setEditNameModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Editar nome</Text>
+        <View
+          style={[
+            styles.modalOverlay,
+            { backgroundColor: colors.modalOverlay },
+          ]}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.modalBackground },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Editar nome
+            </Text>
 
             <TextInput
               value={editName}
               onChangeText={setEditName}
               placeholder="Seu nome"
-              style={styles.inputInline}
-              placeholderTextColor="#8E8E93"
+              style={[
+                styles.inputInline,
+                {
+                  backgroundColor: colors.inputBackground,
+                  color: colors.text,
+                  borderColor: colors.border,
+                },
+              ]}
+              placeholderTextColor={colors.muted}
               editable={!savingName}
             />
 
             <TouchableOpacity
               onPress={handleSaveName}
               disabled={savingName}
-              style={[styles.primaryActionBtn, savingName && styles.disabledBtn]}
+              style={[
+                styles.primaryActionBtn,
+                { backgroundColor: colors.primary },
+                savingName && styles.disabledBtn,
+              ]}
             >
               {savingName ? (
                 <ActivityIndicator color="#fff" />
@@ -962,7 +1236,14 @@ export default function SettingsScreen() {
               style={styles.secondaryActionBtn}
               disabled={savingName}
             >
-              <Text style={styles.secondaryActionBtnText}>Cancelar</Text>
+              <Text
+                style={[
+                  styles.secondaryActionBtnText,
+                  { color: colors.secondaryText },
+                ]}
+              >
+                Cancelar
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -972,7 +1253,9 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F2F2F7' },
+  container: {
+    flex: 1,
+  },
 
   header: {
     flexDirection: 'row',
@@ -980,16 +1263,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 15,
     paddingVertical: 10,
-    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
   },
-  backBtn: { flexDirection: 'row', alignItems: 'center', width: 70 },
-  backText: { fontSize: 17, color: '#007AFF', marginLeft: -5 },
-  headerTitle: { fontSize: 17, fontWeight: '600' },
-  content: { paddingBottom: 40 },
 
-  profileSection: { alignItems: 'center', marginVertical: 30 },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: 70,
+  },
+
+  backText: {
+    fontSize: 17,
+    marginLeft: -5,
+  },
+
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+  },
+
+  content: {
+    paddingBottom: 40,
+  },
+
+  profileSection: {
+    alignItems: 'center',
+    marginVertical: 30,
+  },
 
   avatarWrap: {
     alignItems: 'center',
@@ -1000,7 +1300,6 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#C7C7CC',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -1025,26 +1324,34 @@ const styles = StyleSheet.create({
   },
 
   editAvatarLinkText: {
-    color: '#007AFF',
     fontWeight: '700',
     fontSize: 13,
   },
 
-  profileName: { fontSize: 24, fontWeight: '800', color: '#000' },
-  profileRole: { fontSize: 13, color: '#8E8E93', marginBottom: 10 },
+  profileName: {
+    fontSize: 24,
+    fontWeight: '800',
+  },
+
+  profileRole: {
+    fontSize: 13,
+    marginBottom: 10,
+  },
 
   editProfileBtn: {
     paddingHorizontal: 15,
     paddingVertical: 6,
-    backgroundColor: '#E3F2FD',
     borderRadius: 15,
   },
-  editProfileText: { color: '#007AFF', fontWeight: '600', fontSize: 13 },
+
+  editProfileText: {
+    fontWeight: '600',
+    fontSize: 13,
+  },
 
   sectionTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#8E8E93',
     marginLeft: 20,
     marginBottom: 5,
     marginTop: 20,
@@ -1053,13 +1360,11 @@ const styles = StyleSheet.create({
   projectorHint: {
     marginTop: 10,
     marginHorizontal: 20,
-    color: '#6B7280',
     fontSize: 13,
     lineHeight: 19,
   },
 
   section: {
-    backgroundColor: '#fff',
     borderRadius: 10,
     overflow: 'hidden',
     marginHorizontal: 15,
@@ -1082,25 +1387,36 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
 
-  rowLabel: { flex: 1, fontSize: 16, color: '#000' },
-  divider: { height: 1, backgroundColor: '#E5E5EA', marginLeft: 57 },
-  rightText: { color: '#8E8E93', fontWeight: '700' },
+  rowLabel: {
+    flex: 1,
+    fontSize: 16,
+  },
+
+  divider: {
+    height: 1,
+    marginLeft: 57,
+  },
+
+  rightText: {
+    fontWeight: '700',
+  },
 
   version: {
     textAlign: 'center',
-    color: '#C7C7CC',
     marginTop: 30,
     fontSize: 12,
   },
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'center',
     padding: 20,
   },
 
-  modalContent: { backgroundColor: '#fff', borderRadius: 20, padding: 18 },
+  modalContent: {
+    borderRadius: 20,
+    padding: 18,
+  },
 
   modalTitle: {
     fontSize: 18,
@@ -1115,14 +1431,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
   },
 
-  modalItemText: { fontSize: 16, fontWeight: '700', color: '#111' },
-  modalItemDescription: { marginTop: 4, fontSize: 13, color: '#6B7280' },
+  modalItemText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  modalItemDescription: {
+    marginTop: 4,
+    fontSize: 13,
+  },
 
   emptyModalText: {
-    color: '#6B7280',
     textAlign: 'center',
     lineHeight: 20,
     paddingVertical: 16,
@@ -1130,27 +1451,25 @@ const styles = StyleSheet.create({
 
   modalClose: {
     marginTop: 12,
-    backgroundColor: '#007AFF',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
   },
 
-  modalCloseText: { color: '#fff', fontWeight: '800' },
+  modalCloseText: {
+    color: '#fff',
+    fontWeight: '800',
+  },
 
   inputInline: {
-    backgroundColor: '#F2F2F7',
     borderRadius: 10,
     padding: 12,
     fontSize: 16,
-    color: '#000',
     borderWidth: 1,
-    borderColor: '#E5E5EA',
     lineHeight: 24,
   },
 
   primaryActionBtn: {
-    backgroundColor: '#007AFF',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
@@ -1171,7 +1490,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  secondaryActionBtnText: {
-    color: '#666',
-  },
+  secondaryActionBtnText: {},
 });

@@ -4,9 +4,9 @@ import React from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 
 export default function Index() {
-  const { session, loading } = useAuth();
+  const { session, initialized } = useAuth();
 
-  if (loading) {
+  if (initialized) {
     return (
       <View
         style={{
