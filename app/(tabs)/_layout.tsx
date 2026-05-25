@@ -1,18 +1,17 @@
-import { AuthProvider } from '@/src/providers/AuthProvider';
-import { SettingsProvider, useSettings } from '@/src/providers/SettingsProvider';
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import React, { useMemo } from 'react';
+import { invalidateBibleVersionsCache } from '@/src/features/bible/api/bibleVersions.cache';
+import { useSettings } from '@/src/providers/SettingsProvider';
+import { Ionicons } from '@expo/vector-icons';
+import { Tabs } from 'expo-router';
+import React, { useEffect, useMemo } from 'react';
 import { useColorScheme } from 'react-native';
 
-function AppThemeBridge() {
+export default function TabLayout() {
   const systemScheme = useColorScheme();
   const { settings } = useSettings();
+
+  useEffect(() => {
+    invalidateBibleVersionsCache().catch(() => {});
+  }, []);
 
   const isDark = useMemo(() => {
     if (settings.appTheme === 'dark') return true;
@@ -22,57 +21,96 @@ function AppThemeBridge() {
     return settings.darkMode;
   }, [settings.appTheme, settings.darkMode, systemScheme]);
 
-  const navigationTheme = useMemo(() => {
-    if (isDark) {
-      return {
-        ...DarkTheme,
-        colors: {
-          ...DarkTheme.colors,
-          primary: '#0A84FF',
-          background: '#000000',
-          card: '#111111',
-          text: '#FFFFFF',
-          border: '#2C2C2E',
-          notification: '#FF453A',
-        },
-      };
-    }
-
-    return {
-      ...DefaultTheme,
-      colors: {
-        ...DefaultTheme.colors,
-        primary: '#007AFF',
-        background: '#F2F2F7',
-        card: '#FFFFFF',
-        text: '#000000',
-        border: '#E5E5EA',
-        notification: '#FF3B30',
-      },
-    };
-  }, [isDark]);
+  const colors = useMemo(
+    () => ({
+      active: isDark ? '#0A84FF' : '#007AFF',
+      inactive: '#8E8E93',
+      background: isDark ? '#111111' : '#FFFFFF',
+      border: isDark ? '#2C2C2E' : '#E5E5EA',
+      scene: isDark ? '#000000' : '#F2F2F7',
+    }),
+    [isDark],
+  );
 
   return (
-    <ThemeProvider value={navigationTheme}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: {
-            backgroundColor: isDark ? '#000000' : '#F2F2F7',
-          },
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: colors.active,
+        tabBarInactiveTintColor: colors.inactive,
+        tabBarStyle: {
+          backgroundColor: colors.background,
+          borderTopColor: colors.border,
+        },
+        tabBarLabelStyle: {
+          fontWeight: '700',
+        },
+        sceneStyle: {
+          backgroundColor: colors.scene,
+        },
+      }}
+    >
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Início',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home-outline" color={color} size={size} />
+          ),
         }}
       />
-    </ThemeProvider>
-  );
-}
 
-export default function RootLayout() {
-  return (
-    <AuthProvider>
-      <SettingsProvider>
-        <AppThemeBridge />
-      </SettingsProvider>
-    </AuthProvider>
+      <Tabs.Screen
+        name="diary"
+        options={{
+          title: 'Diário',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="journal-outline" color={color} size={size} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="studies"
+        options={{
+          title: 'Estudos',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="create-outline" color={color} size={size} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="read"
+        options={{
+          title: 'Bíblia',
+          tabBarLabel: 'Bíblia',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="book-outline" color={color} size={size} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="dictionary"
+        options={{
+          title: 'Dicionário',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="library-outline" color={color} size={size} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="plan"
+        options={{
+          title: 'Plano',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar-outline" color={color} size={size} />
+          ),
+        }}
+      />
+
+    </Tabs>
   );
 }
