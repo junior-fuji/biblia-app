@@ -6,7 +6,7 @@ import { ActivityIndicator, Text, View } from 'react-native';
 export default function Index() {
   const { session, initialized } = useAuth();
 
-  if (initialized) {
+  if (!initialized) {
     return (
       <View
         style={{

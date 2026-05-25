@@ -13,12 +13,14 @@ import React, {
 
 type AuthContextValue = {
   initialized: boolean;
+  loading: boolean;
   session: Session | null;
   user: User | null;
 };
 
 const AuthContext = createContext<AuthContextValue>({
   initialized: false,
+  loading: true,
   session: null,
   user: null,
 });
@@ -121,6 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       initialized,
+      loading: !initialized,
       session,
       user: session?.user ?? null,
     }),
