@@ -165,26 +165,27 @@ export default function SettingsScreen() {
   const colors = useMemo<ThemeColors>(
     () =>
       isDark
-        ? {
-            background: '#000000',
-            header: '#111111',
-            section: '#1C1C1E',
-            text: '#FFFFFF',
-            muted: '#A1A1AA',
-            secondaryText: '#D1D5DB',
-            border: '#2C2C2E',
-            divider: '#2C2C2E',
-            inputBackground: '#111111',
-            modalBackground: '#1C1C1E',
-            modalOverlay: 'rgba(0,0,0,0.72)',
-            primary: '#0A84FF',
-            danger: '#FF453A',
-            avatarBackground: '#3A3A3C',
-            editProfileBackground: '#0A84FF22',
-            switchOff: '#3A3A3C',
-            switchOn: '#5856D6',
-            chevron: '#636366',
-          }
+  ? {
+      background: '#0B0F14',
+      header: '#111827',
+      section: '#18202B',
+      text: '#F8FAFC',
+      muted: '#94A3B8',
+      secondaryText: '#CBD5E1',
+      border: '#2A3441',
+      divider: '#2A3441',
+      inputBackground: '#202A36',
+      modalBackground: '#18202B',
+      modalOverlay: 'rgba(0,0,0,0.72)',
+      primary: '#60A5FA',
+      danger: '#F87171',
+      avatarBackground: '#334155',
+      editProfileBackground: '#1E3A5F',
+      switchOff: '#334155',
+      switchOn: '#60A5FA',
+      chevron: '#64748B',
+    }
+            
         : {
             background: '#F2F2F7',
             header: '#FFFFFF',

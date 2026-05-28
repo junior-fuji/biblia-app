@@ -16,26 +16,42 @@ export function useAppTheme() {
 
   const colors = useMemo(
     () =>
-      isDark
-        ? {
-            isDark: true,
-            background: '#000000',
-            surface: '#111111',
-            card: '#1C1C1E',
-            cardSoft: '#2C2C2E',
-            text: '#FFFFFF',
-            textSecondary: '#D1D5DB',
-            muted: '#A1A1AA',
-            border: '#2C2C2E',
-            divider: '#2C2C2E',
-            primary: '#0A84FF',
-            danger: '#FF453A',
-            success: '#30D158',
-            warning: '#FF9F0A',
-            input: '#111111',
-            chip: '#1C1C1E',
-            chipText: '#FFFFFF',
-          }
+        isDark
+    ? {
+        isDark: true,
+  
+        // Fundo geral do app
+        background: '#0B0F14',
+  
+        // Barras, headers e áreas principais
+        surface: '#111827',
+  
+        // Cards/boxes
+        card: '#18202B',
+  
+        // Botões secundários, chips, inputs elevados
+        cardSoft: '#202A36',
+  
+        // Textos
+        text: '#F8FAFC',
+        textSecondary: '#CBD5E1',
+        muted: '#94A3B8',
+  
+        // Linhas e bordas
+        border: '#2A3441',
+        divider: '#2A3441',
+  
+        // Cores de ação
+        primary: '#60A5FA',
+        danger: '#F87171',
+        success: '#34D399',
+        warning: '#FBBF24',
+  
+        // Inputs/chips
+        input: '#18202B',
+        chip: '#1E293B',
+        chipText: '#F8FAFC',
+      }
         : {
             isDark: false,
             background: '#FFFFFF',
