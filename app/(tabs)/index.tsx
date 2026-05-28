@@ -1,5 +1,6 @@
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
 import { useAuth } from '@/src/providers/AuthProvider';
+import { useAppTheme } from '@/src/theme/useAppTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -170,11 +171,13 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const { width } = useWindowDimensions();
+  const { colors, isDark } = useAppTheme();
 
   const [greeting, setGreeting] = useState('Graça e Paz');
   const [quickQuery, setQuickQuery] = useState('');
   const [profileName, setProfileName] = useState<string>('');
   const [avatarUrl, setAvatarUrl] = useState<string>('');
+
   const isWeb = Platform.OS === 'web';
   const isDesktop = isWeb && width >= 1100;
   const isTablet = isWeb && width >= 760 && width < 1100;
@@ -195,7 +198,7 @@ export default function HomeScreen() {
         subtitle: 'Leitura',
         icon: 'book-outline',
         iconColor: '#007AFF',
-        iconBg: '#E3F2FD',
+        iconBg: isDark ? '#0A84FF22' : '#E3F2FD',
         href: '/read',
       },
       {
@@ -204,7 +207,7 @@ export default function HomeScreen() {
         subtitle: 'Hinos',
         icon: 'musical-notes-outline',
         iconColor: '#0097A7',
-        iconBg: '#E0F7FA',
+        iconBg: isDark ? '#0097A722' : '#E0F7FA',
         href: '/harpa',
       },
       {
@@ -213,7 +216,7 @@ export default function HomeScreen() {
         subtitle: 'Anotações',
         icon: 'create-outline',
         iconColor: '#34C759',
-        iconBg: '#E8F5E9',
+        iconBg: isDark ? '#34C75922' : '#E8F5E9',
         href: '/studies',
       },
       {
@@ -222,7 +225,7 @@ export default function HomeScreen() {
         subtitle: 'Anual',
         icon: 'calendar-outline',
         iconColor: '#AF52DE',
-        iconBg: '#F3E5F5',
+        iconBg: isDark ? '#AF52DE22' : '#F3E5F5',
         href: '/plan',
       },
       {
@@ -231,65 +234,70 @@ export default function HomeScreen() {
         subtitle: 'Original',
         icon: 'library-outline',
         iconColor: '#FF9500',
-        iconBg: '#FFF3E0',
+        iconBg: isDark ? '#FF950022' : '#FFF3E0',
         href: '/dictionary',
       },
     ],
-    []
+    [isDark],
   );
 
   useEffect(() => {
     const hour = new Date().getHours();
-    if (hour < 12) setGreeting('Bom dia');
-    else if (hour < 18) setGreeting('Boa tarde');
-    else setGreeting('Boa noite');
+
+    if (hour < 12) {
+      setGreeting('Bom dia');
+    } else if (hour < 18) {
+      setGreeting('Boa tarde');
+    } else {
+      setGreeting('Boa noite');
+    }
   }, []);
 
   useEffect(() => {
     let mounted = true;
-  
+
     async function loadProfile() {
       const sb = getSupabaseOrNull();
       const userId = session?.user?.id;
-  
+
       if (!sb || !userId) {
         setProfileName('');
         setAvatarUrl('');
         return;
       }
-  
+
       try {
         const { data, error } = await sb
           .from('profiles')
           .select('name, avatar_url')
           .eq('id', userId)
           .maybeSingle();
-  
+
         if (!mounted) return;
-  
+
         if (error) {
           console.log('LOAD_PROFILE_HOME_ERROR', error);
           setProfileName('');
           setAvatarUrl('');
           return;
         }
-  
+
         setProfileName(String(data?.name ?? '').trim());
         setAvatarUrl(String(data?.avatar_url ?? '').trim());
-      } catch (e) {
+      } catch (error) {
         if (!mounted) return;
-        console.log('LOAD_PROFILE_HOME_FATAL', e);
+
+        console.log('LOAD_PROFILE_HOME_FATAL', error);
         setProfileName('');
         setAvatarUrl('');
       }
     }
-  
+
     void loadProfile();
-  
+
     return () => {
       mounted = false;
     };
-  
   }, [session?.user?.id]);
 
   const displayName = useMemo(() => {
@@ -303,10 +311,11 @@ export default function HomeScreen() {
 
     return base.charAt(0).toUpperCase() + base.slice(1);
   }, [profileName, session]);
-  
+
   const avatarLabel = useMemo(() => {
     const source = profileName || session?.user?.email || 'US';
     const cleaned = source.replace(/[^a-zA-Z]/g, '').toUpperCase();
+
     return cleaned.slice(0, 2) || 'US';
   }, [profileName, session]);
 
@@ -314,11 +323,13 @@ export default function HomeScreen() {
     const now = new Date();
     const dayOfYear = getDayOfYear(now);
     const index = (dayOfYear - 1) % DAILY_VERSES.length;
+
     return DAILY_VERSES[index];
   }, []);
 
   function handleQuickSearch() {
     const q = quickQuery.trim();
+
     if (q.length < 2) return;
 
     router.push({ pathname: '/search', params: { q } });
@@ -328,12 +339,16 @@ export default function HomeScreen() {
     if (gridColumns === 5) return '18.6%';
     if (gridColumns === 4) return '23.5%';
     if (gridColumns === 3) return '31.8%';
+
     return '48.2%';
   }, [gridColumns]);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      edges={['top', 'bottom']}
+    >
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       <View style={styles.page}>
         <ScrollView
@@ -344,32 +359,39 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.header}>
-            <View>
-              <Text style={styles.greeting}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={[styles.greeting, { color: colors.text }]}>
                 {greeting}, {displayName}
               </Text>
-              <Text style={styles.subGreeting}>Vamos examinar as Escrituras?</Text>
+              <Text style={[styles.subGreeting, { color: colors.muted }]}>
+                Vamos examinar as Escrituras?
+              </Text>
             </View>
 
             <TouchableOpacity
-  onPress={() => router.push('/settings' as any)}
-  activeOpacity={0.8}
-  accessibilityRole="button"
-  accessibilityLabel="Abrir configurações"
-  style={styles.avatarButton}
->
-  <View style={styles.avatar}>
-    {avatarUrl ? (
-      <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-    ) : (
-      <Text style={styles.avatarText}>{avatarLabel}</Text>
-    )}
-  </View>
-</TouchableOpacity>
+              onPress={() => router.push('/settings' as never)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Abrir configurações"
+              style={styles.avatarButton}
+            >
+              <View style={styles.avatar}>
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarText}>{avatarLabel}</Text>
+                )}
+              </View>
+            </TouchableOpacity>
           </View>
 
           <View style={[styles.heroWrap, isDesktop && styles.heroWrapDesktop]}>
-            <View style={[styles.dailyCard, isDesktop && styles.dailyCardDesktop]}>
+            <View
+              style={[
+                styles.dailyCard,
+                isDesktop && styles.dailyCardDesktop,
+              ]}
+            >
               <View style={styles.dailyTopRow}>
                 <View style={styles.iconCircle}>
                   <Ionicons name="book" size={18} color="#fff" />
@@ -386,22 +408,42 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={styles.dailyAction}
                 activeOpacity={0.85}
-                onPress={() => router.push('/read')}
+                onPress={() => router.push('/read' as never)}
               >
                 <Text style={styles.dailyActionText}>Abrir Bíblia</Text>
                 <Ionicons name="arrow-forward" size={16} color="#fff" />
               </TouchableOpacity>
             </View>
 
-            <View style={[styles.quickPanel, isDesktop && styles.quickPanelDesktop]}>
-              <Text style={styles.quickPanelTitle}>Pesquisa Rápida</Text>
+            <View
+              style={[
+                styles.quickPanel,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                },
+                isDesktop && styles.quickPanelDesktop,
+              ]}
+            >
+              <Text style={[styles.quickPanelTitle, { color: colors.text }]}>
+                Pesquisa Rápida
+              </Text>
 
-              <View style={styles.quickSearchWrap}>
-                <Ionicons name="search" size={18} color="#8E8E93" />
+              <View
+                style={[
+                  styles.quickSearchWrap,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Ionicons name="search" size={18} color={colors.muted} />
 
                 <TextInput
-                  style={styles.quickSearchInput}
+                  style={[styles.quickSearchInput, { color: colors.text }]}
                   placeholder="Buscar palavra na Bíblia…"
+                  placeholderTextColor={colors.muted}
                   value={quickQuery}
                   onChangeText={setQuickQuery}
                   returnKeyType="search"
@@ -416,12 +458,15 @@ export default function HomeScreen() {
                     style={{ padding: 6 }}
                     accessibilityLabel="Limpar busca"
                   >
-                    <Ionicons name="close-circle" size={18} color="#C7C7CC" />
+                    <Ionicons name="close-circle" size={18} color={colors.muted} />
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
                     onPress={handleQuickSearch}
-                    style={styles.quickGoBtn}
+                    style={[
+                      styles.quickGoBtn,
+                      { backgroundColor: isDark ? colors.primary : '#111827' },
+                    ]}
                     accessibilityLabel="Pesquisar"
                   >
                     <Ionicons name="arrow-forward" size={18} color="#fff" />
@@ -431,41 +476,80 @@ export default function HomeScreen() {
 
               <View style={styles.quickMiniRow}>
                 <TouchableOpacity
-                  style={styles.quickMiniBtn}
-                  onPress={() => router.push('/read')}
+                  style={[
+                    styles.quickMiniBtn,
+                    {
+                      backgroundColor: colors.cardSoft,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                  onPress={() => router.push('/read' as never)}
                   activeOpacity={0.85}
                 >
-                  <Ionicons name="book-outline" size={16} color="#007AFF" />
-                  <Text style={styles.quickMiniText}>Ler Bíblia</Text>
+                  <Ionicons name="book-outline" size={16} color={colors.primary} />
+                  <Text style={[styles.quickMiniText, { color: colors.text }]}>
+                    Ler Bíblia
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.quickMiniBtn}
-                  onPress={() => router.push('/harpa')}
+                  style={[
+                    styles.quickMiniBtn,
+                    {
+                      backgroundColor: colors.cardSoft,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                  onPress={() => router.push('/harpa' as never)}
                   activeOpacity={0.85}
                 >
-                  <Ionicons name="musical-notes-outline" size={16} color="#0097A7" />
-                  <Text style={styles.quickMiniText}>Abrir Harpa</Text>
+                  <Ionicons
+                    name="musical-notes-outline"
+                    size={16}
+                    color="#0097A7"
+                  />
+                  <Text style={[styles.quickMiniText, { color: colors.text }]}>
+                    Abrir Harpa
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
           </View>
 
-          <Text style={styles.sectionTitle}>Menu Principal</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Menu Principal
+          </Text>
 
-          <View style={[styles.grid, isTablet && styles.gridTablet, isDesktop && styles.gridDesktop]}>
+          <View
+            style={[
+              styles.grid,
+              isTablet && styles.gridTablet,
+              isDesktop && styles.gridDesktop,
+            ]}
+          >
             {menuItems.map((item) => (
               <TouchableOpacity
                 key={item.key}
-                style={[styles.card, { width: cardWidth }]}
-                onPress={() => router.push(item.href as any)}
+                style={[
+                  styles.card,
+                  {
+                    width: cardWidth,
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={() => router.push(item.href as never)}
                 activeOpacity={0.85}
               >
                 <View style={[styles.cardIcon, { backgroundColor: item.iconBg }]}>
                   <Ionicons name={item.icon} size={24} color={item.iconColor} />
                 </View>
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                <Text style={styles.cardSub}>{item.subtitle}</Text>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>
+                  {item.title}
+                </Text>
+                <Text style={[styles.cardSub, { color: colors.muted }]}>
+                  {item.subtitle}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -480,7 +564,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7F8FA',
     alignItems: 'center',
   },
 
@@ -505,19 +588,17 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#111827',
   },
 
   subGreeting: {
     fontSize: 14,
-    color: '#667085',
     marginTop: 4,
   },
 
   avatarButton: {
     borderRadius: 24,
   },
-  
+
   avatar: {
     width: 46,
     height: 46,
@@ -527,12 +608,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  
+
   avatarImage: {
     width: '100%',
     height: '100%',
   },
-  
+
   avatarText: {
     color: '#fff',
     fontSize: 14,
@@ -618,11 +699,9 @@ const styles = StyleSheet.create({
   },
 
   quickPanel: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E9ECF2',
   },
 
   quickPanelDesktop: {
@@ -633,16 +712,13 @@ const styles = StyleSheet.create({
   quickPanelTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#111827',
     marginBottom: 12,
   },
 
   quickSearchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
     borderRadius: 14,
     paddingHorizontal: 12,
     height: 48,
@@ -651,12 +727,10 @@ const styles = StyleSheet.create({
   quickSearchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#111',
     marginLeft: 10,
   },
 
   quickGoBtn: {
-    backgroundColor: '#111827',
     width: 36,
     height: 36,
     borderRadius: 12,
@@ -675,16 +749,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: '#E9ECF2',
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 12,
   },
 
   quickMiniText: {
-    color: '#334155',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -693,7 +764,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     marginBottom: 12,
-    color: '#333',
   },
 
   grid: {
@@ -712,11 +782,9 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    backgroundColor: '#fff',
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E9ECF2',
     minHeight: 130,
   },
 
@@ -732,12 +800,10 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#333',
   },
 
   cardSub: {
     fontSize: 12,
-    color: '#999',
     marginTop: 2,
   },
 });
