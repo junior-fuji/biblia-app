@@ -1,3 +1,4 @@
+import { useAppTheme } from '@/src/theme/useAppTheme';
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
 import { openBibleProjector } from '@/src/services/projector/bibleProjector';
 import { Ionicons } from '@expo/vector-icons';
@@ -313,7 +314,7 @@ export default function ReadBookScreen() {
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<Verse>>(null);
   const isWeb = Platform.OS === 'web';
-
+  const { colors } = useAppTheme();
   const { book, chapter, verse, returnTo } = useLocalSearchParams<RouteParams>();
   const bookId = Number(book);
   const isValidBook = !!book && Number.isFinite(bookId);
@@ -883,15 +884,32 @@ Write with real depth, scholarly tone, and pastoral clarity.
   const renderVerse = useCallback(
     ({ item }: { item: Verse }) => (
       <TouchableOpacity activeOpacity={0.9} onLongPress={() => analyzeVerse(item)}>
-        <Text style={[styles.verse, { fontSize, lineHeight: Math.round(fontSize * 1.6) }]}>
-          <Text style={[styles.verseNumber, { fontSize: Math.round(fontSize * 0.75) }]}>
+        <Text
+          style={[
+            styles.verse,
+            {
+              fontSize,
+              lineHeight: Math.round(fontSize * 1.6),
+              color: colors.text,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.verseNumber,
+              {
+                fontSize: Math.round(fontSize * 0.75),
+                color: colors.primary,
+              },
+            ]}
+          >
             {item.verse}{' '}
           </Text>
           {item.text}
         </Text>
       </TouchableOpacity>
     ),
-    [analyzeVerse, fontSize],
+    [analyzeVerse, colors.primary, colors.text, fontSize],
   );
 
   if (!isValidBook) {
@@ -909,7 +927,7 @@ Write with real depth, scholarly tone, and pastoral clarity.
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen
         options={{
           headerShown: true,
@@ -918,58 +936,69 @@ Write with real depth, scholarly tone, and pastoral clarity.
               onPress={goBackSmart}
               style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 }}
             >
-              <Ionicons name="chevron-back" size={26} color="#007AFF" />
-              <Text style={{ color: '#007AFF', fontSize: 16, fontWeight: '900' }}>Voltar</Text>
+              <Ionicons name="chevron-back" size={26} color={colors.primary} />
+              <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '900' }}>
+                Voltar
+              </Text>
             </TouchableOpacity>
           ),
           headerTitle: () => (
             <TouchableOpacity onPress={() => setShowChapters(true)} style={styles.headerTitleContainer}>
-              <Text style={styles.headerTitleText} numberOfLines={1}>
-                {safeBookName} {chapterNum} <Text style={{ color: '#8e8e93' }}>▼</Text>
-              </Text>
+             <Text style={[styles.headerTitleText, { color: colors.text }]} numberOfLines={1}>
+  {safeBookName} {chapterNum}{' '}
+  <Text style={{ color: colors.muted }}>▼</Text>
+</Text>
             </TouchableOpacity>
           ),
           headerRight: () => null,
         }}
       />
 
-      <View style={styles.topActionBar}>
+      <View
+  style={[
+    styles.topActionBar,
+    {
+      backgroundColor: colors.surface,
+      borderBottomColor: colors.border,
+    },
+  ]}
+>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.topActionBarContent}
         >
-          <TouchableOpacity onPress={() => setShowVersions(true)} style={styles.actionChip}>
+          <TouchableOpacity onPress={() => setShowVersions(true)} style={[styles.actionChip, { backgroundColor: colors.chip }]}>
             <Text style={styles.actionChipVersion}>{versionCode}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={analyzeChapter} style={styles.actionChip}>
+          <TouchableOpacity onPress={analyzeChapter} style={[styles.actionChip, { backgroundColor: colors.chip }]}>
             <Ionicons name="school-outline" size={18} color="#AF52DE" />
-            <Text style={styles.actionChipText}>IA</Text>
+            <Text style={[styles.actionChipText, { color: colors.chipText }]}>IA</Text>
           </TouchableOpacity>
 
           {isWeb ? (
             <TouchableOpacity
               onPress={() => void handleOpenProjector()}
-              style={styles.actionChip}
+              style={[styles.actionChip, { backgroundColor: colors.chip }]}
             >
-              <Ionicons name="tv-outline" size={18} color="#111827" />
-              <Text style={styles.actionChipText}>Projetor</Text>
+             <Ionicons name="tv-outline" size={18} color={colors.chipText} />
+              <Text style={[styles.actionChipText, { color: colors.chipText }]}>Projetor</Text>
             </TouchableOpacity>
           ) : null}
 
           <TouchableOpacity
             onPress={() => setFontSize((p) => clamp(p - 2, 12, 40))}
-            style={styles.actionChip}
+            style={[styles.actionChip, { backgroundColor: colors.chip }]}
           >
-            <Text style={styles.actionChipText}>A-</Text>
+           <Text style={[styles.actionChipText, { color: colors.chipText }]}> A-</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => setFontSize((p) => clamp(p + 2, 12, 40))}
-            style={styles.actionChip}
+            style={[styles.actionChip, { backgroundColor: colors.chip }]}
           >
-            <Text style={styles.actionChipText}>A+</Text>
+            <Text style={[styles.actionChipText, { color: colors.chipText }]}>A+</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -1006,10 +1035,22 @@ Write with real depth, scholarly tone, and pastoral clarity.
         )}
       </View>
 
-      <View style={[styles.bottomWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+      <View
+  style={[
+    styles.bottomWrap,
+    {
+      paddingBottom: Math.max(insets.bottom, 10),
+      backgroundColor: colors.surface,
+      borderTopColor: colors.border,
+    },
+  ]}
+>
         <View style={styles.bottomBar}>
           <TouchableOpacity
-            style={[styles.navBtn, !canPrev && styles.navBtnDisabled]}
+           style={[
+            styles.navBtn,
+            !canPrev && { backgroundColor: colors.cardSoft },
+          ]}
             onPress={goPrev}
             disabled={!canPrev}
           >
@@ -1017,12 +1058,12 @@ Write with real depth, scholarly tone, and pastoral clarity.
             <Text style={[styles.navText, !canPrev && styles.navTextDisabled]}> Anterior</Text>
           </TouchableOpacity>
 
-          <Text style={styles.counterText}>
+          <Text style={[styles.counterText, { color: colors.text }]}>
             {chapterNum} / {totalChapters || '—'}
           </Text>
 
           <TouchableOpacity
-            style={[styles.navBtn, !canNext && styles.navBtnDisabled]}
+            style={[styles.navBtn, !canNext && { backgroundColor: colors.cardSoft }, styles.navBtnDisabled ]}
             onPress={goNext}
             disabled={!canNext}
           >
