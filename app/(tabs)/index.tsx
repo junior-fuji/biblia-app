@@ -1,6 +1,7 @@
 import { getSupabaseOrNull } from '@/lib/supabaseClient';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { useAppTheme } from '@/src/theme/useAppTheme';
+import { useResponsiveMetrics } from '@/src/theme/useResponsiveMetrics';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -49,58 +50,6 @@ const DAILY_VERSES: DailyVerseItem[] = [
     reference: 'ISAÍAS 40:31',
   },
   {
-    text: '“As misericórdias do Senhor são a causa de não sermos consumidos.”',
-    reference: 'LAMENTAÇÕES 3:22',
-  },
-  {
-    text: '“Bem-aventurados os que têm fome e sede de justiça, porque eles serão fartos.”',
-    reference: 'MATEUS 5:6',
-  },
-  {
-    text: '“Buscai primeiro o reino de Deus, e a sua justiça, e todas estas coisas vos serão acrescentadas.”',
-    reference: 'MATEUS 6:33',
-  },
-  {
-    text: '“Vinde a mim, todos os que estais cansados e oprimidos, e eu vos aliviarei.”',
-    reference: 'MATEUS 11:28',
-  },
-  {
-    text: '“Porque Deus amou o mundo de tal maneira que deu o seu Filho unigênito.”',
-    reference: 'JOÃO 3:16',
-  },
-  {
-    text: '“Eu sou o caminho, e a verdade e a vida.”',
-    reference: 'JOÃO 14:6',
-  },
-  {
-    text: '“Conhecereis a verdade, e a verdade vos libertará.”',
-    reference: 'JOÃO 8:32',
-  },
-  {
-    text: '“Recebereis a virtude do Espírito Santo, que há de vir sobre vós.”',
-    reference: 'ATOS 1:8',
-  },
-  {
-    text: '“O justo viverá da fé.”',
-    reference: 'ROMANOS 1:17',
-  },
-  {
-    text: '“E sabemos que todas as coisas contribuem juntamente para o bem daqueles que amam a Deus.”',
-    reference: 'ROMANOS 8:28',
-  },
-  {
-    text: '“Se Deus é por nós, quem será contra nós?”',
-    reference: 'ROMANOS 8:31',
-  },
-  {
-    text: '“Portanto, se alguém está em Cristo, nova criatura é.”',
-    reference: '2 CORÍNTIOS 5:17',
-  },
-  {
-    text: '“Porque pela graça sois salvos, por meio da fé.”',
-    reference: 'EFÉSIOS 2:8',
-  },
-  {
     text: '“Não andeis ansiosos por coisa alguma.”',
     reference: 'FILIPENSES 4:6',
   },
@@ -109,40 +58,8 @@ const DAILY_VERSES: DailyVerseItem[] = [
     reference: 'FILIPENSES 4:13',
   },
   {
-    text: '“A palavra de Cristo habite em vós abundantemente.”',
-    reference: 'COLOSSENSES 3:16',
-  },
-  {
-    text: '“Orai sem cessar.”',
-    reference: '1 TESSALONICENSES 5:17',
-  },
-  {
-    text: '“Combati o bom combate, acabei a carreira, guardei a fé.”',
-    reference: '2 TIMÓTEO 4:7',
-  },
-  {
-    text: '“A fé é o firme fundamento das coisas que se esperam.”',
-    reference: 'HEBREUS 11:1',
-  },
-  {
-    text: '“Cheguemo-nos, pois, com confiança ao trono da graça.”',
-    reference: 'HEBREUS 4:16',
-  },
-  {
-    text: '“Sede cumpridores da palavra, e não somente ouvintes.”',
-    reference: 'TIAGO 1:22',
-  },
-  {
     text: '“Lançando sobre ele toda a vossa ansiedade, porque ele tem cuidado de vós.”',
     reference: '1 PEDRO 5:7',
-  },
-  {
-    text: '“Deus é amor.”',
-    reference: '1 JOÃO 4:8',
-  },
-  {
-    text: '“Eis que estou à porta e bato.”',
-    reference: 'APOCALIPSE 3:20',
   },
 ];
 
@@ -172,6 +89,7 @@ export default function HomeScreen() {
   const { session } = useAuth();
   const { width } = useWindowDimensions();
   const { colors, isDark } = useAppTheme();
+  const metrics = useResponsiveMetrics();
 
   const [greeting, setGreeting] = useState('Graça e Paz');
   const [quickQuery, setQuickQuery] = useState('');
@@ -182,13 +100,26 @@ export default function HomeScreen() {
   const isDesktop = isWeb && width >= 1100;
   const isTablet = isWeb && width >= 760 && width < 1100;
 
-  const gridColumns = useMemo(() => {
-    if (!isWeb) return 2;
-    if (width >= 1400) return 5;
-    if (width >= 1150) return 4;
-    if (width >= 800) return 3;
-    return 2;
-  }, [isWeb, width]);
+  const pageMaxWidth =
+    typeof metrics.homeMaxContentWidth === 'number'
+      ? metrics.homeMaxContentWidth
+      : undefined;
+
+      const gridColumns = useMemo(() => {
+        if (!isWeb) return 2;
+        if (width >= 1900) return 5;
+        if (width >= 1440) return 4;
+        if (width >= 900) return 3;
+        return 2;
+      }, [isWeb, width]);
+
+  const cardWidth = useMemo(() => {
+    if (gridColumns === 5) return '18.6%';
+    if (gridColumns === 4) return '23.5%';
+    if (gridColumns === 3) return '31.8%';
+
+    return '48.2%';
+  }, [gridColumns]);
 
   const menuItems = useMemo<MenuItem[]>(
     () => [
@@ -335,14 +266,6 @@ export default function HomeScreen() {
     router.push({ pathname: '/search', params: { q } });
   }
 
-  const cardWidth = useMemo(() => {
-    if (gridColumns === 5) return '18.6%';
-    if (gridColumns === 4) return '23.5%';
-    if (gridColumns === 3) return '31.8%';
-
-    return '48.2%';
-  }, [gridColumns]);
-
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -350,20 +273,40 @@ export default function HomeScreen() {
     >
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      <View style={styles.page}>
+      <View style={[styles.page, { maxWidth: pageMaxWidth }]}>
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingTop: Math.max(insets.top, 12) },
+            {
+              paddingTop: Math.max(insets.top, 12),
+              paddingHorizontal: metrics.homePagePadding,
+            },
           ]}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.header}>
-            <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text style={[styles.greeting, { color: colors.text }]}>
+            <View style={styles.headerTextBlock}>
+              <Text
+                style={[
+                  styles.greeting,
+                  {
+                    color: colors.text,
+                    fontSize: metrics.homeGreetingFontSize,
+                  },
+                ]}
+              >
                 {greeting}, {displayName}
               </Text>
-              <Text style={[styles.subGreeting, { color: colors.muted }]}>
+
+              <Text
+                style={[
+                  styles.subGreeting,
+                  {
+                    color: colors.muted,
+                    fontSize: metrics.homeSubGreetingFontSize,
+                  },
+                ]}
+              >
                 Vamos examinar as Escrituras?
               </Text>
             </View>
@@ -375,7 +318,16 @@ export default function HomeScreen() {
               accessibilityLabel="Abrir configurações"
               style={styles.avatarButton}
             >
-              <View style={styles.avatar}>
+              <View
+                style={[
+                  styles.avatar,
+                  {
+                    width: metrics.homeAvatarSize,
+                    height: metrics.homeAvatarSize,
+                    borderRadius: Math.round(metrics.homeAvatarSize / 2),
+                  },
+                ]}
+              >
                 {avatarUrl ? (
                   <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
                 ) : (
@@ -390,20 +342,31 @@ export default function HomeScreen() {
               style={[
                 styles.dailyCard,
                 isDesktop && styles.dailyCardDesktop,
+                metrics.homeHeroMinHeight
+                  ? { minHeight: metrics.homeHeroMinHeight }
+                  : null,
               ]}
             >
               <View style={styles.dailyTopRow}>
                 <View style={styles.iconCircle}>
-                  <Ionicons name="book" size={18} color="#fff" />
+                  <Ionicons name="book" size={22} color="#fff" />
                 </View>
 
-                <View style={{ flex: 1 }}>
+                <View style={styles.dailyTitleBlock}>
                   <Text style={styles.dailyTitle}>Versículo do Dia</Text>
                   <Text style={styles.dailyRef}>{dailyVerse.reference}</Text>
                 </View>
               </View>
 
-              <Text style={styles.dailyText}>{dailyVerse.text}</Text>
+              <Text
+                style={[
+                  styles.dailyText,
+                  metrics.isLargeDesktop && styles.dailyTextDesktop,
+                  metrics.isImacSize && styles.dailyTextImac,
+                ]}
+              >
+                {dailyVerse.text}
+              </Text>
 
               <TouchableOpacity
                 style={styles.dailyAction}
@@ -423,9 +386,20 @@ export default function HomeScreen() {
                   borderColor: colors.border,
                 },
                 isDesktop && styles.quickPanelDesktop,
+                metrics.homeHeroMinHeight
+                  ? { minHeight: metrics.homeHeroMinHeight }
+                  : null,
               ]}
             >
-              <Text style={[styles.quickPanelTitle, { color: colors.text }]}>
+              <Text
+                style={[
+                  styles.quickPanelTitle,
+                  {
+                    color: colors.text,
+                    fontSize: metrics.homeQuickTitleFontSize,
+                  },
+                ]}
+              >
                 Pesquisa Rápida
               </Text>
 
@@ -436,12 +410,19 @@ export default function HomeScreen() {
                     backgroundColor: colors.surface,
                     borderColor: colors.border,
                   },
+                  metrics.isLargeDesktop && styles.quickSearchWrapDesktop,
                 ]}
               >
-                <Ionicons name="search" size={18} color={colors.muted} />
+                <Ionicons name="search" size={20} color={colors.muted} />
 
                 <TextInput
-                  style={[styles.quickSearchInput, { color: colors.text }]}
+                  style={[
+                    styles.quickSearchInput,
+                    {
+                      color: colors.text,
+                      fontSize: metrics.homeQuickInputFontSize,
+                    },
+                  ]}
                   placeholder="Buscar palavra na Bíblia…"
                   placeholderTextColor={colors.muted}
                   value={quickQuery}
@@ -455,10 +436,10 @@ export default function HomeScreen() {
                 {quickQuery.length > 0 ? (
                   <TouchableOpacity
                     onPress={() => setQuickQuery('')}
-                    style={{ padding: 6 }}
+                    style={styles.clearSearchBtn}
                     accessibilityLabel="Limpar busca"
                   >
-                    <Ionicons name="close-circle" size={18} color={colors.muted} />
+                    <Ionicons name="close-circle" size={20} color={colors.muted} />
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
@@ -482,11 +463,12 @@ export default function HomeScreen() {
                       backgroundColor: colors.cardSoft,
                       borderColor: colors.border,
                     },
+                    metrics.isLargeDesktop && styles.quickMiniBtnDesktop,
                   ]}
                   onPress={() => router.push('/read' as never)}
                   activeOpacity={0.85}
                 >
-                  <Ionicons name="book-outline" size={16} color={colors.primary} />
+                  <Ionicons name="book-outline" size={18} color={colors.primary} />
                   <Text style={[styles.quickMiniText, { color: colors.text }]}>
                     Ler Bíblia
                   </Text>
@@ -499,13 +481,14 @@ export default function HomeScreen() {
                       backgroundColor: colors.cardSoft,
                       borderColor: colors.border,
                     },
+                    metrics.isLargeDesktop && styles.quickMiniBtnDesktop,
                   ]}
                   onPress={() => router.push('/harpa' as never)}
                   activeOpacity={0.85}
                 >
                   <Ionicons
                     name="musical-notes-outline"
-                    size={16}
+                    size={18}
                     color="#0097A7"
                   />
                   <Text style={[styles.quickMiniText, { color: colors.text }]}>
@@ -516,7 +499,15 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          <Text
+            style={[
+              styles.sectionTitle,
+              {
+                color: colors.text,
+                fontSize: metrics.homeSectionTitleFontSize,
+              },
+            ]}
+          >
             Menu Principal
           </Text>
 
@@ -534,6 +525,8 @@ export default function HomeScreen() {
                   styles.card,
                   {
                     width: cardWidth,
+                    minHeight: metrics.homeCardMinHeight,
+                    padding: metrics.homeCardPadding,
                     backgroundColor: colors.card,
                     borderColor: colors.border,
                   },
@@ -541,20 +534,54 @@ export default function HomeScreen() {
                 onPress={() => router.push(item.href as never)}
                 activeOpacity={0.85}
               >
-                <View style={[styles.cardIcon, { backgroundColor: item.iconBg }]}>
-                  <Ionicons name={item.icon} size={24} color={item.iconColor} />
+                <View
+                  style={[
+                    styles.cardIcon,
+                    {
+                      width: metrics.homeCardIconBoxSize,
+                      height: metrics.homeCardIconBoxSize,
+                      borderRadius: Math.round(
+                        metrics.homeCardIconBoxSize * 0.26,
+                      ),
+                      backgroundColor: item.iconBg,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={item.icon}
+                    size={metrics.homeCardIconSize}
+                    color={item.iconColor}
+                  />
                 </View>
-                <Text style={[styles.cardTitle, { color: colors.text }]}>
+
+                <Text
+                  style={[
+                    styles.cardTitle,
+                    {
+                      color: colors.text,
+                      fontSize: metrics.homeCardTitleFontSize,
+                    },
+                  ]}
+                >
                   {item.title}
                 </Text>
-                <Text style={[styles.cardSub, { color: colors.muted }]}>
+
+                <Text
+                  style={[
+                    styles.cardSub,
+                    {
+                      color: colors.muted,
+                      fontSize: metrics.homeCardSubtitleFontSize,
+                    },
+                  ]}
+                >
                   {item.subtitle}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          <View style={{ height: 24 }} />
+          <View style={styles.bottomSpacer} />
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -570,11 +597,9 @@ const styles = StyleSheet.create({
   page: {
     flex: 1,
     width: '100%',
-    maxWidth: 1280,
   },
 
   scrollContent: {
-    paddingHorizontal: 20,
     paddingBottom: 20,
   },
 
@@ -585,24 +610,24 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
 
+  headerTextBlock: {
+    flex: 1,
+    paddingRight: 12,
+  },
+
   greeting: {
-    fontSize: 26,
     fontWeight: '800',
   },
 
   subGreeting: {
-    fontSize: 14,
     marginTop: 4,
   },
 
   avatarButton: {
-    borderRadius: 24,
+    borderRadius: 999,
   },
 
   avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
     backgroundColor: '#007AFF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -632,13 +657,12 @@ const styles = StyleSheet.create({
 
   dailyCard: {
     backgroundColor: '#0F62FE',
-    padding: 16,
+    padding: 18,
     borderRadius: 18,
   },
 
   dailyCardDesktop: {
-    flex: 1.1,
-    minHeight: 220,
+    flex: 1.15,
     justifyContent: 'space-between',
   },
 
@@ -649,18 +673,22 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
+  dailyTitleBlock: {
+    flex: 1,
+  },
+
   iconCircle: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 12,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
   },
 
   dailyTitle: {
     color: 'rgba(255,255,255,0.92)',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.6,
     marginBottom: 2,
@@ -671,6 +699,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     lineHeight: 22,
+  },
+
+  dailyTextDesktop: {
+    fontSize: 18,
+    lineHeight: 27,
+  },
+
+  dailyTextImac: {
+    fontSize: 22,
+    lineHeight: 32,
   },
 
   dailyRef: {
@@ -700,17 +738,16 @@ const styles = StyleSheet.create({
 
   quickPanel: {
     borderRadius: 18,
-    padding: 16,
+    padding: 18,
     borderWidth: 1,
   },
 
   quickPanelDesktop: {
-    flex: 0.9,
-    minHeight: 220,
+    flex: 0.85,
+    justifyContent: 'center',
   },
 
   quickPanelTitle: {
-    fontSize: 16,
     fontWeight: '800',
     marginBottom: 12,
   },
@@ -724,10 +761,19 @@ const styles = StyleSheet.create({
     height: 48,
   },
 
+  quickSearchWrapDesktop: {
+    height: 58,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+  },
+
   quickSearchInput: {
     flex: 1,
-    fontSize: 16,
     marginLeft: 10,
+  },
+
+  clearSearchBtn: {
+    padding: 6,
   },
 
   quickGoBtn: {
@@ -755,13 +801,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
 
+  quickMiniBtnDesktop: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+
   quickMiniText: {
     fontSize: 13,
     fontWeight: '700',
   },
 
   sectionTitle: {
-    fontSize: 18,
     fontWeight: '800',
     marginBottom: 12,
   },
@@ -782,28 +832,25 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    padding: 16,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    minHeight: 130,
   },
 
   cardIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
   },
 
   cardTitle: {
-    fontSize: 16,
     fontWeight: '800',
   },
 
   cardSub: {
-    fontSize: 12,
-    marginTop: 2,
+    marginTop: 3,
+  },
+
+  bottomSpacer: {
+    height: 24,
   },
 });
