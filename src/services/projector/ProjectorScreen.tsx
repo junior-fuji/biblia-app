@@ -1,4 +1,5 @@
 import { useSettings } from '@/src/providers/SettingsProvider';
+import { useResponsiveMetrics } from '@/src/theme/useResponsiveMetrics';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -71,10 +72,6 @@ type Props = {
 
 const DEFAULT_MIN_FONT_SIZE = 8;
 const DEFAULT_MAX_FONT_SIZE = 82;
-const FONT_STEP = 4;
-const VERTICAL_STEP = 24;
-const MIN_VERTICAL_OFFSET = -260;
-const MAX_VERTICAL_OFFSET = 260;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -166,6 +163,7 @@ export default function ProjectorScreen({
   maxFontSize = DEFAULT_MAX_FONT_SIZE,
 }: Props) {
   const { settings } = useSettings();
+  const metrics = useResponsiveMetrics();
 
   const [manualOffset, setManualOffset] = useState(0);
   const [verticalOffset, setVerticalOffset] = useState(0);
@@ -219,9 +217,14 @@ export default function ProjectorScreen({
 
   const baseComputedFontSize = useMemo(() => {
     if (typeof baseFontSize === 'number') return baseFontSize;
-    if (uniformFontSize) return 38;
+    if (uniformFontSize) return metrics.harpaBaseFontSize;
     return getBaseFontSize(currentSlide?.kind);
-  }, [baseFontSize, currentSlide?.kind, uniformFontSize]);
+  }, [
+    baseFontSize,
+    currentSlide?.kind,
+    metrics.harpaBaseFontSize,
+    uniformFontSize,
+  ]);
 
   const requestedFontSize = clamp(
     baseComputedFontSize + manualOffset,
@@ -240,24 +243,32 @@ export default function ProjectorScreen({
   const lineHeight = Math.round(fontSize * 1.34);
 
   const decreaseFont = useCallback(() => {
-    setManualOffset((prev) => prev - FONT_STEP);
-  }, []);
+    setManualOffset((prev) => prev - metrics.projectorFontStep);
+  }, [metrics.projectorFontStep]);
 
   const increaseFont = useCallback(() => {
-    setManualOffset((prev) => prev + FONT_STEP);
-  }, []);
+    setManualOffset((prev) => prev + metrics.projectorFontStep);
+  }, [metrics.projectorFontStep]);
 
   const moveTextUp = useCallback(() => {
     setVerticalOffset((prev) =>
-      clamp(prev - VERTICAL_STEP, MIN_VERTICAL_OFFSET, MAX_VERTICAL_OFFSET),
+      clamp(
+        prev - metrics.projectorOffsetStep,
+        -metrics.projectorOffsetLimit,
+        metrics.projectorOffsetLimit,
+      ),
     );
-  }, []);
+  }, [metrics.projectorOffsetLimit, metrics.projectorOffsetStep]);
 
   const moveTextDown = useCallback(() => {
     setVerticalOffset((prev) =>
-      clamp(prev + VERTICAL_STEP, MIN_VERTICAL_OFFSET, MAX_VERTICAL_OFFSET),
+      clamp(
+        prev + metrics.projectorOffsetStep,
+        -metrics.projectorOffsetLimit,
+        metrics.projectorOffsetLimit,
+      ),
     );
-  }, []);
+  }, [metrics.projectorOffsetLimit, metrics.projectorOffsetStep]);
 
   const resetVerticalOffset = useCallback(() => {
     setVerticalOffset(0);

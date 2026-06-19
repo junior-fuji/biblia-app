@@ -1,6 +1,7 @@
 import ProjectorScreen, {
   ProjectorSlide,
 } from '@/src/services/projector/ProjectorScreen';
+import { useResponsiveMetrics } from '@/src/theme/useResponsiveMetrics';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo } from 'react';
@@ -161,6 +162,7 @@ export default function HarpaProjectorScreen() {
   useKeepAwake();
 
   const router = useRouter();
+  const metrics = useResponsiveMetrics();
   const { number } = useLocalSearchParams<{ number?: string }>();
 
   const isWeb = Platform.OS === 'web';
@@ -228,9 +230,9 @@ export default function HarpaProjectorScreen() {
         showFooterCounter={false}
         showGroupNavigation={false}
         autoFitText={false}
-        baseFontSize={38}
-        minFontSize={30}
-        maxFontSize={42}
+        baseFontSize={metrics.harpaBaseFontSize}
+        minFontSize={metrics.harpaMinFontSize}
+        maxFontSize={metrics.harpaMaxFontSize}
       />
     );
   }
@@ -241,7 +243,7 @@ export default function HarpaProjectorScreen() {
       subtitle="Harpa Cristã"
       slides={slides}
       onClose={handleClose}
-      baseFontSize={38}
+      baseFontSize={metrics.harpaBaseFontSize}
       uniformFontSize
       pickerLabel="Partes"
       pickerTitle={`${hymn.number} — ${hymn.title}`}
@@ -251,8 +253,8 @@ export default function HarpaProjectorScreen() {
       showFooterCounter={false}
       showGroupNavigation={false}
       autoFitText={false}
-      minFontSize={30}
-      maxFontSize={42}
+      minFontSize={metrics.harpaMinFontSize}
+      maxFontSize={metrics.harpaMaxFontSize}
     />
   );
 }
