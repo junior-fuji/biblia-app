@@ -1,52 +1,56 @@
-import { invalidateBibleVersionsCache } from '@/src/features/bible/api/bibleVersions.cache';
-import { useSettings } from '@/src/providers/SettingsProvider';
+import { useAppTheme } from '@/src/theme/useAppTheme';
+import { useResponsiveMetrics } from '@/src/theme/useResponsiveMetrics';
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import React, { useEffect, useMemo } from 'react';
-import { useColorScheme } from 'react-native';
+import React from 'react';
+import { Platform } from 'react-native';
 
-export default function TabLayout() {
-  const systemScheme = useColorScheme();
-  const { settings } = useSettings();
+type TabIconName = keyof typeof Ionicons.glyphMap;
 
-  useEffect(() => {
-    invalidateBibleVersionsCache().catch(() => {});
-  }, []);
+function TabIcon({
+  name,
+  color,
+  size,
+}: {
+  name: TabIconName;
+  color: string;
+  size: number;
+}) {
+  return <Ionicons name={name} size={size} color={color} />;
+}
 
-  const isDark = useMemo(() => {
-    if (settings.appTheme === 'dark') return true;
-    if (settings.appTheme === 'light') return false;
-    if (settings.appTheme === 'system') return systemScheme === 'dark';
-
-    return settings.darkMode;
-  }, [settings.appTheme, settings.darkMode, systemScheme]);
-
-  const colors = useMemo(
-    () => ({
-      active: isDark ? '#0A84FF' : '#007AFF',
-      inactive: '#8E8E93',
-      background: isDark ? '#111111' : '#FFFFFF',
-      border: isDark ? '#2C2C2E' : '#E5E5EA',
-      scene: isDark ? '#000000' : '#F2F2F7',
-    }),
-    [isDark],
-  );
+export default function TabsLayout() {
+  const { colors, isDark } = useAppTheme();
+  const metrics = useResponsiveMetrics();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.active,
-        tabBarInactiveTintColor: colors.inactive,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.muted,
         tabBarStyle: {
-          backgroundColor: colors.background,
+          height: metrics.tabBarHeight,
+          paddingTop: metrics.isLargeDesktop ? 8 : 6,
+          paddingBottom:
+            Platform.OS === 'ios'
+              ? metrics.isLargeDesktop
+                ? 12
+                : 8
+              : metrics.isLargeDesktop
+                ? 10
+                : 6,
+          backgroundColor: colors.card,
           borderTopColor: colors.border,
+          borderTopWidth: 1,
+        },
+        tabBarItemStyle: {
+          paddingVertical: metrics.isLargeDesktop ? 4 : 2,
         },
         tabBarLabelStyle: {
+          fontSize: metrics.tabLabelFontSize,
           fontWeight: '700',
-        },
-        sceneStyle: {
-          backgroundColor: colors.scene,
+          marginTop: metrics.isLargeDesktop ? 2 : 0,
         },
       }}
     >
@@ -54,28 +58,12 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Início',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" color={color} size={size} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="diary"
-        options={{
-          title: 'Diário',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="journal-outline" color={color} size={size} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="studies"
-        options={{
-          title: 'Estudos',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="create-outline" color={color} size={size} />
+          tabBarIcon: ({ color }) => (
+            <TabIcon
+              name={isDark ? 'home' : 'home-outline'}
+              color={color}
+              size={metrics.tabIconSize}
+            />
           ),
         }}
       />
@@ -84,9 +72,40 @@ export default function TabLayout() {
         name="read"
         options={{
           title: 'Bíblia',
-          tabBarLabel: 'Bíblia',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="book-outline" color={color} size={size} />
+          tabBarIcon: ({ color }) => (
+            <TabIcon
+              name={isDark ? 'book' : 'book-outline'}
+              color={color}
+              size={metrics.tabIconSize}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="diary"
+        options={{
+          title: 'Diário',
+          tabBarIcon: ({ color }) => (
+            <TabIcon
+              name={isDark ? 'journal' : 'journal-outline'}
+              color={color}
+              size={metrics.tabIconSize}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="studies"
+        options={{
+          title: 'Estudos',
+          tabBarIcon: ({ color }) => (
+            <TabIcon
+              name={isDark ? 'create' : 'create-outline'}
+              color={color}
+              size={metrics.tabIconSize}
+            />
           ),
         }}
       />
@@ -95,8 +114,12 @@ export default function TabLayout() {
         name="dictionary"
         options={{
           title: 'Dicionário',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="library-outline" color={color} size={size} />
+          tabBarIcon: ({ color }) => (
+            <TabIcon
+              name={isDark ? 'library' : 'library-outline'}
+              color={color}
+              size={metrics.tabIconSize}
+            />
           ),
         }}
       />
@@ -105,12 +128,15 @@ export default function TabLayout() {
         name="plan"
         options={{
           title: 'Plano',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" color={color} size={size} />
+          tabBarIcon: ({ color }) => (
+            <TabIcon
+              name={isDark ? 'calendar' : 'calendar-outline'}
+              color={color}
+              size={metrics.tabIconSize}
+            />
           ),
         }}
       />
-
     </Tabs>
   );
 }
