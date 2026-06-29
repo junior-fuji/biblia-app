@@ -105,21 +105,22 @@ export default function HomeScreen() {
       ? metrics.homeMaxContentWidth
       : undefined;
 
-      const gridColumns = useMemo(() => {
-        if (!isWeb) return 2;
-        if (width >= 1900) return 5;
-        if (width >= 1440) return 4;
-        if (width >= 900) return 3;
-        return 2;
-      }, [isWeb, width]);
-
-  const cardWidth = useMemo(() => {
-    if (gridColumns === 5) return '18.6%';
-    if (gridColumns === 4) return '23.5%';
-    if (gridColumns === 3) return '31.8%';
-
-    return '48.2%';
-  }, [gridColumns]);
+     const gridColumns = useMemo(() => {
+  if (!isWeb) return 2;
+  if (width >= 1900) return 6;
+  if (width >= 1700) return 5;
+  if (width >= 1440) return 4;
+  if (width >= 900) return 3;
+  return 2;
+}, [isWeb, width]);
+      const cardWidth = useMemo(() => {
+        if (gridColumns === 6) return '15.4%';
+        if (gridColumns === 5) return '18.6%';
+        if (gridColumns === 4) return '23.5%';
+        if (gridColumns === 3) return '31.8%';
+      
+        return '48.2%';
+      }, [gridColumns]);
 
   const menuItems = useMemo<MenuItem[]>(
     () => [
@@ -140,6 +141,15 @@ export default function HomeScreen() {
         iconColor: '#0097A7',
         iconBg: isDark ? '#0097A722' : '#E0F7FA',
         href: '/harpa',
+      },
+      {
+        key: 'atlas',
+        title: 'Atlas',
+        subtitle: 'Mapas',
+        icon: 'map-outline',
+        iconColor: '#B7791F',
+        iconBg: isDark ? '#B7791F22' : '#FFF4D6',
+        href: '/atlas',
       },
       {
         key: 'studies',
