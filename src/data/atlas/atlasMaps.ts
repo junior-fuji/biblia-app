@@ -103,16 +103,6 @@ export type AtlasMarker = {
           references: ['Gênesis 12:9', 'Gênesis 13:1'],
         },
         {
-          id: 'egypt',
-          title: 'Egito',
-          subtitle: 'Descida em tempo de fome',
-          x: 18,
-          y: 78,
-          description:
-            'Abrão desceu ao Egito por causa da fome na terra de Canaã, antes de retornar para a região do Neguebe.',
-          references: ['Gênesis 12:10-20', 'Gênesis 13:1'],
-        },
-        {
           id: 'hebron',
           title: 'Hebrom',
           subtitle: 'Carvalhais de Manre',
@@ -132,12 +122,22 @@ export type AtlasMarker = {
             'Região associada ao episódio em que Deus prova Abraão no sacrifício de Isaque.',
           references: ['Gênesis 22:1-19'],
         },
+        {
+          id: 'egypt',
+          title: 'Egito',
+          subtitle: 'Descida em tempo de fome',
+          x: 18,
+          y: 78,
+          description:
+            'Abrão desceu ao Egito por causa da fome na terra de Canaã, antes de retornar para a região do Neguebe.',
+          references: ['Gênesis 12:10-20', 'Gênesis 13:1'],
+        },
       ],
       routes: [
         {
           id: 'main-route',
           title: 'Rota principal da jornada',
-          color: '#B7791F',
+          color: '#C6922E',
           points: [
             { x: 78, y: 70 },
             { x: 68, y: 54 },
