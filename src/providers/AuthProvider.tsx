@@ -25,19 +25,25 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
 });
 
-function isBrokenRefreshTokenError(error: unknown): boolean {
+function getErrorMessage(error: unknown): string {
   if (!error || typeof error !== 'object') {
-    return false;
+    return '';
   }
 
-  const message =
-    'message' in error && typeof error.message === 'string'
-      ? error.message
-      : '';
+  if ('message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+
+  return '';
+}
+
+function isBrokenRefreshTokenError(error: unknown): boolean {
+  const message = getErrorMessage(error);
 
   return (
     message.includes('Invalid Refresh Token') ||
-    message.includes('Refresh Token Not Found')
+    message.includes('Refresh Token Not Found') ||
+    message.includes('refresh_token_not_found')
   );
 }
 
@@ -70,29 +76,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           if (isBrokenRefreshTokenError(error)) {
             await clearBrokenSupabaseSession();
+
+            try {
+              await sb.auth.signOut({ scope: 'local' });
+            } catch (signOutError) {
+              console.log('AUTH_BOOTSTRAP_SIGN_OUT_ERROR', signOutError);
+            }
           }
 
-          if (!mounted) {
-            return;
-          }
+          if (!mounted) return;
 
           setSession(null);
           setInitialized(true);
           return;
         }
 
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
 
         setSession(data.session ?? null);
         setInitialized(true);
       } catch (error) {
         console.log('AUTH_BOOTSTRAP_FATAL', error);
 
-        if (!mounted) {
-          return;
+        if (isBrokenRefreshTokenError(error)) {
+          await clearBrokenSupabaseSession();
+
+          try {
+            await sb.auth.signOut({ scope: 'local' });
+          } catch (signOutError) {
+            console.log('AUTH_BOOTSTRAP_FATAL_SIGN_OUT_ERROR', signOutError);
+          }
         }
+
+        if (!mounted) return;
 
         setSession(null);
         setInitialized(true);
@@ -106,7 +122,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = sb.auth.onAuthStateChange((event, nextSession) => {
       console.log('AUTH_STATE_CHANGE', event, Boolean(nextSession?.user?.id));
 
-      if (!mounted) {
+      if (!mounted) return;
+
+      if (event === 'SIGNED_OUT') {
+        setSession(null);
+        setInitialized(true);
+
+        void clearBrokenSupabaseSession();
         return;
       }
 

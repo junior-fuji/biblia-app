@@ -147,8 +147,8 @@ export default function HomeScreen() {
         title: 'Atlas',
         subtitle: 'Mapas',
         icon: 'map-outline',
-        iconColor: '#B7791F',
-        iconBg: isDark ? '#B7791F22' : '#FFF4D6',
+        iconColor: '#C6922E',
+        iconBg: isDark ? '#C6922E22' : '#FFF4D8',
         href: '/atlas',
       },
       {

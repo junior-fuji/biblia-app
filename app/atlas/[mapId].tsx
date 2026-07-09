@@ -1,20 +1,31 @@
 import AbrahamJourneyMap from '@/src/components/atlas/AbrahamJourneyMap';
 import {
-    AtlasMarker,
-    getAtlasMapById,
+  AtlasMarker,
+  getAtlasMapById,
 } from '@/src/data/atlas/atlasMaps';
 import { useAppTheme } from '@/src/theme/useAppTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+const placeImages = {
+  ur: require('../../assets/atlas/places/ur.png'),
+  haran: require('../../assets/atlas/places/haran.png'),
+  shechem: require('../../assets/atlas/places/shechem.png'),
+  bethel: require('../../assets/atlas/places/bethel.png'),
+  negev: require('../../assets/atlas/places/negev.png'),
+  hebron: require('../../assets/atlas/places/hebron.png'),
+  moriah: require('../../assets/atlas/places/moriah.png'),
+  egypt: require('../../assets/atlas/places/egypt.png'),
+} as const;
 
 export default function AtlasMapScreen() {
   const router = useRouter();
@@ -147,6 +158,9 @@ export default function AtlasMapScreen() {
           >
             {map.markers.map((marker, index) => {
               const active = selectedMarker?.id === marker.id;
+              const placeImage =
+                placeImages[marker.id as keyof typeof placeImages] ??
+                placeImages.ur;
 
               return (
                 <TouchableOpacity
@@ -165,32 +179,15 @@ export default function AtlasMapScreen() {
                     },
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.locationNumber,
-                      {
-                        backgroundColor: active ? '#C6922E' : '#1F7EAF',
-                      },
-                    ]}
-                  >
-                    <Text style={styles.locationNumberText}>{index + 1}</Text>
-                  </View>
+                   <Image
+  source={placeImage}
+  style={[
+    styles.placeCardImage,
+    marker.id === 'egypt' && styles.placeCardImageEgypt,
+  ]}
+  resizeMode={marker.id === 'egypt' ? 'contain' : 'cover'}
+/>
 
-                  <View style={styles.locationTextBlock}>
-                    <Text
-                      style={[styles.locationName, { color: colors.text }]}
-                      numberOfLines={1}
-                    >
-                      {marker.title.replace('Ur dos Caldeus', 'Ur')}
-                    </Text>
-
-                    <Text
-                      style={[styles.locationSub, { color: colors.muted }]}
-                      numberOfLines={2}
-                    >
-                      {marker.subtitle ?? marker.references[0] ?? ''}
-                    </Text>
-                  </View>
                 </TouchableOpacity>
               );
             })}
@@ -369,7 +366,7 @@ const styles = StyleSheet.create({
   locationsCard: {
     borderWidth: 1,
     borderRadius: 18,
-    padding: 14,
+    padding: 12,
     marginBottom: 14,
   },
 
@@ -395,21 +392,30 @@ const styles = StyleSheet.create({
   },
 
   locationList: {
-    gap: 10,
+    gap: 8,
     paddingRight: 2,
   },
 
   locationCard: {
-    width: 150,
-    minHeight: 78,
-    borderWidth: 1,
+    width: 114,
+    height:102,
+    borderWidth: -8,
     borderRadius: 16,
-    padding: 11,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 9,
+    overflow: 'hidden',
+    padding: 0,
   },
 
+  placeCardImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#F1DFC0',
+  },
+  placeCardImageEgypt: {
+    width: 128,
+    height: 128,
+    alignSelf: 'center',
+    marginTop: -13,
+  },
   locationNumber: {
     width: 28,
     height: 28,
