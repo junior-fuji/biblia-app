@@ -97,3 +97,18 @@ export async function getBibleVersionsCached(): Promise<BibleVersion[]> {
   // sem versões no banco (estranho) -> devolve cache ou fallback (não cacheia)
   return cached ?? [{ id: "local-ara", code: "ARA", name: "ARA", sort_order: 1, is_active: true }];
 }
+export async function getVersionIdByCode(code: string): Promise<string> {
+  const versions = await getBibleVersionsCached();
+
+  const normalizedCode = code.trim().toUpperCase();
+
+  const version = versions.find(
+    (item) => item.code.trim().toUpperCase() === normalizedCode,
+  );
+
+  if (!version?.id) {
+    throw new Error(`Versão bíblica não encontrada: ${code}`);
+  }
+
+  return version.id;
+}

@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import OpenAI from "openai";
 
 export const runtime = "nodejs";
