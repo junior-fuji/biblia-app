@@ -25,6 +25,19 @@ const placeImages = {
   hebron: require('../../assets/atlas/places/hebron.png'),
   moriah: require('../../assets/atlas/places/moriah.png'),
   egypt: require('../../assets/atlas/places/egypt.png'),
+
+  'egypt-exodus': require('../../assets/atlas/places/egypt-exodus.png'),
+  ramesses: require('../../assets/atlas/places/ramesses.png'),
+  succoth: require('../../assets/atlas/places/succoth.png'),
+  etham: require('../../assets/atlas/places/etham.png'),
+  'red-sea': require('../../assets/atlas/places/red-sea.png'),
+  marah: require('../../assets/atlas/places/marah.png'),
+  elim: require('../../assets/atlas/places/elim.png'),
+  rephidim: require('../../assets/atlas/places/rephidim.png'),
+  sinai: require('../../assets/atlas/places/sinai.png'),
+  'kadesh-barnea': require('../../assets/atlas/places/kadesh-barnea.png'),
+  'mount-hor': require('../../assets/atlas/places/mount-hor.png'),
+  moab: require('../../assets/atlas/places/moab.png'),
 } as const;
 
 export default function AtlasMapScreen() {
@@ -111,21 +124,13 @@ export default function AtlasMapScreen() {
           ]}
         >
           <View style={styles.mapContainer}>
-            {map.id === 'abraham-journey' ? (
-             <AbrahamJourneyMap
-             markers={map.markers}
-             routes={map.routes}
-             selectedMarkerId={selectedMarker?.id}
-             onSelectMarker={handleSelectMarker}
-           />
-            ) : (
-              <View style={styles.mapFallback}>
-                <Text style={styles.mapFallbackTitle}>{map.title}</Text>
-                <Text style={styles.mapFallbackSubtitle}>
-                  Mapa visual será inserido aqui
-                </Text>
-              </View>
-            )}
+            <AbrahamJourneyMap
+              imageKey={map.imageKey}
+              markers={map.markers}
+              routes={map.routes}
+              selectedMarkerId={selectedMarker?.id}
+              onSelectMarker={handleSelectMarker}
+            />
           </View>
         </View>
 

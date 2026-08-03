@@ -9,6 +9,12 @@ import Svg, {
 } from 'react-native-svg';
 
 const abrahamBaseImage = require('../../../assets/atlas/abraham-base.png');
+const exodusBaseImage = require('../../../assets/atlas/exodus-base.png');
+
+const atlasBaseImages = {
+  'abraham-journey': abrahamBaseImage,
+  'exodus-journey': exodusBaseImage,
+} as const;
 
 type AtlasMapMarker = {
   id: string;
@@ -25,6 +31,7 @@ type AtlasMapRoute = {
 };
 
 type Props = {
+  imageKey?: string;
   markers: AtlasMapMarker[];
   routes: AtlasMapRoute[];
   selectedMarkerId?: string | null;
@@ -46,12 +53,37 @@ function buildPath(points: { x: number; y: number }[]) {
 }
 
 export default function AbrahamJourneyMap({
+  imageKey,
   markers,
   routes,
   selectedMarkerId,
   onSelectMarker,
 }: Props) {
   const mainRoute = routes[0];
+
+  const selectedImageKey =
+    imageKey ??
+    (markers.some((marker) =>
+      [
+        'egypt-exodus',
+        'ramesses',
+        'succoth',
+        'etham',
+        'red-sea',
+        'marah',
+        'elim',
+        'rephidim',
+        'sinai',
+        'kadesh-barnea',
+        'mount-hor',
+        'moab',
+      ].includes(marker.id),
+    )
+      ? 'exodus-journey'
+      : 'abraham-journey');
+
+  const baseImageSource =
+    atlasBaseImages[selectedImageKey as keyof typeof atlasBaseImages] ?? abrahamBaseImage;
 
   const routePath = useMemo(() => {
     return mainRoute ? buildPath(mainRoute.points) : '';
@@ -60,7 +92,7 @@ export default function AbrahamJourneyMap({
   return (
     <View style={styles.wrap}>
       <ImageBackground
-        source={abrahamBaseImage}
+        source={baseImageSource}
         resizeMode="contain"
         style={styles.baseImage}
         imageStyle={styles.baseImageInner}

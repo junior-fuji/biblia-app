@@ -42,15 +42,14 @@ export const atlasMaps: AtlasMap[] = [
     period: 'Período Patriarcal',
     imageKey: 'abraham-journey',
     summary:
-      'A jornada de Abraão marca o início da história patriarcal. Chamado por Deus, Abrão sai da região da Mesopotâmia, passa por Harã e segue para Canaã, onde recebe a promessa da terra e da descendência. Em tempos de fome, desce ao Egito antes do nascimento de Isaque e depois retorna à região de Canaã, passando novamente pelo Neguebe e por Betel, estabelecendo-se depois em Hebrom. Moriá pertence a uma etapa posterior da história, já envolvendo Isaque.',
+      'A jornada de Abraão marca o início da história patriarcal. Chamado por Deus,sai da região da Mesopotâmia, passa por Harã e segue para Canaã, onde recebe a promessa da terra e da descendência. Em tempos de fome, desce ao Egito antes do nascimento de Isaque e depois retorna à região de Canaã, passando novamente pelo Neguebe e por Betel, estabelecendo-se depois em Hebrom. Moriá pertence a uma etapa posterior da história, já envolvendo Isaque.',
     references: [
       'Gênesis 11:27-32',
       'Gênesis 12:1-20',
       'Gênesis 13:1-18',
       'Gênesis 15:1-21',
       'Gênesis 17:1-27',
-      'Gênesis 21:1-7',
-      'Gênesis 22:1-19',
+      'Gênesis ênesis 22:1-19',
     ],
     markers: [
       {
@@ -81,8 +80,7 @@ export const atlasMaps: AtlasMap[] = [
         y: 49,
         description:
           'Lugar onde o Senhor apareceu a Abrão e prometeu dar aquela terra à sua descendência.',
-        references: ['Gênesis 12:6-7'],
-      },
+        referen      },
       {
         id: 'bethel',
         title: 'Betel',
@@ -108,8 +106,7 @@ export const atlasMaps: AtlasMap[] = [
         title: 'Egito',
         subtitle: 'Descida em tempo de fome',
         x: 18,
-        y: 78,
-        description:
+       description:
           'Abrão desceu ao Egito por causa da fome na terra de Canaã. Esse episódio acontece antes do nascimento de Isaque e antes do episódio de Moriá.',
         references: ['Gênesis 12:10-20', 'Gênesis 13:1'],
       },
@@ -166,8 +163,7 @@ export const atlasMaps: AtlasMap[] = [
     summary:
       'A jornada do Êxodo apresenta a saída de Israel do Egito, a travessia do mar, a caminhada pelo deserto, a aliança no Sinai e a aproximação da Terra Prometida. A rota é apresentada de forma aproximada e didática, pois a localização exata de alguns lugares é discutida entre estudiosos.',
     references: [
-      'Êxodo 1:8-14',
-      'Êxodo 12:31-42',
+         'Êxodo 12:31-42',
       'Êxodo 13:17-22',
       'Êxodo 14:21-31',
       'Êxodo 15:22-27',
@@ -236,7 +232,7 @@ export const atlasMaps: AtlasMap[] = [
         x: 49,
         y: 62,
         description:
-          'Lugar onde as águas amargas foram tornadas doces, revelando o cuidado de Deus no deserto.',
+          'Lugar onde as águas amargas foram tornadas doces, revee Deus no deserto.',
         references: ['Êxodo 15:22-26'],
       },
       {
@@ -303,7 +299,7 @@ export const atlasMaps: AtlasMap[] = [
     routes: [
       {
         id: 'exodus-main-route',
-        title: 'Rota aproximada do Êxodo',
+        title: 'Rota apo',
         color: '#C6922E',
         points: [
           { x: 16, y: 50 },

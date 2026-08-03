@@ -173,9 +173,7 @@ export const atlasMaps: AtlasMap[] = [
       'Êxodo 15:22-27',
       'Êxodo 17:1-16',
       'Êxodo 19:1-6',
-      'Números 13:26',
-      'Números 20:22-29',
-      'Números 22:1',
+      'Números 13:26'     'Números 22:1',
       'Deuteronômio 34:1-8',
     ],
     markers: [
@@ -209,8 +207,7 @@ export const atlasMaps: AtlasMap[] = [
           'Primeira parada mencionada na rota depois que Israel partiu de Ramessés.',
         references: ['Êxodo 12:37', 'Números 33:5'],
       },
-      {
-        id: 'etham',
+      m',
         title: 'Etã',
         subtitle: 'À entrada do deserto',
         x: 36,
@@ -242,8 +239,7 @@ export const atlasMaps: AtlasMap[] = [
       {
         id: 'elim',
         title: 'Elim',
-        subtitle: 'Águas e palmeiras',
-        x: 54,
+        subtitle: 'Águas e palmx: 54,
         y: 64,
         description:
           'Lugar de descanso onde havia fontes de água e palmeiras.',
@@ -276,7 +272,7 @@ export const atlasMaps: AtlasMap[] = [
         x: 64,
         y: 42,
         description:
-          'Região ligada ao envio dos espias e à recusa do povo em entrar na terra naquele momento.',
+          'Região ligada ao envio dos espias e à recusa do povo em entrar na terro.',
         references: ['Números 13:26', 'Números 14:1-45', 'Deuteronômio 1:19-46'],
       },
       {
@@ -312,7 +308,7 @@ export const atlasMaps: AtlasMap[] = [
           { x: 36, y: 50 },
           { x: 43, y: 60 },
           { x: 49, y: 62 },
-          { x: 54, y: 64 },
+  , y: 64 },
           { x: 58, y: 68 },
           { x: 61, y: 74 },
           { x: 64, y: 42 },
