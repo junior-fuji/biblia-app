@@ -230,6 +230,16 @@ export const atlasMaps: AtlasMap[] = [
         references: ['Êxodo 14:21-31'],
       },
       {
+        id: 'shur',
+        title: 'Deserto de Sur',
+        subtitle: 'Após a travessia',
+        x: 49.7,
+        y: 64.2,
+        description:
+          'Região desértica por onde Israel caminhou após a travessia do mar.',
+        references: ['Êxodo 15:22'],
+      },
+      {
         id: 'marah',
         title: 'Mara',
         subtitle: 'Águas amargas',
@@ -248,6 +258,16 @@ export const atlasMaps: AtlasMap[] = [
         description:
           'Lugar de descanso onde havia fontes de água e palmeiras.',
         references: ['Êxodo 15:27'],
+      },
+      {
+        id: 'sin',
+        title: 'Deserto de Sim',
+        subtitle: 'Entre Elim e Sinai',
+        x: 62.5,
+        y: 80.7,
+        description:
+          'Região desértica entre Elim e Sinai, associada à provisão de maná.',
+        references: ['Êxodo 16:1-15'],
       },
       {
         id: 'rephidim',
