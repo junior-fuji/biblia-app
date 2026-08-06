@@ -186,13 +186,10 @@ export default function AtlasMapScreen() {
                     },
                   ]}
                 >
-                   <Image
+    <Image
   source={placeImage}
-  style={[
-    styles.placeCardImage,
-    marker.id === 'egypt' && styles.placeCardImageEgypt,
-  ]}
-  resizeMode={marker.id === 'egypt' ? 'contain' : 'cover'}
+  style={styles.placeCardImage}
+  resizeMode="contain"
 />
 
                 </TouchableOpacity>
@@ -404,24 +401,19 @@ const styles = StyleSheet.create({
   },
 
   locationCard: {
-    width: 114,
-    height:102,
-    borderWidth: -8,
-    borderRadius: 16,
+    width: 118,
+    height: 118,
+    borderRadius: 18,
     overflow: 'hidden',
     padding: 0,
+    marginRight: 14,
+    borderWidth: 1,
+    backgroundColor: '#F8F2E7',
   },
-
+  
   placeCardImage: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#F1DFC0',
-  },
-  placeCardImageEgypt: {
-    width: 128,
-    height: 128,
-    alignSelf: 'center',
-    marginTop: -13,
   },
   locationNumber: {
     width: 28,
