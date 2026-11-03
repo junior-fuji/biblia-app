@@ -36,10 +36,15 @@ export type TranslationToken = {
   id: string;
   position: number;
   text: string;
+  /** Offsets use JavaScript UTF-16 string indices: [startOffset, endOffset). */
   startOffset: number;
   endOffset: number;
 };
 
+/**
+ * Alignment is intentionally many-to-many.
+ * Either side may be empty to represent material with no direct counterpart.
+ */
 export type LexicalAlignment = {
   id: string;
   translationTokenIds: string[];
@@ -48,10 +53,12 @@ export type LexicalAlignment = {
 };
 
 export type LexicalVerse = {
-  bibleVerseId: number;
+  /** Exact DB type remains intentionally open until the live Supabase schema is verified. */
+  bibleVerseId: string | number;
   translationVersionId: string;
   translationTextHash: string;
   tokenizationVersion: string;
+  offsetEncoding: 'utf16-js';
   originalEditionCode: string;
   translationTokens: TranslationToken[];
   originalTokens: OriginalToken[];
