@@ -15,7 +15,7 @@ export const genesis1_1Prototype: LexicalVerse = {
   translationVersionId: 'prototype-pt',
   translationTextHash: 'prototype-only',
   tokenizationVersion: 'prototype-v1',
-  offsetEncoding: 'utf-16',
+  offsetEncoding: 'utf16-js',
   originalEditionCode: 'prototype-hebrew',
   translationTokens: [
     { id: 'pt-gen-1-1-1', position: 1, text: 'No princípio', startOffset: 0, endOffset: 12 },
@@ -55,7 +55,7 @@ export const john1_1Prototype: LexicalVerse = {
   translationVersionId: 'prototype-pt',
   translationTextHash: 'prototype-only',
   tokenizationVersion: 'prototype-v1',
-  offsetEncoding: 'utf-16',
+  offsetEncoding: 'utf16-js',
   originalEditionCode: 'prototype-greek',
   translationTokens: [
     { id: 'pt-jhn-1-1-1', position: 1, text: 'No princípio', startOffset: 0, endOffset: 12 },
