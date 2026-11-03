@@ -1,5 +1,5 @@
 import React, { Fragment } from 'react';
-import { Pressable, StyleSheet, Text, type TextStyle, type StyleProp } from 'react-native';
+import { StyleSheet, Text, type TextStyle, type StyleProp } from 'react-native';
 import { getLexicalLookupForTranslationToken } from '../api/lexical';
 import type { LexicalLookup, LexicalVerse } from '../api/lexical.types';
 
@@ -13,6 +13,9 @@ type Props = {
 /**
  * Renderiza somente os trechos que possuem cobertura lexical como interativos.
  * O texto-base continua sendo a fonte visual; offsets seguem índices UTF-16 do JS.
+ *
+ * Usamos Text aninhado com onPress, em vez de Pressable dentro de Text, para
+ * preservar o fluxo inline do versículo de forma consistente no React Native.
  */
 export function LexicalVerseText({ text, lexicalVerse, onLexicalPress, style }: Props) {
   if (!lexicalVerse || lexicalVerse.translationTokens.length === 0) {
@@ -33,9 +36,14 @@ export function LexicalVerseText({ text, lexicalVerse, onLexicalPress, style }: 
 
     if (lookup) {
       parts.push(
-        <Pressable key={token.id} onPress={() => onLexicalPress(lookup)}>
-          <Text style={[style, styles.lexical]}>{rendered}</Text>
-        </Pressable>,
+        <Text
+          key={token.id}
+          onPress={() => onLexicalPress(lookup)}
+          style={styles.lexical}
+          suppressHighlighting={false}
+        >
+          {rendered}
+        </Text>,
       );
     } else {
       parts.push(<Fragment key={token.id}>{rendered}</Fragment>);
