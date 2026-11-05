@@ -5,8 +5,8 @@
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "reimport:bibles": "node scripts/reimport-bibles.js",
-    "import:missing-bibles": "node scripts/import-missing-bibles.js",
+    "reimport:bibles": "node scripts/reimport-bibles.js --execute-import",
+    "import:missing-bibles": "node scripts/import-missing-bibles.js --execute-import",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",

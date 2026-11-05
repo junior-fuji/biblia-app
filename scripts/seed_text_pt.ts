@@ -2,11 +2,15 @@ import { createClient } from '@supabase/supabase-js';
 require('dotenv').config();
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('❌ Erro: Variáveis .env não encontradas.');
   process.exit(1);
+}
+
+if (!/^sb_publishable_[A-Za-z0-9_-]+$/.test(supabaseKey)) {
+  throw new Error('Configuração Supabase inválida: use uma chave pública sb_publishable_.');
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);

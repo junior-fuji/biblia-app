@@ -5,29 +5,37 @@ import { AppState, Platform } from 'react-native';
 import 'react-native-url-polyfill/auto';
 
 const extra = (Constants.expoConfig?.extra ?? (Constants as any).manifest2?.extra ?? {}) as {
+  EXPO_PUBLIC_SUPABASE_URL?: string;
+  EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?: string;
   supabaseUrl?: string;
-  supabaseAnonKey?: string;
+  supabasePublishableKey?: string;
 };
 
 const supabaseUrl =
   process.env.EXPO_PUBLIC_SUPABASE_URL ||
+  extra.EXPO_PUBLIC_SUPABASE_URL ||
   extra.supabaseUrl;
 
-const supabaseAnonKey =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-  extra.supabaseAnonKey;
+const supabasePublishableKey =
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  extra.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  extra.supabasePublishableKey;
 
 let _client: SupabaseClient | null = null;
 let _appStateSubscribed = false;
 
 function createSupabaseInstance(): SupabaseClient {
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!supabaseUrl || !supabasePublishableKey) {
     throw new Error(
-      'Supabase não configurado. Faltam ENV: EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY'
+      'Supabase não configurado. Faltam ENV: EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY'
     );
   }
 
-  const client = createClient(supabaseUrl, supabaseAnonKey, {
+  if (!/^sb_publishable_[A-Za-z0-9_-]+$/.test(supabasePublishableKey)) {
+    throw new Error('Configuração Supabase inválida: use uma chave pública sb_publishable_.');
+  }
+
+  const client = createClient(supabaseUrl, supabasePublishableKey, {
     auth: {
       ...(Platform.OS !== 'web' ? { storage: AsyncStorage } : {}),
       autoRefreshToken: true,
@@ -52,7 +60,7 @@ function createSupabaseInstance(): SupabaseClient {
   return client;
 }
 
-if (supabaseUrl && supabaseAnonKey) {
+if (supabaseUrl && supabasePublishableKey) {
   _client = createSupabaseInstance();
 }
 
